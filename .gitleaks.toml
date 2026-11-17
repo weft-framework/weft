@@ -4,7 +4,9 @@ title = "Gitleaks configuration"
 useDefault = true
 
 [[allowlists]]
-description = "Ignore test directories"
+description = "Ignore test directories and files"
 paths = [
-  '''(^|/)test/''',
+  '''(^|/)(test|tests|__tests__)/''',
+  '''_test\.go$''',
+  '''\.spec\.(js|ts)$''',
 ]
