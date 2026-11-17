@@ -29,6 +29,9 @@ desktop.ini
 .env.*
 !.env.example
 
+# Local weft binaries used to pack @weft-framework/cli
+/bins/
+
 # Weft build output
 .weft
 *.wx.js
