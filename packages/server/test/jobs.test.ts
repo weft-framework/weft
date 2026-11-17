@@ -184,7 +184,9 @@ test("a run that times out is aborted and retried", async () => {
     return h.runs.length === 1 ? new Promise(() => {}) : undefined;
   });
   const id = (await h.jobs.enqueue(null, h.slow, {})) as string;
-  await h.jobs.drain();
+  const ran = h.jobs.drain();
+  await new Promise((r) => setTimeout(r, 1100));
+  await ran;
   assert.equal(aborted, 1);
   assert.match((await h.jobs.get(id))!.error!, /timed out/);
   h.tick(1000);

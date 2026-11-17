@@ -118,9 +118,15 @@ test("a write on one instance refreshes pages held by another", async () => {
   const until = async (re: RegExp) => {
     const end = Date.now() + 2000;
     while (!re.test(buf)) {
-      assert.ok(Date.now() < end, `timed out waiting for ${re}: ${buf}`);
-      const { value } = await reader.read();
-      buf += dec.decode(value);
+      const left = end - Date.now();
+      assert.ok(left > 0, `timed out waiting for ${re}: ${buf}`);
+      const chunk = await Promise.race([
+        reader.read(),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error(`timed out waiting for ${re}: ${buf}`)), left);
+        }),
+      ]);
+      buf += dec.decode(chunk.value);
     }
   };
   await until(/"t":"hello"/);

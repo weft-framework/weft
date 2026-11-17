@@ -2720,7 +2720,7 @@ export function createApp(opts: AppOptions): App {
     if (reload && !dispatching.has(e)) e.foreign = true;
     if (e.timer === null) {
       e.timer = setTimeout(() => void refresh(e), syncDelay);
-      if (e.sinks.size === 0) (e.timer as { unref?(): void }).unref?.();
+      (e.timer as { unref?(): void }).unref?.();
     }
   }
 
@@ -2921,6 +2921,7 @@ export function createApp(opts: AppOptions): App {
         stream.push({ t: "hello", session: id, p: PROTOCOL_VERSION });
         detach = attach(entry, (msg) => stream.push(msg));
         timer = setInterval(() => controller.enqueue(enc.encode(": ping\n\n")), heartbeatMs);
+        (timer as { unref?(): void }).unref?.();
       },
       cancel() {
         streams.delete(id);

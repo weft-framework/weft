@@ -875,6 +875,7 @@ export class Jobs {
         })
         .catch((err) => this.#onError(err, rec));
     }, Math.max(1000, Math.floor(this.#leaseMs / 3)));
+    (renew as { unref?(): void }).unref?.();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
@@ -882,6 +883,7 @@ export class Jobs {
         controller.abort(err);
         reject(err);
       }, job.options.timeoutMs);
+      (timer as { unref?(): void }).unref?.();
     });
     const ctx: JobContext = {
       user: actor,
