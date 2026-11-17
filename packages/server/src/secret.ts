@@ -50,20 +50,50 @@ export function secretEnv(
   return new Secret(name, value);
 }
 
-const LINE = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/;
+function blankOrComment(s: string): boolean {
+  let i = 0;
+  while (i < s.length && (s[i] === " " || s[i] === "\t")) i++;
+  return i === s.length || s[i] === "#";
+}
+
+function envLine(raw: string): [string, string] | null {
+  let i = 0;
+  while (i < raw.length && (raw[i] === " " || raw[i] === "\t")) i++;
+  if (i === raw.length || raw[i] === "#") return ["", ""];
+  if (raw.startsWith("export", i) && (raw[i + 6] === " " || raw[i + 6] === "\t")) {
+    i += 6;
+    while (i < raw.length && (raw[i] === " " || raw[i] === "\t")) i++;
+  }
+  const start = i;
+  const first = raw.charCodeAt(i);
+  if (!(first === 95 || (first >= 65 && first <= 90) || (first >= 97 && first <= 122))) return null;
+  i++;
+  while (i < raw.length) {
+    const c = raw.charCodeAt(i);
+    if (c === 95 || (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122)) i++;
+    else break;
+  }
+  const key = raw.slice(start, i);
+  while (i < raw.length && (raw[i] === " " || raw[i] === "\t")) i++;
+  if (raw[i] !== "=") return null;
+  i++;
+  while (i < raw.length && (raw[i] === " " || raw[i] === "\t")) i++;
+  return [key, raw.slice(i)];
+}
 
 export function parseEnv(text: string, file = ".env"): Record<string, string> {
   const out: Record<string, string> = {};
   const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/);
   lines.forEach((raw, i) => {
-    if (/^\s*(#.*)?$/.test(raw)) return;
-    const m = LINE.exec(raw);
-    if (!m) throw new Error(`${file}:${i + 1}: expected KEY=value`);
-    let v = m[2].trimEnd();
+    const parsed = envLine(raw);
+    if (parsed && parsed[0] === "") return;
+    if (!parsed) throw new Error(`${file}:${i + 1}: expected KEY=value`);
+    const m = parsed;
+    let v = m[1].trimEnd();
     const q = v[0];
     if (q === '"' || q === "'") {
       const end = v.lastIndexOf(q);
-      if (end === 0 || !/^\s*(#.*)?$/.test(v.slice(end + 1))) throw new Error(`${file}:${i + 1}: unterminated quote`);
+      if (end === 0 || !blankOrComment(v.slice(end + 1))) throw new Error(`${file}:${i + 1}: unterminated quote`);
       v = v.slice(1, end);
       if (q === '"') {
         v = v.replace(/\\([nrt"\\])/g, (_s, c: string) => ({ n: "\n", r: "\r", t: "\t", '"': '"', "\\": "\\" })[c]!);
@@ -72,8 +102,8 @@ export function parseEnv(text: string, file = ".env"): Record<string, string> {
       const hash = v.search(/\s#/);
       if (hash >= 0) v = v.slice(0, hash).trimEnd();
     }
-    if (m[1] === "__proto__") throw new Error(`${file}:${i + 1}: __proto__ is not a variable name`);
-    out[m[1]] = v;
+    if (m[0] === "__proto__") throw new Error(`${file}:${i + 1}: __proto__ is not a variable name`);
+    out[m[0]] = v;
   });
   return out;
 }

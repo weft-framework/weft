@@ -2720,7 +2720,7 @@ export function createApp(opts: AppOptions): App {
     if (reload && !dispatching.has(e)) e.foreign = true;
     if (e.timer === null) {
       e.timer = setTimeout(() => void refresh(e), syncDelay);
-      (e.timer as { unref?(): void }).unref?.();
+      if (e.sinks.size === 0) (e.timer as { unref?(): void }).unref?.();
     }
   }
 
@@ -2921,7 +2921,6 @@ export function createApp(opts: AppOptions): App {
         stream.push({ t: "hello", session: id, p: PROTOCOL_VERSION });
         detach = attach(entry, (msg) => stream.push(msg));
         timer = setInterval(() => controller.enqueue(enc.encode(": ping\n\n")), heartbeatMs);
-        (timer as { unref?(): void }).unref?.();
       },
       cancel() {
         streams.delete(id);
@@ -3867,8 +3866,22 @@ function seeOther(to: string): Response {
   return new Response(null, { status: 303, headers: { location: to } });
 }
 
+function jsonSafe(value: unknown, depth = 0): unknown {
+  if (value instanceof Error) return { name: value.name, message: String(value.message) };
+  if (value === null || typeof value !== "object" || depth > 8) return value;
+  if (Array.isArray(value)) return value.map((item) => jsonSafe(item, depth + 1));
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) return value;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    if (k === "stack") continue;
+    out[k] = jsonSafe(v, depth + 1);
+  }
+  return out;
+}
+
 function jsonResponse(code: number, body: unknown): Response {
-  return new Response(JSON.stringify(body, (key, value) => (key === "stack" ? undefined : value)), {
+  return new Response(JSON.stringify(jsonSafe(body)), {
     status: code,
     headers: {
       "content-type": "application/json; charset=utf-8",

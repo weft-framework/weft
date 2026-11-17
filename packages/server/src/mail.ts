@@ -266,7 +266,8 @@ export function htmlToText(html: string): string {
       const inner = htmlToText(html.slice(innerFrom, closeAt < innerFrom ? innerFrom : closeAt));
       const href = hrefOf(raw);
       const label = inner.replace(/[ \t\u00a0]+/g, " ").trim();
-      if (!href || href.startsWith("#") || href.toLowerCase().startsWith("javascript:") || href.toLowerCase().startsWith("data:") || href.toLowerCase().startsWith("vbscript:")) {
+      const scheme = href.trim().toLowerCase();
+      if (!href || scheme.startsWith("#") || scheme.startsWith("javascript:") || scheme.startsWith("data:") || scheme.startsWith("vbscript:")) {
         out += label;
       } else if (label === "" || label === href || `mailto:${label}` === href) {
         out += href.toLowerCase().startsWith("mailto:") ? href.slice(7) : href;
