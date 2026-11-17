@@ -1,0 +1,10 @@
+import { cn } from "../../lib/utils.ts";
+
+export const toastClass =
+  "bg-popover text-popover-foreground pointer-events-auto relative flex w-full flex-col gap-1 rounded-md border p-4 pr-8 text-sm shadow-lg [&>[data-title]]:font-medium [&>[data-description]]:text-muted-foreground [&>[data-close]]:absolute [&>[data-close]]:top-2 [&>[data-close]]:right-2 [&>[data-close]]:size-5 [&>[data-close]]:rounded-sm [&>[data-close]]:opacity-60 [&>[data-close]]:hover:opacity-100";
+
+component Toaster(position?: "top-left" | "top-center" | "top-right" | "bottom-left" | "bottom-center" | "bottom-right", label?: string, ...attrs: Attrs) {
+  view {
+    <ol data-weft-ignore="" data-weft-toaster="" aria-label={label ?? "Notifications"} data-position={position ?? "bottom-right"} data-item-class={toastClass} data-success-class="[&>[data-title]]:text-green-600 dark:[&>[data-title]]:text-green-400" data-error-class="border-destructive/50 [&>[data-title]]:text-destructive" data-warning-class="[&>[data-title]]:text-amber-600 dark:[&>[data-title]]:text-amber-400" data-slot="toaster" class={cn("pointer-events-none fixed z-[100] flex max-h-screen w-full flex-col gap-2 p-4 sm:max-w-[420px] data-[position^=top]:top-0 data-[position^=bottom]:bottom-0 data-[position$=left]:left-0 data-[position$=right]:right-0 data-[position$=center]:left-1/2 data-[position$=center]:-translate-x-1/2", attrs.class)} {...attrs}></ol>
+  }
+}

@@ -1,0 +1,71 @@
+import { redirect, switchTenant, type PageContext } from "@weft/server";
+import { fail } from "@weft/server/action";
+import { access } from "../access.ts";
+import { meOf } from "../lib/workspaces.ts";
+import { userById } from "../lib/users.ts";
+import { AuthShell } from "../components/AuthShell.wx";
+import { buttonVariants } from "../components/ui/button.wx";
+
+export const meta = { title: "Join a workspace" };
+
+export async function load(ctx: PageContext) {
+  const token = ctx.query.get("token") ?? "";
+  const invite = token ? await access.inspectInvite(token) : null;
+  const me = meOf(ctx);
+  const mine = me ? userById(me.id)?.email ?? "" : "";
+  const here = "/invite?token=" + encodeURIComponent(token);
+  return {
+    token,
+    found: invite !== null,
+    workspace: invite?.tenant ?? "",
+    role: invite?.role ?? "",
+    invited: invite?.email ?? "",
+    signedInAs: mine,
+    matches: invite !== null && mine !== "" && (invite.email === null || invite.email === mine),
+    signIn: "/sign-in?next=" + encodeURIComponent(here),
+  };
+}
+
+action joinWorkspace(token: string) {
+  const me = meOf(ctx)
+  if (!me) fail("Sign in first.")
+  const address = userById(me.id)?.email
+  try {
+    const member = await access.acceptInvite(token, me.id, { email: address })
+    await switchTenant(ctx, member.scope)
+  } catch (err) {
+    fail(err instanceof Error && err.name === "AccessError" ? "This invite " + (err.message === "the invite expired" ? "has expired." : "cannot be used: " + err.message + ".") : "Could not join. Try again.")
+  }
+  return redirect("/app")
+}
+
+component Page(token: string, found: boolean, workspace: string, role: string, invited: string, signedInAs: string, matches: boolean, signIn: string) {
+  view {
+    {#if !found}
+      <AuthShell title="This invite cannot be used" lead="It was already accepted, withdrawn, or has expired. Ask the person who invited you for a new one.">
+        <a href="/" class={buttonVariants({ variant: "outline" })}>Go to the home page</a>
+      </AuthShell>
+    {:else if matches}
+      <AuthShell title={"Join " + workspace} lead={"You are invited as " + role.toLowerCase() + ". You will see what that role allows from the moment you join."}>
+        <form action={joinWorkspace} class="flex flex-col gap-4">
+          <input type="hidden" name="token" value={token} />
+          <p data-weft-message role="alert" class="text-destructive text-sm empty:hidden"></p>
+          <button class={buttonVariants({})}>Join {workspace}</button>
+        </form>
+        <p class="text-muted-foreground mt-6 text-sm">Joining as {signedInAs}.</p>
+      </AuthShell>
+    {:else if signedInAs}
+      <AuthShell title="This invite is for another address" lead={"It was sent to " + invited + ", and you are signed in as " + signedInAs + "."}>
+        <a href={signIn} class={buttonVariants({})}>Sign in with the invited address</a>
+      </AuthShell>
+    {:else}
+      <AuthShell title={"Join " + workspace} lead={invited ? "Sign in or sign up with " + invited + " to accept." : "Sign in or sign up to accept."}>
+        <div class="flex flex-col gap-3">
+          <a href={signIn} class={buttonVariants({})}>Sign in</a>
+          <a href="/sign-up" class={buttonVariants({ variant: "outline" })}>Create an account</a>
+        </div>
+        <p class="text-muted-foreground mt-6 text-sm">After signing up, open the invite link from your email again.</p>
+      </AuthShell>
+    {/if}
+  }
+}

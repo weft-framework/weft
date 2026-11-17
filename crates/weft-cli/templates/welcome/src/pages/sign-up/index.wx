@@ -1,0 +1,60 @@
+import { redirect, type PageContext } from "@weft/server";
+import { fail } from "@weft/server/action";
+import { account } from "../../lib/accounts.ts";
+import { meOf } from "../../lib/workspaces.ts";
+import { AuthShell } from "../../components/AuthShell.wx";
+import { buttonVariants } from "../../components/ui/button.wx";
+import { inputClass } from "../../components/ui/input.wx";
+import { labelClass } from "../../components/ui/label.wx";
+import { Field, FieldDescription } from "../../components/ui/field.wx";
+
+export const meta = { title: "Create an account" };
+
+export async function load(ctx: PageContext) {
+  if (meOf(ctx)) return redirect("/app");
+  return { form: await account.signUpForm(ctx), sent: ctx.query.get("sent") === "1" };
+}
+
+action signUp(address: string, password: string, form: string, website: string) {
+  try {
+    await account.signUp(ctx, { email: address, password, form, trap: website })
+  } catch (err) {
+    fail(err instanceof Error && err.name === "AccountError" ? err.message : "Could not sign you up. Try again.")
+  }
+  return redirect("/sign-up?sent=1")
+}
+
+component Page(form: string, sent: boolean) {
+  view {
+    {#if sent}
+      <AuthShell title="Check your email" lead="We sent a link to the address you gave. Open it to create your account; it works for 24 hours.">
+        <p class="text-muted-foreground text-sm leading-relaxed">
+          Nothing there? Look in spam, or <a href="/sign-up" class="text-foreground underline underline-offset-4">try again</a>. While developing, every message the app sends is listed at <a href="/_weft/dev/mail" class="text-foreground font-mono text-[13px] underline underline-offset-4">/_weft/dev/mail</a>.
+        </p>
+      </AuthShell>
+    {:else}
+      <AuthShell title="Create an account" lead="Your email and a password. You will confirm the address before anything is made.">
+        <form action={signUp} class="flex flex-col gap-4">
+          <input type="hidden" name="form" value={form} />
+          <div aria-hidden="true" class="absolute -left-[9999px] size-px overflow-hidden">
+            <label>Leave this empty <input name="website" tabindex="-1" autocomplete="off" /></label>
+          </div>
+          <Field>
+            <label for="address" class={labelClass}>Email</label>
+            <input id="address" name="address" type="email" autocomplete="email" required class={inputClass} />
+          </Field>
+          <Field>
+            <label for="password" class={labelClass}>Password</label>
+            <input id="password" name="password" type="password" autocomplete="new-password" minlength="10" required class={inputClass} aria-describedby="password-hint" />
+            <FieldDescription id="password-hint">At least 10 characters.</FieldDescription>
+          </Field>
+          <p data-weft-message role="alert" class="text-destructive text-sm empty:hidden"></p>
+          <button class={buttonVariants({})}>Create account</button>
+        </form>
+        <p class="text-muted-foreground mt-10 text-sm">
+          Have an account? <a href="/sign-in" class="text-foreground font-medium underline-offset-4 hover:underline">Sign in</a>
+        </p>
+      </AuthShell>
+    {/if}
+  }
+}

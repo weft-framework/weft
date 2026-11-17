@@ -1,0 +1,111 @@
+import type { PageContext } from "@weft/server";
+import type { NotificationView } from "@weft/core/notifications";
+import { gate, type Me } from "../../lib/workspaces.ts";
+import { notify } from "../../lib/notify.ts";
+import { AppShell } from "../../components/AppShell.wx";
+import { Icon } from "../../components/Icon.wx";
+import type { IconName } from "../../lib/icons.ts";
+import { buttonVariants } from "../../components/ui/button.wx";
+import { activityWhen } from "../../components/ui/activity-feed.wx";
+
+export const meta = { title: "Inbox" };
+
+export function load(ctx: PageContext) {
+  const g = gate(ctx);
+  if (!g.ok) return g.redirect;
+  return { me: g.me, path: ctx.url.pathname };
+}
+
+const ICON: Record<string, IconName> = { assigned: "user", review: "check", comment: "chat", booking: "calendar", security: "shield" };
+
+export const iconOf = (n: NotificationView): IconName => ICON[n.type] ?? "inbox";
+
+component Page(me: Me, path: string) {
+  signal onlyUnread = false
+
+  function readOne(id: string) {
+    notify.markRead(me.id, [id])
+  }
+
+  function unreadOne(id: string) {
+    notify.markUnread(me.id, [id])
+  }
+
+  function removeOne(id: string) {
+    notify.remove(me.id, [id])
+  }
+
+  function readAll() {
+    notify.markRead(me.id, "all")
+  }
+
+  function clearRead() {
+    const read = notify.inbox(me.id, { limit: 200 }).filter((n) => n.read !== null).map((n) => n.id)
+    if (read.length > 0) notify.remove(me.id, read)
+  }
+
+  function toggleUnread() {
+    onlyUnread = !onlyUnread
+  }
+
+  view {
+    <AppShell me={me} path={path} title="Inbox">
+      <div class="mb-6 flex flex-wrap items-center gap-2">
+        <p class="text-muted-foreground mr-auto text-sm" aria-live="polite">
+          {notify.unread(me.id) === 0 ? "Nothing unread." : notify.unread(me.id) + " unread"}
+        </p>
+        <button type="button" @click={toggleUnread} aria-pressed={onlyUnread ? "true" : "false"} class={buttonVariants({ variant: onlyUnread ? "secondary" : "outline", size: "sm" })}>Only unread</button>
+        <button type="button" @click={readAll} disabled={notify.unread(me.id) === 0} class={buttonVariants({ variant: "outline", size: "sm" })}>
+          <Icon name="check" />
+          Mark all read
+        </button>
+        <button type="button" @click={clearRead} class={buttonVariants({ variant: "ghost", size: "sm" })}>Clear read</button>
+      </div>
+
+      {#if notify.inbox(me.id, { limit: 100, unread: onlyUnread }).length === 0}
+        <div class="rounded-lg border border-dashed px-6 py-14 text-center">
+          <Icon name="inbox" class="text-muted-foreground mx-auto size-6" />
+          <p class="mt-3 font-medium">{onlyUnread ? "You have read everything" : "Your inbox is empty"}</p>
+          <p class="text-muted-foreground mt-1 text-sm">Tasks given to you, reviews and room reminders show up here.</p>
+        </div>
+      {:else}
+        <ul class="divide-y rounded-lg border">
+          {#each notify.inbox(me.id, { limit: 100, unread: onlyUnread }) as n (n.id)}
+            <li class={n.read === null ? "bg-muted/40 flex items-start gap-3 px-4 py-3.5" : "flex items-start gap-3 px-4 py-3.5"}>
+              <span class="bg-background mt-0.5 grid size-8 shrink-0 place-items-center rounded-full border">
+                <Icon name={iconOf(n)} class="size-4" />
+              </span>
+              <div class="min-w-0 flex-1">
+                <p class="flex items-center gap-2 text-sm">
+                  {#if n.read === null}
+                    <span class="bg-primary size-1.5 shrink-0 rounded-full" aria-label="Unread"></span>
+                  {/if}
+                  {#if n.url}
+                    <a href={n.url} class="font-medium underline-offset-4 hover:underline">{n.title}</a>
+                  {:else}
+                    <span class="font-medium">{n.title}</span>
+                  {/if}
+                </p>
+                {#if n.body}
+                  <p class="text-muted-foreground mt-0.5 text-sm">{n.body}</p>
+                {/if}
+                <p class="text-muted-foreground mt-1 text-xs">{activityWhen(n.created, Date.now())}</p>
+              </div>
+              <div class="flex shrink-0 gap-1">
+                {#if n.read === null}
+                  <button type="button" @click={readOne(n.id)} class={buttonVariants({ variant: "ghost", size: "sm" })}>Mark read</button>
+                {:else}
+                  <button type="button" @click={unreadOne(n.id)} class={buttonVariants({ variant: "ghost", size: "sm" })}>Mark unread</button>
+                {/if}
+                <button type="button" @click={removeOne(n.id)} aria-label={"Remove " + n.title} class={buttonVariants({ variant: "ghost", size: "icon" })}>
+                  <Icon name="trash" />
+                </button>
+              </div>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+      <p class="text-muted-foreground mt-6 text-sm">Choose what also comes by email on <a href="/app/account#notifications" class="text-foreground underline-offset-4 hover:underline">your account</a>.</p>
+    </AppShell>
+  }
+}

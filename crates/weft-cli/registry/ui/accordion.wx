@@ -1,0 +1,28 @@
+import { cn } from "../../lib/utils.ts";
+
+component Accordion(children: Html, ...attrs: Attrs) {
+  view {
+    <div data-slot="accordion" class={cn("w-full", attrs.class)} {...attrs}>{children}</div>
+  }
+}
+
+component AccordionItem(name?: string, open?: boolean, children: Html, ...attrs: Attrs) {
+  view {
+    <details name={name} open={open} data-slot="accordion-item" class={cn("group/accordion border-b last:border-b-0", attrs.class)} {...attrs}>{children}</details>
+  }
+}
+
+component AccordionTrigger(children: Html, ...attrs: Attrs) {
+  view {
+    <summary data-slot="accordion-trigger" class={cn("focus-visible:border-ring focus-visible:ring-ring/50 flex flex-1 cursor-pointer list-none items-start justify-between gap-4 rounded-md py-4 text-left text-sm font-medium transition-all outline-none hover:underline focus-visible:ring-[3px] [&::-webkit-details-marker]:hidden", attrs.class)} {...attrs}>
+      {children}
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-muted-foreground pointer-events-none size-4 shrink-0 translate-y-0.5 transition-transform duration-200 group-open/accordion:rotate-180" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+    </summary>
+  }
+}
+
+component AccordionContent(children: Html, ...attrs: Attrs) {
+  view {
+    <div data-slot="accordion-content" class={cn("overflow-hidden pt-0 pb-4 text-sm", attrs.class)} {...attrs}>{children}</div>
+  }
+}

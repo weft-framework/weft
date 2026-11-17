@@ -1,0 +1,13 @@
+import type { PageMeta } from "@weft/server";
+
+export const meta: PageMeta = {
+  title: "Not found",
+  robots: "noindex",
+};
+
+component Page() {
+  view {
+    <h1>Page not found</h1>
+    <p><a href="/">Back to the home page</a></p>
+  }
+}

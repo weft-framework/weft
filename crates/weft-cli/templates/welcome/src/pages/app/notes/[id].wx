@@ -1,0 +1,138 @@
+import { grantToken, notFound, type PageContext } from "@weft/server";
+import { mentionsIn, parseRichText, type WeftEvent } from "@weft/runtime";
+import { gate, type Me } from "../../../lib/workspaces.ts";
+import { Notes, noteHistory, LIMITS, docOf } from "../../../lib/notes.ts";
+import { assignable } from "../../../lib/tasks.ts";
+import { appUrl } from "../../../lib/env.ts";
+import { nameOf } from "../../../lib/users.ts";
+import { AppShell } from "../../../components/AppShell.wx";
+import { Icon } from "../../../components/Icon.wx";
+import { buttonVariants } from "../../../components/ui/button.wx";
+import { RichTextEditor } from "../../../components/ui/rich-text-editor.wx";
+import { ShareLink } from "../../../components/ui/share-link.wx";
+import { activityWhen } from "../../../components/ui/activity-feed.wx";
+
+export const meta = { title: "Note" };
+
+export function load(ctx: PageContext) {
+  const g = gate(ctx, "notes.read");
+  if (!g.ok) return g.redirect;
+  const id = String(ctx.params.id);
+  const note = Notes.as(g.me).get(id);
+  if (!note) return notFound();
+  const share = async () => {
+    const token = await grantToken(ctx, Notes, id, "read", { ttlMs: 24 * 3600_000 });
+    return `${appUrl}/shared/${id}?grant=${encodeURIComponent(token)}`;
+  };
+  return { me: g.me, id, path: ctx.url.pathname, share };
+}
+
+component Page(me: Me, id: string, path: string, share: () => Promise<string>) {
+  signal problem = ""
+  signal savedAt = 0
+
+  function save(e: WeftEvent) {
+    const title = String(e.form?.title ?? "").trim().replace(/\s+/g, " ").slice(0, 120) || "Untitled"
+    const r = parseRichText(e.form?.body ?? "", LIMITS)
+    if (!r.ok) {
+      problem = "Not saved: " + r.error
+      return
+    }
+    const before = Notes.as(me).get(id)
+    const allowed = new Set([...assignable(me).map((p) => p.id), ...(before ? mentionsIn(docOf(before)) : [])])
+    if (mentionsIn(r.doc).some((m) => !allowed.has(m))) {
+      problem = "Not saved: you can mention only people in this workspace."
+      return
+    }
+    const n = Notes.as(me).update((x) => x.id === id, { title, body: JSON.stringify(r.doc), updated: Date.now() })
+    problem = n === 0 ? "Your role does not let you change this note." : ""
+    if (n > 0) savedAt = Date.now()
+  }
+
+  function setShared(e: WeftEvent) {
+    const n = Notes.as(me).update((x) => x.id === id && x.author === me.id, { shared: e.checked === true })
+    problem = n === 0 ? "Only the author decides who reads a note." : ""
+  }
+
+  function trash() {
+    problem = Notes.as(me).delete((x) => x.id === id) === 0 ? "Your role does not let you delete this note." : ""
+  }
+
+  client function saveSoon(e: Event) {
+    const form = (e.target as HTMLElement).closest("form")
+    form?.requestSubmit()
+  }
+
+  view {
+    <AppShell me={me} path={path} title="Note">
+      {#if Notes.as(me).get(id)}
+        <div class="mb-6 flex flex-wrap items-center gap-3">
+          <a href="/app/notes" class="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm">
+            <Icon name="undo" />
+            Notes
+          </a>
+          <span class="text-muted-foreground ml-auto text-xs" aria-live="polite">
+            {savedAt ? "Saved " + activityWhen(savedAt, Date.now()) : "Changes save by themselves"}
+          </span>
+        </div>
+        <div class="grid gap-10 lg:grid-cols-[1fr_16rem]">
+          <form @submit={save} class="flex min-w-0 flex-col gap-4">
+            <input
+              name="title"
+              aria-label="Title"
+              value={Notes.as(me).get(id)?.title}
+              maxlength="120"
+              disabled={!me.can("notes.edit")}
+              @change={saveSoon}
+              class="w-full bg-transparent text-2xl font-semibold tracking-[-0.02em] outline-none placeholder:text-muted-foreground"
+              placeholder="Untitled"
+            />
+            <RichTextEditor name="body" label="Note" value={Notes.as(me).get(id)?.body} docKey={id} autosave={900} placeholder="Write something" disabled={!me.can("notes.edit")} mentions={assignable(me).map((p) => ({ id: p.id, label: p.name }))} />
+            {#if problem}
+              <p role="alert" class="text-destructive text-sm">{problem}</p>
+            {/if}
+          </form>
+
+          <aside class="flex flex-col gap-8 text-sm">
+            <section>
+              <h3 class="text-muted-foreground mb-2 text-xs font-medium">Who can read it</h3>
+              {#if Notes.as(me).get(id)?.author === me.id}
+                <label class="flex items-start gap-2.5">
+                  <input type="checkbox" checked={Notes.as(me).get(id)?.shared} @change={setShared} class="accent-primary mt-0.5 size-4" />
+                  <span>Everyone in the workspace<span class="text-muted-foreground block text-xs">Off: only you.</span></span>
+                </label>
+              {:else}
+                <p>Shared by {nameOf(Notes.as(me).get(id)?.author ?? "")} with the workspace.</p>
+              {/if}
+            </section>
+            <section>
+              <h3 class="text-muted-foreground mb-2 text-xs font-medium">Share link</h3>
+              <ShareLink make={share} label="Create a link" expires="for 24 hours" />
+              <p class="text-muted-foreground mt-2 text-xs">Anyone with the link can read this note, signed in or not, until it expires. It cannot be used to change it.</p>
+            </section>
+            <section>
+              <h3 class="text-muted-foreground mb-2 text-xs font-medium">Versions</h3>
+              <ol class="flex flex-col gap-1.5">
+                {#each (noteHistory.versions(Notes.as(me), id, { limit: 6 }) ?? []) as v (v.version)}
+                  <li><span class="font-medium">{v.actor ? nameOf(v.actor) : "Someone"}</span> <span class="text-muted-foreground">{activityWhen(v.at, Date.now())}</span></li>
+                {/each}
+              </ol>
+            </section>
+            {#can write(Notes.as(me).get(id))}
+              <button type="button" @click={trash} class={buttonVariants({ variant: "ghost", size: "sm" }) + " text-destructive w-fit"}>
+                <Icon name="trash" />
+                Move to trash
+              </button>
+            {/can}
+          </aside>
+        </div>
+      {:else}
+        <div class="py-16 text-center">
+          <h2 class="text-lg font-semibold">This note is gone</h2>
+          <p class="text-muted-foreground mt-1 text-sm">It was deleted, or its author stopped sharing it.</p>
+          <a href="/app/notes" class={buttonVariants({ variant: "outline" }) + " mt-4"}>All notes</a>
+        </div>
+      {/if}
+    </AppShell>
+  }
+}

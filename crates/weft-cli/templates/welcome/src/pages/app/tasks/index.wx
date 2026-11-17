@@ -1,0 +1,148 @@
+import type { PageContext } from "@weft/server";
+import type { WeftEvent } from "@weft/runtime";
+import { gate, type Me } from "../../../lib/workspaces.ts";
+import {
+  Tasks,
+  review,
+  taskTags,
+  assignable,
+  createTask,
+  moveTask,
+  STATUSES,
+  STATUS_LABEL,
+  TRANSITION_LABEL,
+  type Task,
+} from "../../../lib/tasks.ts";
+import { colorOf, initials, nameOf } from "../../../lib/users.ts";
+import { AppShell } from "../../../components/AppShell.wx";
+import { Icon } from "../../../components/Icon.wx";
+import { buttonVariants } from "../../../components/ui/button.wx";
+import { inputClass } from "../../../components/ui/input.wx";
+import { Badge } from "../../../components/ui/badge.wx";
+import { NativeSelect, NativeSelectOption } from "../../../components/ui/native-select.wx";
+
+export const meta = { title: "Tasks" };
+
+export function load(ctx: PageContext) {
+  const g = gate(ctx, "tasks.read");
+  if (!g.ok) return g.redirect;
+  return { me: g.me, path: ctx.url.pathname, tag: ctx.query.get("tag") ?? "" };
+}
+
+export function column(me: Me, status: string, onlyMine: boolean, tag: string): Task[] {
+  const tagged = tag ? new Set(taskTags.keysWith(me, tag).map(String)) : null;
+  return Tasks.as(me)
+    .where((t) => t.status === status && (!onlyMine || t.assignee === me.id) && (!tagged || tagged.has(t.id)))
+    .sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999") || b.created - a.created);
+}
+
+export function steps(me: Me, t: Task): string[] {
+  return review.available(Tasks.as(me), t.id).filter((s) => s !== "sendBack");
+}
+
+export const today = () => new Date().toISOString().slice(0, 10);
+
+component Page(me: Me, path: string, tag: string) {
+  signal onlyMine = false
+  signal problem = ""
+
+  function add(e: WeftEvent) {
+    const r = createTask(me, {
+      title: String(e.form?.title ?? ""),
+      assignee: String(e.form?.assignee ?? ""),
+      due: String(e.form?.due ?? ""),
+    })
+    problem = typeof r === "string" ? r : ""
+  }
+
+  function step(id: string, transition: string) {
+    problem = moveTask(me, id, transition) ?? ""
+  }
+
+  function toggleMine() {
+    onlyMine = !onlyMine
+  }
+
+  view {
+    <AppShell me={me} path={path} title="Tasks">
+      <div class="flex flex-wrap items-center gap-3">
+        {#if me.can("tasks.edit")}
+          <form @submit={add} class="flex min-w-0 flex-1 flex-wrap gap-2" autocomplete="off">
+            <input name="title" aria-label="New task" placeholder="What needs doing?" maxlength="140" class={inputClass + " min-w-48 flex-1"} />
+            {#if assignable(me).length > 1}
+              <NativeSelect name="assignee" aria-label="Give to" class="w-40">
+                <NativeSelectOption value="">Nobody yet</NativeSelectOption>
+                {#each assignable(me) as p (p.id)}
+                  <NativeSelectOption value={p.id}>{p.id === me.id ? "Me" : p.name}</NativeSelectOption>
+                {/each}
+              </NativeSelect>
+            {:else}
+              <input type="hidden" name="assignee" value={me.id} />
+            {/if}
+            <input type="date" name="due" aria-label="Due" min={today()} class={inputClass + " w-40"} />
+            <button class={buttonVariants({})} :busy>
+              <Icon name="plus" />
+              Add
+            </button>
+          </form>
+        {/if}
+        <div class="ml-auto flex items-center gap-2">
+          <button type="button" @click={toggleMine} aria-pressed={onlyMine ? "true" : "false"} class={buttonVariants({ variant: onlyMine ? "secondary" : "ghost", size: "sm" })}>Only mine</button>
+          <a href="/app/tasks/data" class={buttonVariants({ variant: "ghost", size: "sm" })}>
+            <Icon name="download" />
+            Import and export
+          </a>
+          <a href="/app/tasks/trash" class={buttonVariants({ variant: "ghost", size: "sm" })}>
+            <Icon name="trash" />
+            Trash
+          </a>
+        </div>
+      </div>
+      {#if problem}
+        <p role="alert" class="text-destructive mt-3 flex items-center gap-2 text-sm"><Icon name="shield" />{problem}</p>
+      {/if}
+      {#if tag}
+        <p class="text-muted-foreground mt-4 text-sm">
+          Tagged <Badge variant="outline">{tag}</Badge>
+          <a href="/app/tasks" class="text-foreground ml-2 underline-offset-4 hover:underline">Show all</a>
+        </p>
+      {/if}
+
+      <div class="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {#each STATUSES as status}
+          <section aria-labelledby={"col-" + status} class="bg-muted/40 flex min-h-40 flex-col rounded-xl p-2">
+            <h2 id={"col-" + status} class="flex items-center justify-between px-2 pt-1 pb-2 text-sm font-semibold">
+              {STATUS_LABEL[status]}
+              <span class="text-muted-foreground text-xs font-normal tabular-nums">{column(me, status, onlyMine, tag).length}</span>
+            </h2>
+            <ul class="flex flex-col gap-2">
+              {#each column(me, status, onlyMine, tag) as t (t.id)}
+                <li class="bg-card rounded-lg border p-3 shadow-xs">
+                  <a href={"/app/tasks/" + t.id} class="block text-sm leading-snug font-medium underline-offset-4 hover:underline">{t.title}</a>
+                  <div class="text-muted-foreground mt-2 flex items-center gap-2 text-xs">
+                    {#if t.assignee}
+                      <span aria-label={"Given to " + nameOf(t.assignee)} title={nameOf(t.assignee)} class="grid size-5 place-items-center rounded-full text-[10px] font-semibold text-white" style={"background:" + colorOf(t.assignee)}>{initials(nameOf(t.assignee))}</span>
+                    {/if}
+                    {#if t.due}
+                      <span class={t.due < today() && t.status !== "done" ? "text-destructive tabular-nums" : "tabular-nums"}>{t.due}</span>
+                    {/if}
+                    {#each taskTags.of(me, t.id).slice(0, 2) as g}
+                      <span class="rounded bg-secondary px-1.5 py-0.5">{g}</span>
+                    {/each}
+                  </div>
+                  {#if steps(me, t).length > 0}
+                    <div class="mt-2.5 flex flex-wrap gap-1.5">
+                      {#each steps(me, t) as s}
+                        <button type="button" @click={step(t.id, s)} class={buttonVariants({ variant: s === "approve" ? "default" : "outline", size: "sm" }) + " h-7 px-2 text-xs"}>{TRANSITION_LABEL[s]}</button>
+                      {/each}
+                    </div>
+                  {/if}
+                </li>
+              {/each}
+            </ul>
+          </section>
+        {/each}
+      </div>
+    </AppShell>
+  }
+}

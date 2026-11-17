@@ -1,0 +1,19 @@
+import { qrCode, qrPath, qrViewBox, type QrLevel } from "@weft/runtime";
+import { cn } from "../../lib/utils.ts";
+
+component QrCode(value: string, label: string, level?: QrLevel, ...attrs: Attrs) {
+  view {
+    <svg
+      data-slot="qr-code"
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox={qrViewBox(qrCode(value, { level: level ?? "M" }))}
+      role="img"
+      aria-label={label}
+      shape-rendering="crispEdges"
+      class={cn("size-40 rounded-md border bg-white text-black", attrs.class)}
+      {...attrs}
+    >
+      <path fill="currentColor" d={qrPath(qrCode(value, { level: level ?? "M" }))} />
+    </svg>
+  }
+}

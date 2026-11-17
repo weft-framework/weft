@@ -1,0 +1,14 @@
+export const meta = { title: "Counter" };
+
+component Page() {
+  signal count = 0
+
+  function increment() {
+    count = count + 1
+  }
+
+  view {
+    <p>Count: {count}</p>
+    <button @click={increment}>+1</button>
+  }
+}

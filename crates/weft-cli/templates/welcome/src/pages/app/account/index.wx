@@ -1,0 +1,439 @@
+import { listSessions, redirect, revokeSession, signOutEverywhere, type PageContext } from "@weft/server";
+import { fail } from "@weft/server/action";
+import { hashPassword, verifyPassword } from "@weft/server/password";
+import type { WeftEvent } from "@weft/runtime";
+import type { SessionInfo } from "@weft/server";
+client import { createPasskey, passkeysSupported } from "@weft/runtime"
+import { account, passkeys, twoFactor } from "../../../lib/accounts.ts";
+import { notify } from "../../../lib/notify.ts";
+import { meOf, workspaceOf, type Me } from "../../../lib/workspaces.ts";
+import { rename, setPassword, userById } from "../../../lib/users.ts";
+import { AppShell } from "../../../components/AppShell.wx";
+import { Icon } from "../../../components/Icon.wx";
+import { buttonVariants } from "../../../components/ui/button.wx";
+import { inputClass } from "../../../components/ui/input.wx";
+import { labelClass } from "../../../components/ui/label.wx";
+import { NativeSelect, NativeSelectOption } from "../../../components/ui/native-select.wx";
+import { QrCode } from "../../../components/ui/qr-code.wx";
+import { activityWhen } from "../../../components/ui/activity-feed.wx";
+
+export const meta = { title: "Account" };
+
+export interface KeyRow {
+  id: string;
+  name: string;
+  created: number;
+  lastUsed: number | null;
+  backedUp: boolean;
+}
+
+export async function load(ctx: PageContext) {
+  const me = meOf(ctx);
+  if (!me) return redirect("/sign-in?next=/app/account");
+  const user = userById(me.id);
+  if (!user) return redirect("/sign-in");
+  const tf = await twoFactor.status(ctx);
+  const enabled = tf?.enabled === true;
+  const setup = !enabled && ctx.query.get("setup") === "two-factor" ? await twoFactor.setup(ctx, { account: user.email }) : null;
+  const keys: KeyRow[] = (await passkeys.list(me.id)).map((k) => ({ id: k.id, name: k.name, created: k.created, lastUsed: k.lastUsed, backedUp: k.backedUp }));
+  return {
+    me,
+    path: ctx.url.pathname,
+    hasWorkspace: workspaceOf(ctx) !== null,
+    name: user.name,
+    email: user.email,
+    hasPassword: user.password !== null,
+    enabled,
+    recoveryLeft: tf?.recoveryLeft ?? 0,
+    setup,
+    keys,
+    sessions: await listSessions(ctx),
+    done: ctx.query.get("done") ?? "",
+  };
+}
+
+const DONE: Record<string, string> = {
+  profile: "Name saved.",
+  "email-sent": "If that address is free, a confirmation link is on its way to it. Your address changes when you open it.",
+  email: "Email address changed. Your old address was told.",
+  password: "Password changed. Your other sessions were signed out.",
+  "two-factor-off": "Two-factor sign-in is off.",
+  passkey: "Passkey added. You can sign in with it now.",
+  "passkey-removed": "Passkey removed.",
+  "signed-out": "Signed out of that session.",
+  everywhere: "Signed out everywhere else.",
+};
+
+async function tell(user: string, title: string, body: string) {
+  await notify.send(user, "security", { title, body, url: "/app/account" })
+}
+
+const signedIn = (ctx: PageContext) => {
+  const me = meOf(ctx)
+  if (!me) fail("Sign in again.", 401)
+  return me
+}
+
+const accountError = (e: unknown) => {
+  if ((e as { name?: string })?.name !== "AccountError") throw e
+  return (e as Error).message
+}
+
+action saveProfile(name: string) {
+  const me = signedIn(ctx)
+  const shown = name.trim().replace(/\s+/g, " ")
+  if (shown.length < 1 || shown.length > 60) fail("A name is 1 to 60 characters.")
+  rename(me.id, shown)
+  return redirect("/app/account?done=profile")
+}
+
+action changeEmail(address: string) {
+  signedIn(ctx)
+  try {
+    await account.requestEmailChange(ctx, address)
+  } catch (e) {
+    fail(accountError(e))
+  }
+  return redirect("/app/account?done=email-sent")
+}
+
+action changePassword(current: string, password: string, again: string) {
+  const me = signedIn(ctx)
+  const user = userById(me.id)
+  if (!user) fail("Sign in again.", 401)
+  if (user.password !== null && !(await verifyPassword(current, user.password))) fail("Your current password is not that.")
+  if (password.length < 10) fail("Use at least 10 characters.")
+  if (password.length > 256) fail("Use at most 256 characters.")
+  if (password !== again) fail("The two new passwords are not the same.")
+  setPassword(me.id, await hashPassword(password))
+  await signOutEverywhere(ctx, { keepThis: true })
+  await tell(me.id, "Your password was changed", "If this was not you, reset your password and sign out everywhere.")
+  return redirect("/app/account?done=password")
+}
+
+action enableTwoFactor(state: string, code: string) {
+  const me = signedIn(ctx)
+  let codes: string[] | null
+  try {
+    codes = await twoFactor.enable(ctx, state, code.replace(/\s+/g, ""))
+  } catch (e) {
+    fail((e as Error)?.name === "TwoFactorError" ? (e as Error).message : "Could not turn it on.")
+  }
+  if (!codes) fail("That code is wrong. Check the time on your phone and try the newest code.")
+  await tell(me.id, "Two-factor sign-in is on", "Signing in now asks for a code from your authenticator app.")
+  return codes
+}
+
+action newRecoveryCodes(code: string) {
+  const me = signedIn(ctx)
+  const codes = await twoFactor.regenerateRecoveryCodes(ctx, code.replace(/\s+/g, ""))
+  if (!codes) fail("That code is wrong.")
+  await tell(me.id, "New recovery codes", "Your old recovery codes no longer work.")
+  return codes
+}
+
+action disableTwoFactor(code: string) {
+  const me = signedIn(ctx)
+  let ok = false
+  try {
+    ok = await twoFactor.disable(ctx, code.replace(/\s+/g, ""))
+  } catch (e) {
+    fail((e as Error)?.name === "TwoFactorError" ? (e as Error).message : "Could not turn it off.")
+  }
+  if (!ok) fail("That code is wrong.")
+  await tell(me.id, "Two-factor sign-in is off", "Signing in asks only for your password or an email link now.")
+  return redirect("/app/account?done=two-factor-off")
+}
+
+action passkeyAddStart() {
+  const me = signedIn(ctx)
+  const user = userById(me.id)
+  return passkeys.registrationOptions(ctx, { userName: user?.email, displayName: user?.name })
+}
+
+action passkeyAddFinish(state: string, credential: string, label?: string) {
+  const me = signedIn(ctx)
+  try {
+    await passkeys.register(ctx, state, credential, { name: String(label ?? "").trim().slice(0, 60) || "Passkey" })
+  } catch (e) {
+    fail((e as Error)?.name === "PasskeyError" ? (e as Error).message : "That passkey was not accepted.")
+  }
+  await tell(me.id, "A passkey was added", "It can sign in to your account.")
+  return "/app/account?done=passkey#passkeys"
+}
+
+action removePasskey(id: string) {
+  const me = signedIn(ctx)
+  await passkeys.remove(me.id, id)
+  await tell(me.id, "A passkey was removed", "It can no longer sign in to your account.")
+  return redirect("/app/account?done=passkey-removed#passkeys")
+}
+
+action endSession(id: string) {
+  signedIn(ctx)
+  if (!(await revokeSession(ctx, id))) fail("That session has already ended.")
+  return redirect("/app/account?done=signed-out#sessions")
+}
+
+action endOtherSessions() {
+  signedIn(ctx)
+  await signOutEverywhere(ctx, { keepThis: true })
+  return redirect("/app/account?done=everywhere#sessions")
+}
+
+export function deviceOf(agent: string | null): string {
+  if (!agent) return "Unknown device";
+  const browser = /Edg\//.test(agent) ? "Edge" : /Firefox\//.test(agent) ? "Firefox" : /Chrome\//.test(agent) ? "Chrome" : /Safari\//.test(agent) ? "Safari" : /node|undici/i.test(agent) ? "A script" : "A browser";
+  const os = /Windows/.test(agent) ? "Windows" : /Android/.test(agent) ? "Android" : /iPhone|iPad/.test(agent) ? "iOS" : /Mac OS X/.test(agent) ? "macOS" : /Linux/.test(agent) ? "Linux" : "";
+  return os ? `${browser} on ${os}` : browser;
+}
+
+export const grouped = (key: string) => key.match(/.{1,4}/g)?.join(" ") ?? key;
+
+const MODE_LABEL: Record<string, string> = { off: "Off", instant: "At once", daily: "Daily summary", weekly: "Weekly summary" };
+
+component Section(id: string, title: string, lead: string, children: Html) {
+  view {
+    <section id={id} aria-labelledby={id + "-h"} class="grid gap-4 border-t py-8 first:border-t-0 first:pt-0 md:grid-cols-[14rem_1fr] md:gap-10">
+      <div>
+        <h2 id={id + "-h"} class="text-sm font-semibold">{title}</h2>
+        <p class="text-muted-foreground mt-1 text-sm">{lead}</p>
+      </div>
+      <div class="min-w-0">{children}</div>
+    </section>
+  }
+}
+
+export interface Setup {
+  secret: string;
+  uri: string;
+  state: string;
+}
+
+component Page(me: Me, path: string, hasWorkspace: boolean, name: string, email: string, hasPassword: boolean, enabled: boolean, recoveryLeft: number, setup: Setup | null, keys: KeyRow[], sessions: SessionInfo[], done: string) {
+  client signal codes = ""
+  client signal codeError = ""
+  client signal keyError = ""
+
+  function choose(type: string, channel: string, e: WeftEvent) {
+    notify.setPreference(me.id, type as never, channel as never, String(e.value) as never)
+  }
+
+  client function turnOn(e: Event) {
+    e.preventDefault()
+    const form = e.target as HTMLFormElement
+    const data = new FormData(form)
+    codeError = ""
+    enableTwoFactor(String(data.get("state")), String(data.get("code")))
+      .then((list) => (codes = (list as string[]).join("\n")))
+      .catch((err) => (codeError = err?.message ?? "Could not turn it on."))
+  }
+
+  client function renew(e: Event) {
+    e.preventDefault()
+    const data = new FormData(e.target as HTMLFormElement)
+    codeError = ""
+    newRecoveryCodes(String(data.get("code")))
+      .then((list) => (codes = (list as string[]).join("\n")))
+      .catch((err) => (codeError = err?.message ?? "That code is wrong."))
+  }
+
+  client function addKey(e: Event) {
+    e.preventDefault()
+    keyError = ""
+    if (!passkeysSupported()) {
+      keyError = "This browser cannot make passkeys."
+      return
+    }
+    const label = String(new FormData(e.target as HTMLFormElement).get("label") ?? "")
+    passkeyAddStart()
+      .then((o) => o as { publicKey: Parameters<typeof createPasskey>[0]; state: string })
+      .then((o) => createPasskey(o.publicKey).then((credential) => passkeyAddFinish(o.state, credential, label)))
+      .then((to) => location.assign(String(to)))
+      .catch((err) => (keyError = err?.name === "NotAllowedError" ? "" : (err?.message ?? "That passkey was not accepted.")))
+  }
+
+  view {
+    <AppShell me={me} path={path} title="Account">
+      {#if !hasWorkspace}
+        <p class="bg-muted mb-6 rounded-lg px-4 py-3 text-sm">You are not in a workspace yet. <a href="/app/welcome" class="font-medium underline-offset-4 hover:underline">Make one</a>, or open an invite you were sent.</p>
+      {/if}
+      {#if DONE[done]}
+        <p role="status" class="mb-6 flex items-center gap-2 text-sm"><Icon name="check" />{DONE[done]}</p>
+      {/if}
+
+      <Section id="profile" title="Profile" lead="How others in your workspaces see you.">
+        <form action={saveProfile} class="flex max-w-md flex-col gap-3">
+          <label for="name" class={labelClass}>Name</label>
+          <div class="flex gap-2">
+            <input id="name" name="name" value={name} required maxlength="60" autocomplete="name" class={inputClass} />
+            <button class={buttonVariants({ variant: "outline" })}>Save</button>
+          </div>
+          <p data-weft-message role="alert" class="text-destructive text-sm empty:hidden"></p>
+        </form>
+      </Section>
+
+      <Section id="email" title="Email" lead="Where sign-in links, invites and notifications go.">
+        <p class="text-sm">You sign in as <span class="font-medium">{email}</span>.</p>
+        <form action={changeEmail} class="mt-4 flex max-w-md flex-col gap-3">
+          <label for="address" class={labelClass}>New address</label>
+          <div class="flex gap-2">
+            <input id="address" name="address" type="email" required maxlength="254" autocomplete="email" class={inputClass} />
+            <button class={buttonVariants({ variant: "outline" })}>Send link</button>
+          </div>
+          <p class="text-muted-foreground text-xs">Nothing changes until you open the link sent to the new address, signed in as you.</p>
+          <p data-weft-message role="alert" class="text-destructive text-sm empty:hidden"></p>
+        </form>
+      </Section>
+
+      <Section id="password" title="Password" lead={hasPassword ? "Changing it signs you out everywhere else." : "You sign in by email link. Add a password to sign in without your inbox."}>
+        <form action={changePassword} class="flex max-w-md flex-col gap-3">
+          {#if hasPassword}
+            <label for="current" class={labelClass}>Current password</label>
+            <input id="current" name="current" type="password" required autocomplete="current-password" class={inputClass} />
+          {:else}
+            <input type="hidden" name="current" value="" />
+          {/if}
+          <label for="password-new" class={labelClass}>New password</label>
+          <input id="password-new" name="password" type="password" required minlength="10" maxlength="256" autocomplete="new-password" class={inputClass} />
+          <label for="password-again" class={labelClass}>New password again</label>
+          <input id="password-again" name="again" type="password" required minlength="10" maxlength="256" autocomplete="new-password" class={inputClass} />
+          <p data-weft-message role="alert" class="text-destructive text-sm empty:hidden"></p>
+          <button class={buttonVariants({}) + " w-fit"}>{hasPassword ? "Change password" : "Add password"}</button>
+        </form>
+      </Section>
+
+      <Section id="two-factor" title="Two-factor sign-in" lead="A code from an authenticator app, asked after your password or email link.">
+        <div :hidden={!codes} class="max-w-md">
+          <p class="text-sm font-medium">Keep these recovery codes somewhere safe</p>
+          <p class="text-muted-foreground mt-1 text-sm">Each one signs you in once without your phone. They are shown only now.</p>
+          <pre class="bg-muted mt-3 rounded-lg p-4 font-mono text-sm leading-7 select-all">{codes}</pre>
+          <a href="/app/account#two-factor" class={buttonVariants({}) + " mt-4"}>I saved them</a>
+        </div>
+        <div :hidden={codes !== ""}>
+          {#if enabled}
+            <p class="flex items-center gap-2 text-sm"><Icon name="shield" />On. {recoveryLeft} recovery {recoveryLeft === 1 ? "code" : "codes"} left.</p>
+            <div class="mt-5 grid max-w-xl gap-6 sm:grid-cols-2">
+              <form @submit={renew} class="flex flex-col gap-2">
+                <label for="renew-code" class={labelClass}>New recovery codes</label>
+                <input id="renew-code" name="code" inputmode="numeric" autocomplete="one-time-code" required placeholder="Code from your app" class={inputClass} />
+                <button class={buttonVariants({ variant: "outline" }) + " w-fit"}>Make new codes</button>
+              </form>
+              <form action={disableTwoFactor} class="flex flex-col gap-2">
+                <label for="off-code" class={labelClass}>Turn it off</label>
+                <input id="off-code" name="code" inputmode="numeric" autocomplete="one-time-code" required placeholder="Code from your app" class={inputClass} />
+                <button class={buttonVariants({ variant: "outline" }) + " text-destructive w-fit"}>Turn off</button>
+                <p data-weft-message role="alert" class="text-destructive text-sm empty:hidden"></p>
+              </form>
+            </div>
+          {:else if setup}
+            <div class="flex flex-col gap-6 sm:flex-row">
+              <QrCode value={setup.uri} label="Setup code for your authenticator app" class="size-44 shrink-0" />
+              <div class="flex max-w-sm flex-col gap-3 text-sm">
+                <p>Scan this with your authenticator app, or type the key:</p>
+                <code class="bg-muted rounded px-2 py-1.5 font-mono text-xs break-all select-all">{grouped(setup.secret)}</code>
+                <form @submit={turnOn} class="flex flex-col gap-2">
+                  <input type="hidden" name="state" value={setup.state} />
+                  <label for="first-code" class={labelClass}>Code shown in the app</label>
+                  <div class="flex gap-2">
+                    <input id="first-code" name="code" inputmode="numeric" autocomplete="one-time-code" required maxlength="10" class={inputClass + " font-mono tracking-[0.3em]"} />
+                    <button class={buttonVariants({})}>Turn on</button>
+                  </div>
+                </form>
+                <a href="/app/account#two-factor" class="text-muted-foreground text-xs underline-offset-4 hover:underline">Not now</a>
+              </div>
+            </div>
+          {:else}
+            <p class="text-sm">Off.</p>
+            <a href="/app/account?setup=two-factor#two-factor" class={buttonVariants({ variant: "outline" }) + " mt-3"}>
+              <Icon name="shield" />
+              Set up
+            </a>
+          {/if}
+        </div>
+        <p role="alert" class="text-destructive mt-3 text-sm empty:hidden">{codeError}</p>
+      </Section>
+
+      <Section id="passkeys" title="Passkeys" lead="Sign in with your fingerprint, face or device PIN. Nothing to type, nothing to phish.">
+        {#if keys.length > 0}
+          <ul class="mb-4 max-w-xl divide-y rounded-lg border">
+            {#each keys as k (k.id)}
+              <li class="flex items-center gap-3 px-4 py-2.5 text-sm">
+                <Icon name="key" />
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate font-medium">{k.name}</span>
+                  <span class="text-muted-foreground block text-xs">Added {activityWhen(k.created, Date.now())}{k.lastUsed ? ", used " + activityWhen(k.lastUsed, Date.now()) : ", not used yet"}{k.backedUp ? ", synced" : ""}</span>
+                </span>
+                <form action={removePasskey}>
+                  <input type="hidden" name="id" value={k.id} />
+                  <button class={buttonVariants({ variant: "ghost", size: "sm" })}>Remove</button>
+                </form>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+        <form @submit={addKey} class="flex max-w-md gap-2">
+          <input name="label" aria-label="Passkey name" placeholder="Name, like Work laptop" maxlength="60" class={inputClass} />
+          <button class={buttonVariants({ variant: "outline" })}>
+            <Icon name="plus" />
+            Add passkey
+          </button>
+        </form>
+        <p role="alert" class="text-destructive mt-2 text-sm empty:hidden">{keyError}</p>
+      </Section>
+
+      <Section id="sessions" title="Where you are signed in" lead="Each browser that is signed in. End any you do not recognise.">
+        <ul class="max-w-xl divide-y rounded-lg border">
+          {#each sessions as s (s.id)}
+            <li class="flex items-center gap-3 px-4 py-2.5 text-sm">
+              <span class="min-w-0 flex-1">
+                <span class="block font-medium">{deviceOf(s.agent)}{s.current ? " (this one)" : ""}</span>
+                <span class="text-muted-foreground block text-xs">Signed in {activityWhen(s.created, Date.now())}, last seen {activityWhen(s.seen, Date.now())}{s.mfa ? ", with two factors" : ""}</span>
+              </span>
+              {#if !s.current}
+                <form action={endSession}>
+                  <input type="hidden" name="id" value={s.id} />
+                  <button class={buttonVariants({ variant: "ghost", size: "sm" })}>Sign out</button>
+                </form>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+        {#if sessions.length > 1}
+          <form action={endOtherSessions} class="mt-3">
+            <button class={buttonVariants({ variant: "outline", size: "sm" })}>
+              <Icon name="logout" />
+              Sign out everywhere else
+            </button>
+          </form>
+        {/if}
+      </Section>
+
+      <Section id="notifications" title="Notifications" lead="Everything lands in your inbox. Choose what also comes by email.">
+        <ul class="max-w-xl divide-y rounded-lg border">
+          {#each notify.preferences(me.id) as t (t.type)}
+            <li class="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
+              <span class="min-w-0 flex-1">
+                <span class="block font-medium">{t.label}</span>
+                {#if t.description}
+                  <span class="text-muted-foreground block text-xs">{t.description}</span>
+                {/if}
+              </span>
+              {#each t.channels.filter((c) => c.channel === "email") as c (c.channel)}
+                {#if c.locked}
+                  <span class="text-muted-foreground text-xs">Always by email</span>
+                {:else}
+                  <NativeSelect aria-label={t.label + " by email"} @change={choose(t.type, c.channel)} class="w-40">
+                    {#each c.modes as m}
+                      <NativeSelectOption value={m} selected={m === c.mode}>{MODE_LABEL[m] ?? m}</NativeSelectOption>
+                    {/each}
+                  </NativeSelect>
+                {/if}
+              {/each}
+            </li>
+          {/each}
+        </ul>
+      </Section>
+    </AppShell>
+  }
+}

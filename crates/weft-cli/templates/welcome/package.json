@@ -1,0 +1,28 @@
+{
+  "name": "{{name}}",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "weft dev",
+    "check": "weft check .",
+    "build": "weft build",
+    "start": "node --experimental-strip-types --disable-warning=ExperimentalWarning dist/server.mjs"
+  },
+  "dependencies": {
+    "@weft/core": "^0.0.1",
+    "@weft/data": "^0.0.1",
+    "@weft/runtime": "^0.0.1",
+    "@weft/server": "^0.0.1",
+    "@weft/theme": "^0.0.1",
+    "@weft/ui": "^0.0.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/node": "^4.3.5",
+    "tailwindcss": "^4.3.5",
+    "typescript": "^5.9.0"
+  },
+  "engines": {
+    "node": ">=22.6"
+  }
+}

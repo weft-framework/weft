@@ -1,0 +1,19 @@
+// Client state beside server state, for the expiry test: `open` lives in
+// the browser and must survive the page being rendered again; `likes`
+// lives on the server and must answer on the new live page.
+
+component Page() {
+  client signal open = false
+  client derived label = open ? "Hide details" : "Show details"
+  client function toggle() { open = !open }
+
+  signal likes = 0
+  function like() { likes = likes + 1 }
+
+  view {
+    <h1>Islands</h1>
+    <button id="toggle" @click={toggle}>{label}</button>
+    <p id="details" hidden={!open}>Revealed in the browser.</p>
+    <button id="like" @click={like}>Like ({likes})</button>
+  }
+}

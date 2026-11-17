@@ -1,0 +1,360 @@
+import { notFound, pointerArea, type PageContext } from "@weft/server";
+import type { WeftEvent } from "@weft/runtime";
+client import { pointerAreaOf, pointerPlace, pointerRange } from "@weft/runtime"
+import { gate, type Me } from "../../../lib/workspaces.ts";
+import {
+  Tasks,
+  review,
+  taskComments,
+  taskTags,
+  taskHistory,
+  assignable,
+  assign,
+  comment,
+  moveTask,
+  STATUS_LABEL,
+  TRANSITION_LABEL,
+} from "../../../lib/tasks.ts";
+import { colorOf, initials, nameOf } from "../../../lib/users.ts";
+import { AppShell } from "../../../components/AppShell.wx";
+import { Icon } from "../../../components/Icon.wx";
+import { buttonVariants } from "../../../components/ui/button.wx";
+import { inputClass } from "../../../components/ui/input.wx";
+import { labelClass } from "../../../components/ui/label.wx";
+import { Badge } from "../../../components/ui/badge.wx";
+import { NativeSelect, NativeSelectOption } from "../../../components/ui/native-select.wx";
+import { activityWhen } from "../../../components/ui/activity-feed.wx";
+import { PresenceStack } from "../../../components/ui/presence-stack.wx";
+import { AuditTimeline } from "../../../components/ui/audit-timeline.wx";
+import { taskViewers } from "../../../lib/presence.ts";
+
+export const meta = { title: "Task" };
+
+export function load(ctx: PageContext) {
+  const g = gate(ctx, "tasks.read");
+  if (!g.ok) return g.redirect;
+  const id = String(ctx.params.id);
+  if (!Tasks.as(g.me).get(id)) return notFound();
+  taskViewers.join(ctx, id, { name: nameOf(g.me.id) });
+  return { me: g.me, id, path: ctx.url.pathname };
+}
+
+export const FIELD_LABEL: Record<string, string> = { title: "title", notes: "notes", status: "status", assignee: "assignee", due: "due date" };
+
+export function changed(fields: { field: string }[]): string {
+  const names = fields.map((c) => FIELD_LABEL[c.field]).filter(Boolean);
+  return names.length ? "changed the " + names.join(", ") : "saved it";
+}
+
+component Page(me: Me, id: string, path: string) {
+  signal problem = ""
+  signal editing = false
+
+  function save(e: WeftEvent) {
+    const title = String(e.form?.title ?? "").trim()
+    const due = String(e.form?.due ?? "")
+    if (title === "") {
+      problem = "Give the task a title."
+      return
+    }
+    const n = Tasks.as(me).update((t) => t.id === id, { title: title.slice(0, 140), due: due || null })
+    problem = n === 0 ? "Your role does not let you change this task." : ""
+    if (n > 0) editing = false
+  }
+
+  function giveTo(e: WeftEvent) {
+    problem = assign(me, id, String(e.value ?? "") || null) ?? ""
+  }
+
+  function step(transition: string, e: WeftEvent) {
+    problem = moveTask(me, id, transition, String(e.form?.note ?? "") || undefined) ?? ""
+  }
+
+  function say(e: WeftEvent) {
+    problem = comment(me, id, String(e.form?.body ?? "")) ?? ""
+  }
+
+  function tag(e: WeftEvent) {
+    const t = String(e.form?.tag ?? "").trim()
+    if (t !== "") problem = taskTags.add(me, id, t) ? "" : "Tags are short words; your role must let you change the task."
+  }
+
+  function untag(t: string) {
+    taskTags.remove(me, id, t)
+  }
+
+  function putBack(version: number) {
+    problem = taskHistory.restore(Tasks.as(me), id, version) ? "" : "That version cannot be put back."
+  }
+
+  function trash() {
+    problem = Tasks.as(me).delete((t) => t.id === id) === 0 ? "Your role does not let you delete this task." : ""
+  }
+
+  function edit() {
+    editing = !editing
+  }
+
+  client function showPointers(el: HTMLElement) {
+    const layer = el.querySelector<HTMLElement>("[data-pointer-layer]")
+    if (!layer) return () => {}
+    const draw = (e: Event) => {
+      const pointers = (e as CustomEvent<{ pointers: Parameters<typeof pointerPlace>[1][] }>).detail.pointers
+      const base = el.getBoundingClientRect()
+      layer.replaceChildren()
+      for (const p of pointers) {
+        const at = pointerPlace(el, p)
+        if (at) {
+          const mark = document.createElement("span")
+          mark.dataset.pointer = p.id
+          mark.className = "bg-primary text-primary-foreground absolute rounded-sm px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap shadow-sm"
+          mark.style.left = at.x + 8 + "px"
+          mark.style.top = at.y + 8 + "px"
+          mark.textContent = p.label ?? "Someone"
+          layer.append(mark)
+        }
+        const range = pointerRange(el, p, document)
+        if (range && "getClientRects" in range) {
+          for (const r of Array.from((range as Range).getClientRects())) {
+            const line = document.createElement("span")
+            line.className = "bg-primary/60 absolute h-0.5"
+            line.style.left = r.left - base.left + "px"
+            line.style.top = r.bottom - base.top + "px"
+            line.style.width = r.width + "px"
+            layer.append(line)
+          }
+        }
+      }
+    }
+    const bar = el.querySelector<HTMLElement>("[data-follow-bar]")
+    let presenters: { id: string; label: string }[] = []
+    const button = (text: string, pressed: boolean, run: () => void) => {
+      const b = document.createElement("button")
+      b.type = "button"
+      b.className = "hover:bg-accent rounded-md border px-2.5 py-1 text-xs aria-pressed:bg-primary aria-pressed:text-primary-foreground"
+      b.setAttribute("aria-pressed", String(pressed))
+      b.textContent = text
+      b.addEventListener("click", run)
+      return b
+    }
+    const controls = () => {
+      const area = pointerAreaOf(el)
+      if (!bar || !area) return
+      bar.replaceChildren(button(area.presenting ? "Sharing your view" : "Share your view", area.presenting, () => area.present(!area.presenting)))
+      for (const p of presenters) {
+        const on = area.following === p.id
+        bar.append(button(on ? "Following " + p.label : "Follow " + p.label, on, () => area.follow(on ? null : p.id)))
+      }
+    }
+    const listed = (e: Event) => {
+      const pointers = (e as CustomEvent<{ pointers: Parameters<typeof pointerPlace>[1][] }>).detail.pointers
+      const next = pointers.filter((p) => p.view).map((p) => ({ id: p.id, label: p.label ?? "someone" }))
+      if (JSON.stringify(next) !== JSON.stringify(presenters)) {
+        presenters = next
+        controls()
+      }
+    }
+    el.addEventListener("weft:pointers", draw)
+    el.addEventListener("weft:pointers", listed)
+    el.addEventListener("weft:present", controls)
+    el.addEventListener("weft:follow", controls)
+    const first = setTimeout(controls, 0)
+    return () => {
+      clearTimeout(first)
+      el.removeEventListener("weft:pointers", draw)
+      el.removeEventListener("weft:pointers", listed)
+      el.removeEventListener("weft:present", controls)
+      el.removeEventListener("weft:follow", controls)
+    }
+  }
+
+  view {
+    <AppShell me={me} path={path} title="Task">
+      {#if Tasks.as(me).get(id)}
+        <div class="mb-6 flex items-center justify-between gap-4">
+          <a href="/app/tasks" class="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm">
+            <Icon name="undo" />
+            Board
+          </a>
+          <PresenceStack presence={taskViewers} room={id} max={5} />
+        </div>
+        <div class="grid gap-10 lg:grid-cols-[1fr_17rem]">
+          <div class="relative min-w-0" {...pointerArea(taskViewers, id)} use:showPointers>
+            <div data-pointer-layer data-weft-ignore aria-hidden="true" class="pointer-events-none absolute inset-0 z-10"></div>
+            <div data-follow-bar data-weft-ignore class="mb-4 flex min-h-7 flex-wrap gap-2"></div>
+            {#if editing}
+              <form @submit={save} class="flex flex-col gap-3">
+                <label for="t-title" class={labelClass}>Title</label>
+                <input id="t-title" name="title" value={Tasks.as(me).get(id)?.title} maxlength="140" class={inputClass} />
+                <label for="t-notes" class={labelClass}>Notes</label>
+                <textarea id="t-notes" :bind.shared={Tasks.as(me).get(id)?.notes} rows="6" maxlength="4000" class={inputClass + " h-auto py-2"}></textarea>
+                <p class="text-muted-foreground text-xs">Notes are written together: everyone editing this task sees them change as they type, and they save by themselves.</p>
+                <label for="t-due" class={labelClass}>Due</label>
+                <input id="t-due" name="due" type="date" value={Tasks.as(me).get(id)?.due ?? ""} class={inputClass + " w-44"} />
+                <div class="flex gap-2">
+                  <button class={buttonVariants({})} :busy>Save</button>
+                  <button type="button" @click={edit} class={buttonVariants({ variant: "ghost" })}>Cancel</button>
+                </div>
+              </form>
+            {:else}
+              <div class="flex items-start gap-3">
+                <h2 class="flex-1 text-2xl leading-tight font-semibold tracking-[-0.02em]">{Tasks.as(me).get(id)?.title}</h2>
+                <Badge variant={Tasks.as(me).get(id)?.status === "review" ? "default" : "secondary"}>{STATUS_LABEL[Tasks.as(me).get(id)?.status ?? "todo"]}</Badge>
+              </div>
+              {#if Tasks.as(me).get(id)?.notes}
+                <p class="mt-4 text-[15px] leading-relaxed whitespace-pre-wrap" data-weft-point-on="notes">{Tasks.as(me).get(id)?.notes}</p>
+              {:else}
+                <p class="text-muted-foreground mt-4 text-sm">No notes.</p>
+              {/if}
+              {#if me.can("tasks.edit")}
+                <button type="button" @click={edit} class={buttonVariants({ variant: "outline", size: "sm" }) + " mt-4"}>
+                  <Icon name="pencil" />
+                  Edit
+                </button>
+              {/if}
+            {/if}
+
+            {#if problem}
+              <p role="alert" class="text-destructive mt-4 flex items-center gap-2 text-sm"><Icon name="shield" />{problem}</p>
+            {/if}
+
+            {#if review.available(Tasks.as(me), id).length > 0}
+              <section aria-labelledby="steps-h" class="mt-8 rounded-lg border p-4">
+                <h3 id="steps-h" class="text-sm font-semibold">Move it on</h3>
+                <div class="mt-3 flex flex-wrap items-start gap-2">
+                  {#each review.available(Tasks.as(me), id).filter((s) => s !== "sendBack") as s}
+                    <form @submit={step(s)}>
+                      <button class={buttonVariants({ variant: s === "approve" ? "default" : "outline", size: "sm" })}>{TRANSITION_LABEL[s]}</button>
+                    </form>
+                  {/each}
+                </div>
+                {#if review.available(Tasks.as(me), id).includes("sendBack")}
+                  <form @submit={step("sendBack")} class="mt-3 flex gap-2">
+                    <input name="note" aria-label="Why it goes back" placeholder="Why it goes back" maxlength="1000" class={inputClass} />
+                    <button class={buttonVariants({ variant: "outline", size: "sm" }) + " h-9"}>Send back</button>
+                  </form>
+                {/if}
+              </section>
+            {/if}
+
+            <section aria-labelledby="comments-h" class="mt-10">
+              <h3 id="comments-h" class="mb-4 text-sm font-semibold">Comments</h3>
+              <ol class="flex flex-col gap-5">
+                {#each taskComments.list(me, id) as c (c.id)}
+                  <li class="flex gap-3" data-weft-point-on={"comment-" + c.id}>
+                    <span aria-hidden="true" class="grid size-7 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white" style={"background:" + colorOf(c.author)}>{initials(nameOf(c.author))}</span>
+                    <div class="min-w-0">
+                      <p class="text-sm"><span class="font-medium">{nameOf(c.author)}</span> <span class="text-muted-foreground text-xs">{activityWhen(c.at, Date.now())}</span></p>
+                      <p class="mt-0.5 text-sm whitespace-pre-wrap">{c.body}</p>
+                    </div>
+                  </li>
+                {/each}
+              </ol>
+              {#if taskComments.list(me, id).length === 0}
+                <p class="text-muted-foreground text-sm">No comments yet.</p>
+              {/if}
+              <form @submit={say} class="mt-5 flex gap-2" autocomplete="off">
+                <input name="body" aria-label="Comment" placeholder="Write a comment" maxlength="4000" class={inputClass} />
+                <button class={buttonVariants({ variant: "secondary" })} :busy>
+                  <Icon name="send" />
+                  Send
+                </button>
+              </form>
+            </section>
+          </div>
+
+          <aside class="flex flex-col gap-8 text-sm">
+            <section>
+              <h3 class="text-muted-foreground mb-2 text-xs font-medium">Given to</h3>
+              {#if me.can("tasks.edit") && assignable(me).length > 0}
+                <NativeSelect aria-label="Given to" @change={giveTo} class="w-full">
+                  <NativeSelectOption value="" selected={!Tasks.as(me).get(id)?.assignee}>Nobody</NativeSelectOption>
+                  {#each assignable(me) as p (p.id)}
+                    <NativeSelectOption value={p.id} selected={Tasks.as(me).get(id)?.assignee === p.id}>{p.name}</NativeSelectOption>
+                  {/each}
+                </NativeSelect>
+              {:else}
+                <p>{Tasks.as(me).get(id)?.assignee ? nameOf(Tasks.as(me).get(id)?.assignee ?? "") : "Nobody"}</p>
+              {/if}
+            </section>
+
+            <section>
+              <h3 class="text-muted-foreground mb-2 text-xs font-medium">Tags</h3>
+              <div class="flex flex-wrap gap-1.5">
+                {#each taskTags.of(me, id) as t}
+                  <span class="bg-secondary inline-flex items-center gap-1 rounded-md py-0.5 pr-1 pl-2 text-xs">
+                    <a href={"/app/tasks?tag=" + encodeURIComponent(t)} class="hover:underline">{t}</a>
+                    {#if me.can("tasks.edit")}
+                      <button type="button" @click={untag(t)} aria-label={"Remove tag " + t} class="hover:bg-background rounded px-1">×</button>
+                    {/if}
+                  </span>
+                {/each}
+              </div>
+              {#if me.can("tasks.edit")}
+                <form @submit={tag} class="mt-2" autocomplete="off">
+                  <input name="tag" aria-label="Add a tag" placeholder="Add a tag" maxlength="32" class={inputClass + " h-8"} />
+                </form>
+              {/if}
+            </section>
+
+            <section>
+              <h3 class="text-muted-foreground mb-2 text-xs font-medium">Review steps</h3>
+              <ol class="flex flex-col gap-2">
+                {#each review.steps(Tasks.as(me), id) as s (s.id)}
+                  <li>
+                    <span class="font-medium">{s.by ? nameOf(s.by) : "Someone"}</span>
+                    {" " + (TRANSITION_LABEL[s.transition] ?? s.transition).toLowerCase()}
+                    <span class="text-muted-foreground block text-xs">{activityWhen(s.at, Date.now())}</span>
+                    {#if s.note}
+                      <span class="text-muted-foreground mt-0.5 block border-l-2 pl-2">{s.note}</span>
+                    {/if}
+                  </li>
+                {/each}
+              </ol>
+              {#if review.steps(Tasks.as(me), id).length === 0}
+                <p class="text-muted-foreground">Not moved yet.</p>
+              {/if}
+            </section>
+
+            <section>
+              <h3 class="text-muted-foreground mb-2 text-xs font-medium">Versions</h3>
+              <ol class="flex flex-col gap-2">
+                {#each (taskHistory.versions(Tasks.as(me), id, { limit: 8 }) ?? []) as v, i (v.version)}
+                  <li class="flex items-start gap-2">
+                    <span class="min-w-0 flex-1">
+                      <span class="font-medium">{v.actor ? nameOf(v.actor) : "Someone"}</span>
+                      {" " + (v.action === "create" ? "created it" : v.action === "trash" ? "deleted it" : v.action === "restore" ? "restored it" : changed(v.changes))}
+                      <span class="text-muted-foreground block text-xs">{activityWhen(v.at, Date.now())}</span>
+                    </span>
+                    {#if i > 0 && v.action !== "trash" && me.can("tasks.edit")}
+                      <button type="button" @click={putBack(v.version)} class="text-muted-foreground hover:text-foreground text-xs underline-offset-4 hover:underline">Put back</button>
+                    {/if}
+                  </li>
+                {/each}
+              </ol>
+            </section>
+
+            <section>
+              <h3 class="text-muted-foreground mb-2 text-xs font-medium">Audit trail</h3>
+              <p class="text-muted-foreground mb-3 text-xs">Every change and every refused attempt, as the rules decided it.</p>
+              <AuditTimeline rows={Tasks.as(me)} row={id} limit={10} actorName={nameOf} />
+            </section>
+
+            {#if me.can("tasks.edit")}
+              <button type="button" @click={trash} class={buttonVariants({ variant: "ghost", size: "sm" }) + " text-destructive w-fit"}>
+                <Icon name="trash" />
+                Move to trash
+              </button>
+            {/if}
+          </aside>
+        </div>
+      {:else}
+        <div class="py-16 text-center">
+          <h2 class="text-lg font-semibold">This task is in the trash</h2>
+          <p class="text-muted-foreground mt-1 text-sm">It can be restored from the trash for 30 days.</p>
+          <a href="/app/tasks/trash" class={buttonVariants({ variant: "outline" }) + " mt-4"}>Open the trash</a>
+        </div>
+      {/if}
+    </AppShell>
+  }
+}

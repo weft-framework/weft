@@ -1,0 +1,83 @@
+{
+  "name": "weft-vscode",
+  "displayName": "Weft",
+  "description": "Weft (.wx) language support: syntax highlighting and the Weft language server.",
+  "version": "0.0.1",
+  "publisher": "weft",
+  "license": "MIT",
+  "author": "Vakea",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aleroycz/weft"
+  },
+  "type": "commonjs",
+  "main": "./extension.js",
+  "engines": {
+    "vscode": "^1.82.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Formatters"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "weft",
+        "aliases": [
+          "Weft",
+          "wx"
+        ],
+        "extensions": [
+          ".wx"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "weft",
+        "scopeName": "source.weft",
+        "path": "./syntaxes/weft.tmLanguage.json",
+        "embeddedLanguages": {
+          "meta.embedded.expression.weft": "typescript",
+          "meta.embedded.block.css.weft": "css"
+        }
+      }
+    ],
+    "configuration": {
+      "title": "Weft",
+      "properties": {
+        "weft.server.path": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to the `weft` executable that runs the language server (`weft lsp`). Empty: `weft` from the workspace's `node_modules/.bin`, else from `PATH`."
+        },
+        "weft.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Log the messages between VS Code and the language server."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "weft.restartServer",
+        "title": "Weft: Restart Language Server"
+      }
+    ]
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}

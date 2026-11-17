@@ -1,0 +1,8 @@
+component Logo(...attrs: Attrs) {
+  view {
+    <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linejoin="round" aria-hidden="true" class={attrs.class}>
+      <path d="M2 8 11 24 20 8" />
+      <path d="M12 8 14.58 12.59M17.41 17.62 21 24 30 8" />
+    </svg>
+  }
+}

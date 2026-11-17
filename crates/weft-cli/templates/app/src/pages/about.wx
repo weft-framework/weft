@@ -1,0 +1,14 @@
+import type { PageMeta } from "@weft/server";
+
+export const meta: PageMeta = {
+  title: "About",
+  description: "How this project is laid out.",
+};
+
+component Page() {
+  view {
+    <h1>About</h1>
+    <p>Pages are files in <code>src/pages</code>: <code>about.wx</code> is served at <code>/about</code>.</p>
+    <p>Static files in <code>public</code> are served as they are.</p>
+  }
+}

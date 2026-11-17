@@ -1,0 +1,14 @@
+[package]
+name = "weft-lsp"
+description = "The Weft language server behind `weft lsp`."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+weft-compiler.workspace = true
+weft-fmt.workspace = true
+serde_json = "1"

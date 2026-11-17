@@ -1,0 +1,29 @@
+import type { PageContext } from "@weft/server";
+import { email } from "../../lib/accounts.ts";
+import { AuthShell } from "../../components/AuthShell.wx";
+import { buttonVariants } from "../../components/ui/button.wx";
+
+export const meta = { title: "Sign in" };
+
+export async function load(ctx: PageContext) {
+  const p = await email.pending(ctx);
+  return { address: p?.email ?? "", token: p?.token ?? "", to: p?.action ?? "" };
+}
+
+component Page(address: string, token: string, to: string) {
+  view {
+    {#if token}
+      <AuthShell title="Sign in" lead={"Continue as " + address + "?"}>
+        <form method="post" action={to} class="flex flex-col gap-4">
+          <input type="hidden" name="t" value={token} />
+          <button class={buttonVariants({})}>Sign in as {address}</button>
+        </form>
+        <p class="text-muted-foreground mt-6 text-sm">Not you? Close this page: nothing happens until you press the button.</p>
+      </AuthShell>
+    {:else}
+      <AuthShell title="This link has expired" lead="Sign-in links work once, for 15 minutes.">
+        <a href="/sign-in" class={buttonVariants({})}>Get a new link</a>
+      </AuthShell>
+    {/if}
+  }
+}

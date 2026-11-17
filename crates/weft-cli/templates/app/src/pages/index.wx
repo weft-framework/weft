@@ -1,0 +1,14 @@
+import type { PageMeta } from "@weft/server";
+import { Counter } from "../components/Counter.wx";
+
+export const meta: PageMeta = {
+  title: "Home",
+};
+
+component Page() {
+  view {
+    <h1>Welcome</h1>
+    <p>Edit <code>src/pages/index.wx</code> and save; the page reloads.</p>
+    <Counter start={0} />
+  }
+}

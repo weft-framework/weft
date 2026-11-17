@@ -1,0 +1,25 @@
+import { notFound, type PageContext, type PageMeta } from "@weft/server";
+import { findPost, type Post } from "../../lib/posts.ts";
+
+export function load(ctx: PageContext) {
+  const post = findPost(String(ctx.params.slug));
+  return post ? { post } : notFound();
+}
+
+export function meta(_ctx: PageContext, data: { post: Post }): PageMeta {
+  return {
+    title: data.post.title,
+    description: data.post.summary,
+    openGraph: { type: "article" },
+  };
+}
+
+component Page(post: Post) {
+  view {
+    <article>
+      <h1>{post.title}</h1>
+      <p>{post.body}</p>
+    </article>
+    <p><a href="/blog">All posts</a></p>
+  }
+}

@@ -1,0 +1,25 @@
+interface Todo {
+  id: string
+  title: string
+  done: boolean
+}
+
+component TodoList(todos: Todo[], title: string = "Tasks") {
+  derived open = todos.filter((t) => !t.done).length
+
+  view {
+    <section class="todos">
+      <h2>{title} <small>({open} open)</small></h2>
+
+      {#if todos.length === 0}
+        <p class="empty">Nothing to do yet.</p>
+      {:else}
+        <ol>
+          {#each todos as todo, i (todo.id)}
+            <li class={todo.done ? "done" : ""}>{i + 1}. {todo.title}</li>
+          {/each}
+        </ol>
+      {/if}
+    </section>
+  }
+}

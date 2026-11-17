@@ -1,0 +1,91 @@
+import { renderRichText, type RichDoc } from "@weft/runtime";
+import { cn } from "../../lib/utils.ts";
+client import { fromDom } from "@weft/runtime"
+client import { richText } from "@weft/ui"
+
+export const RICH_TOOLS = [
+  { command: "bold", label: "Bold", keys: "Ctrl+B", d: ["M7 5h6a3.5 3.5 0 0 1 0 7H7z", "M7 12h7a3.5 3.5 0 0 1 0 7H7z"] },
+  { command: "italic", label: "Italic", keys: "Ctrl+I", d: ["M14 5h-4", "M14 19h-4", "M14 5l-4 14"] },
+  { command: "underline", label: "Underline", keys: "Ctrl+U", d: ["M7 4v7a5 5 0 0 0 10 0V4", "M5 20h14"] },
+  { command: "strike", label: "Strikethrough", keys: "", d: ["M5 12h14", "M16 6.5A4 3 0 0 0 12 5c-2.2 0-4 1.2-4 3 0 1.3.8 2.2 2 2.7", "M8 17.5A4 3 0 0 0 12 19c2.2 0 4-1.2 4-3 0-.7-.2-1.3-.6-1.8"] },
+  { command: "code", label: "Code", keys: "Ctrl+E", d: ["M9 8l-4 4 4 4", "M15 8l4 4-4 4"] },
+  { command: "sep", label: "", keys: "", d: [] },
+  { command: "h2", label: "Heading", keys: "", d: ["M5 5v14", "M13 5v14", "M5 12h8", "M17 19h3", "M17 15.5c0-1 .8-1.5 1.5-1.5s1.5.5 1.5 1.5c0 1.5-3 2-3 3.5"] },
+  { command: "h3", label: "Subheading", keys: "", d: ["M5 5v14", "M13 5v14", "M5 12h8", "M17 14h3l-2 2a1.5 1.5 0 1 1-1 2.6"] },
+  { command: "quote", label: "Quote", keys: "", d: ["M6 7h4v4c0 3-1.5 5-4 6", "M14 7h4v4c0 3-1.5 5-4 6"] },
+  { command: "ul", label: "Bulleted list", keys: "Ctrl+Shift+8", d: ["M9 6h11", "M9 12h11", "M9 18h11", "M4.5 6h.01", "M4.5 12h.01", "M4.5 18h.01"] },
+  { command: "ol", label: "Numbered list", keys: "Ctrl+Shift+7", d: ["M10 6h10", "M10 12h10", "M10 18h10", "M4 5l1.5-1v5", "M3.5 14.5c0-.8.7-1.5 1.5-1.5s1.5.6 1.5 1.3c0 1.2-3 1.7-3 3.7h3"] },
+  { command: "sep", label: "", keys: "", d: [] },
+  { command: "link", label: "Link", keys: "Ctrl+K", d: ["M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1", "M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"] },
+  { command: "clear", label: "Clear formatting", keys: "", d: ["M5 5h11", "M10 5 7 19", "M15 14l5 5", "M20 14l-5 5"] },
+];
+
+export function richValue(value: RichDoc | string | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "";
+  return typeof value === "string" ? value : JSON.stringify(value);
+}
+
+component RichTextEditor(name: string, value?: RichDoc | string | null, label: string, placeholder?: string, docKey?: string, autosave?: number, disabled?: boolean, mentions?: { id: string; label: string }[], ...attrs: Attrs) {
+  client function keepValue(el: HTMLElement) {
+    const surface = el.querySelector<HTMLElement>("[data-rich-surface]")
+    const field = el.querySelector<HTMLInputElement>("input[data-rich-value]")
+    if (!surface || !field) return () => {}
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const changed = () => {
+      field.value = JSON.stringify(fromDom(surface))
+      surface.dataset.empty = (surface.textContent ?? "").trim() === "" && !surface.querySelector("li, hr, img, [data-mention]") ? "true" : "false"
+      const wait = Number(el.getAttribute("data-autosave") ?? "0")
+      if (wait > 0) {
+        clearTimeout(timer)
+        timer = setTimeout(() => field.form?.requestSubmit(), wait)
+      }
+    }
+    surface.addEventListener("input", changed)
+    return () => {
+      clearTimeout(timer)
+      surface.removeEventListener("input", changed)
+    }
+  }
+
+  view {
+    <div data-slot="rich-text-editor" data-autosave={autosave ?? 0} use:richText use:keepValue class={cn("border-input dark:bg-input/30 focus-within:border-ring focus-within:ring-ring/50 rounded-md border bg-transparent shadow-xs transition-[color,box-shadow] focus-within:ring-[3px]", attrs.class)}>
+      <div role="toolbar" aria-label={label + " formatting"} class="flex flex-wrap items-center gap-0.5 border-b p-1">
+        {#each RICH_TOOLS as t}
+          {#if t.command === "sep"}
+            <span aria-hidden="true" class="bg-border mx-1 h-5 w-px"></span>
+          {:else}
+            <button type="button" data-rich-command={t.command} aria-pressed="false" aria-label={t.label} title={t.keys ? t.label + " (" + t.keys + ")" : t.label} disabled={disabled} class="text-muted-foreground hover:bg-accent hover:text-accent-foreground aria-pressed:bg-accent aria-pressed:text-foreground focus-visible:ring-ring/50 grid size-8 place-items-center rounded-md outline-none focus-visible:ring-[3px] disabled:opacity-50">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="size-4">
+                {#each t.d as d}
+                  <path d={d} />
+                {/each}
+              </svg>
+            </button>
+          {/if}
+        {/each}
+        <span data-rich-link="" hidden class="ml-auto flex items-center gap-1.5">
+          <input type="url" aria-label="Link address" placeholder="https://example.com, then Enter" class="border-input focus-visible:ring-ring/50 aria-invalid:border-destructive h-7 w-56 rounded-md border bg-transparent px-2 text-sm outline-none focus-visible:ring-[3px]" />
+        </span>
+      </div>
+      <input type="hidden" name={name} value={richValue(value)} data-rich-value="" data-weft-ignore="" id={"rich-value-" + (docKey ?? name)} />
+      <div
+        data-rich-surface=""
+        data-weft-ignore=""
+        id={"rich-" + (docKey ?? name)}
+        contenteditable={disabled ? "false" : "true"}
+        aria-label={label}
+        aria-placeholder={placeholder ?? null}
+        data-placeholder={placeholder ?? ""}
+        data-empty={richValue(value) === "" ? "true" : "false"}
+        class="prose-weft min-h-40 px-3 py-2.5 text-[15px] leading-relaxed outline-none data-[empty=true]:before:text-muted-foreground data-[empty=true]:before:pointer-events-none data-[empty=true]:before:absolute data-[empty=true]:before:content-[attr(data-placeholder)] relative [&_a]:text-primary [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_code]:bg-muted [&_code]:rounded [&_code]:px-1 [&_code]:font-mono [&_code]:text-[13px] [&_h2]:mt-4 [&_h2]:mb-1 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mt-3 [&_h3]:mb-1 [&_h3]:text-base [&_h3]:font-semibold [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-1.5 [&_ul]:list-disc [&_ul]:pl-6"
+      >{renderRichText(value ?? null)}</div>
+      {#if mentions && mentions.length > 0}
+        <ul data-rich-mentions="" id={"rich-" + (docKey ?? name) + "-mentions"} role="listbox" aria-label={"People to mention in " + label} hidden class="bg-popover text-popover-foreground mx-2 mb-2 max-h-56 overflow-y-auto rounded-md border p-1 shadow-md">
+          {#each mentions as m, i}
+            <li data-mention-option="" data-id={m.id} data-label={m.label} id={"rich-" + (docKey ?? name) + "-mention-" + i} role="option" aria-selected="false" class="aria-selected:bg-accent aria-selected:text-accent-foreground cursor-default rounded-sm px-2 py-1.5 text-sm">{m.label}</li>
+          {/each}
+        </ul>
+      {/if}
+    </div>
+  }
+}

@@ -1,0 +1,250 @@
+import type { PageContext } from "@weft/server";
+import type { WeftEvent } from "@weft/runtime";
+import type { ConversationView } from "@weft/core/chat";
+import { gate, type Me } from "../../lib/workspaces.ts";
+import { chat } from "../../lib/chat.ts";
+import { assignable } from "../../lib/tasks.ts";
+import { colorOf, initials, nameOf } from "../../lib/users.ts";
+import { AppShell } from "../../components/AppShell.wx";
+import { Icon } from "../../components/Icon.wx";
+import { buttonVariants } from "../../components/ui/button.wx";
+import { inputClass } from "../../components/ui/input.wx";
+import { activityWhen } from "../../components/ui/activity-feed.wx";
+
+export const meta = { title: "Chat" };
+
+export function load(ctx: PageContext) {
+  const g = gate(ctx, "chat.use");
+  if (!g.ok) return g.redirect;
+  return { me: g.me, path: ctx.url.pathname, start: ctx.query.get("c") ?? "" };
+}
+
+export function titleOf(me: Me, c: ConversationView): string {
+  if (c.kind === "group") return c.title;
+  const other = c.members.find((m) => m !== me.id);
+  return other ? nameOf(other) : "Just you";
+}
+
+export function find(me: Me, id: string): ConversationView | null {
+  if (!id) return null;
+  try {
+    return chat.conversation(me.id, id);
+  } catch {
+    return null;
+  }
+}
+
+export function seenBy(me: Me, c: ConversationView): string {
+  const last = c.last;
+  if (!last || !last.mine) return "";
+  const readers = chat.readBy(me.id, c.id).filter((r) => r.user !== me.id && r.lastRead >= last.seq);
+  if (readers.length === 0) return "Sent";
+  return c.kind === "direct" ? "Seen" : "Seen by " + readers.map((r) => nameOf(r.user)).join(", ");
+}
+
+export const canEdit = (m: { mine: boolean; deleted: boolean; created: number }) => m.mine && !m.deleted && Date.now() - m.created < 15 * 60_000;
+
+component Page(me: Me, path: string, start: string) {
+  signal open = start
+  signal problem = ""
+  signal editing = ""
+  signal grouping = false
+
+  function show(id: string) {
+    open = id
+    editing = ""
+    problem = ""
+    if (find(me, id)) chat.markRead(me.id, id)
+  }
+
+  function startWith(user: string) {
+    try {
+      show(chat.startDirect(me.id, user))
+    } catch {
+      problem = "You can message people who share a workspace with you."
+    }
+  }
+
+  function makeGroup(e: WeftEvent) {
+    const title = String(e.form?.title ?? "").trim()
+    const members = Object.keys(e.form ?? {}).filter((k) => k.startsWith("m_")).map((k) => k.slice(2))
+    if (title === "" || members.length === 0) {
+      problem = "Name the group and pick at least one person."
+      return
+    }
+    try {
+      show(chat.createGroup(me.id, { title, members }))
+      grouping = false
+    } catch {
+      problem = "That group could not be made: everyone must share a workspace with you."
+    }
+  }
+
+  function send(e: WeftEvent) {
+    const body = String(e.form?.body ?? "").trim()
+    if (body === "" || !open) return
+    try {
+      chat.send(me.id, open, body)
+      chat.markRead(me.id, open)
+      problem = ""
+    } catch {
+      problem = "Not sent: a message is 1 to 4000 characters, in a conversation you are in."
+    }
+  }
+
+  function typing() {
+    if (!open) return
+    try {
+      chat.typing(me.id, open)
+      chat.markRead(me.id, open)
+    } catch {
+    }
+  }
+
+  function startEdit(id: string) {
+    editing = id
+  }
+
+  function saveEdit(id: string, e: WeftEvent) {
+    try {
+      chat.edit(me.id, id, String(e.form?.body ?? ""))
+      editing = ""
+    } catch {
+      problem = "Messages can be changed for 15 minutes after sending."
+    }
+  }
+
+  function remove(id: string) {
+    try {
+      chat.delete(me.id, id)
+    } catch {
+      problem = "Only the author deletes a message."
+    }
+  }
+
+  function leave() {
+    try {
+      chat.leave(me.id, open)
+      open = ""
+    } catch {
+      problem = "You are not in that conversation."
+    }
+  }
+
+  function toggleGroup() {
+    grouping = !grouping
+  }
+
+  view {
+    <AppShell me={me} path={path} title="Chat">
+      <div class="grid min-h-[32rem] overflow-hidden rounded-xl border md:grid-cols-[17rem_1fr]">
+        <aside class="bg-muted/30 flex flex-col border-b md:border-r md:border-b-0" aria-label="Conversations">
+          <div class="flex items-center justify-between border-b px-3 py-2.5">
+            <h2 class="text-sm font-semibold">Conversations</h2>
+            <button type="button" @click={toggleGroup} aria-expanded={grouping ? "true" : "false"} class={buttonVariants({ variant: "ghost", size: "sm" })}>
+              <Icon name="plus" />
+              Group
+            </button>
+          </div>
+          {#if grouping}
+            <form @submit={makeGroup} class="flex flex-col gap-2 border-b p-3 text-sm" autocomplete="off">
+              <input name="title" aria-label="Group name" placeholder="Group name" maxlength="80" class={inputClass + " h-8"} />
+              {#each assignable(me).filter((p) => p.id !== me.id) as p (p.id)}
+                <label class="flex items-center gap-2"><input type="checkbox" name={"m_" + p.id} value="1" class="accent-primary" />{p.name}</label>
+              {/each}
+              <button class={buttonVariants({ size: "sm" })}>Start group</button>
+            </form>
+          {/if}
+          <ul class="flex-1 overflow-y-auto">
+            {#each chat.inbox(me.id) as c (c.id)}
+              <li>
+                <button type="button" @click={show(c.id)} aria-current={c.id === open ? "true" : null} class="hover:bg-muted aria-[current=true]:bg-muted flex w-full items-center gap-2.5 px-3 py-2.5 text-left">
+                  <span class="min-w-0 flex-1">
+                    <span class="block truncate text-sm font-medium">{titleOf(me, c)}</span>
+                    <span class="text-muted-foreground block truncate text-xs">{c.last ? (c.last.mine ? "You: " : "") + (c.last.deleted ? "deleted" : c.last.body) : "No messages yet"}</span>
+                  </span>
+                  {#if c.unread > 0 && c.id !== open}
+                    <span class="bg-primary text-primary-foreground rounded-full px-1.5 text-xs tabular-nums" aria-label={c.unread + " unread"}>{c.unread}</span>
+                  {/if}
+                </button>
+              </li>
+            {/each}
+          </ul>
+          <div class="border-t p-3">
+            <p class="text-muted-foreground mb-2 text-xs">Message someone</p>
+            <div class="flex flex-wrap gap-1.5">
+              {#each assignable(me).filter((p) => p.id !== me.id) as p (p.id)}
+                <button type="button" @click={startWith(p.id)} class={buttonVariants({ variant: "outline", size: "sm" }) + " h-7 text-xs"}>{p.name}</button>
+              {/each}
+              {#if assignable(me).length <= 1}
+                <p class="text-muted-foreground text-xs">Invite people from <a href="/app/team" class="underline-offset-4 hover:underline">People</a> to chat with them.</p>
+              {/if}
+            </div>
+          </div>
+        </aside>
+
+        <section class="flex min-w-0 flex-col" aria-label="Messages">
+          {#if find(me, open)}
+            <header class="flex items-center gap-2 border-b px-4 py-2.5">
+              <h2 class="min-w-0 flex-1 truncate text-sm font-semibold">{titleOf(me, find(me, open)!)}</h2>
+              {#if find(me, open)!.kind === "group"}
+                <span class="text-muted-foreground text-xs">{find(me, open)!.members.map(nameOf).join(", ")}</span>
+                <button type="button" @click={leave} class={buttonVariants({ variant: "ghost", size: "sm" })}>Leave</button>
+              {/if}
+            </header>
+            <ol class="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-4" aria-live="polite">
+              {#each chat.messages(me.id, open, { limit: 100 }) as m (m.id)}
+                <li class={m.mine ? "flex flex-row-reverse gap-2.5" : "flex gap-2.5"}>
+                  <span aria-hidden="true" class="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white" style={"background:" + colorOf(m.author)}>{initials(nameOf(m.author))}</span>
+                  <div class={m.mine ? "flex max-w-[75%] flex-col items-end" : "flex max-w-[75%] flex-col items-start"}>
+                    {#if editing === m.id}
+                      <form @submit={saveEdit(m.id)} class="flex gap-1.5">
+                        <input name="body" value={m.body} aria-label="Change message" maxlength="4000" class={inputClass + " h-8"} />
+                        <button class={buttonVariants({ size: "sm" })}>Save</button>
+                      </form>
+                    {:else}
+                      <p class={m.deleted ? "text-muted-foreground rounded-lg border border-dashed px-3 py-1.5 text-sm italic" : m.mine ? "bg-primary text-primary-foreground rounded-lg px-3 py-1.5 text-sm whitespace-pre-wrap" : "bg-muted rounded-lg px-3 py-1.5 text-sm whitespace-pre-wrap"}>{m.deleted ? "Message deleted" : m.body}</p>
+                    {/if}
+                    <span class="text-muted-foreground mt-1 flex gap-2 text-[11px]">
+                      {m.mine ? "" : nameOf(m.author) + " "}{activityWhen(m.created, Date.now())}{m.edited ? " (edited)" : ""}
+                      {#if canEdit(m) && editing !== m.id}
+                        <button type="button" @click={startEdit(m.id)} class="hover:text-foreground underline-offset-2 hover:underline">Edit</button>
+                        <button type="button" @click={remove(m.id)} class="hover:text-destructive underline-offset-2 hover:underline">Delete</button>
+                      {/if}
+                    </span>
+                  </div>
+                </li>
+              {/each}
+              {#if chat.messages(me.id, open, { limit: 1 }).length === 0}
+                <li class="text-muted-foreground m-auto text-sm">Say hello.</li>
+              {/if}
+            </ol>
+            <footer class="border-t px-4 py-3">
+              <p class="text-muted-foreground mb-1.5 h-4 text-xs">
+                {chat.typingIn(me.id, open).length > 0 ? chat.typingIn(me.id, open).map(nameOf).join(", ") + " typing..." : seenBy(me, find(me, open)!)}
+              </p>
+              <form @submit={send} class="flex gap-2" autocomplete="off">
+                <input name="body" aria-label="Message" placeholder="Write a message" maxlength="4000" @input={typing} class={inputClass} />
+                <button class={buttonVariants({})} :busy>
+                  <Icon name="send" />
+                  Send
+                </button>
+              </form>
+              {#if problem}
+                <p role="alert" class="text-destructive mt-2 text-sm">{problem}</p>
+              {/if}
+            </footer>
+          {:else}
+            <div class="text-muted-foreground m-auto max-w-xs p-8 text-center text-sm">
+              <Icon name="chat" class="mx-auto mb-3 size-6" />
+              Pick a conversation, or message someone from your workspace.
+              {#if problem}
+                <p role="alert" class="text-destructive mt-2">{problem}</p>
+              {/if}
+            </div>
+          {/if}
+        </section>
+      </div>
+    </AppShell>
+  }
+}

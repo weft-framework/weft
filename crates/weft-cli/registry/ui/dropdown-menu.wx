@@ -1,0 +1,102 @@
+import { cn } from "../../lib/utils.ts";
+import { buttonVariants } from "./button.wx";
+import type { Placement } from "@weft/ui";
+client import { menu, position } from "@weft/ui"
+
+export const menuContentClass =
+  "bg-popover text-popover-foreground z-50 m-0 min-w-[8rem] overflow-x-hidden overflow-y-auto rounded-md border p-1 shadow-md";
+
+export const menuItemClass =
+  "focus:bg-accent focus:text-accent-foreground hover:bg-accent hover:text-accent-foreground data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 dark:data-[variant=destructive]:focus:bg-destructive/20 data-[variant=destructive]:focus:text-destructive [&_svg:not([class*='text-'])]:text-muted-foreground relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-hidden select-none aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[inset]:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
+
+export const menuCheckClass =
+  "focus:bg-accent focus:text-accent-foreground hover:bg-accent relative flex w-full cursor-default items-center gap-2 rounded-sm py-1.5 pr-2 pl-8 text-left text-sm outline-hidden select-none aria-disabled:pointer-events-none aria-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 group";
+
+component DropdownMenuTrigger(menu: string, variant?: "default" | "outline" | "ghost" | "secondary", children: Html, ...attrs: Attrs) {
+  view {
+    <button type="button" popovertarget={menu} aria-haspopup="menu" data-slot="dropdown-menu-trigger" class={cn(buttonVariants({ variant: variant ?? "outline" }), attrs.class)} {...attrs}>{children}</button>
+  }
+}
+
+component DropdownMenuContent(id: string, placement?: Placement, children: Html, ...attrs: Attrs) {
+  view {
+    <div id={id} popover="auto" role="menu" data-slot="dropdown-menu-content" class={cn(menuContentClass, attrs.class)} use:menu use:position={{ placement: placement ?? "bottom-start", offset: 4 }} {...attrs}>{children}</div>
+  }
+}
+
+component DropdownMenuGroup(label?: string, children: Html, ...attrs: Attrs) {
+  view {
+    <div role="group" aria-label={label} data-slot="dropdown-menu-group" class={cn(attrs.class)} {...attrs}>{children}</div>
+  }
+}
+
+component DropdownMenuItem(href?: string, variant?: "default" | "destructive", inset?: boolean, disabled?: boolean, children: Html, ...attrs: Attrs) {
+  view {
+    {#if href}
+      <a href={href} role="menuitem" tabindex="-1" aria-disabled={disabled ? "true" : undefined} data-variant={variant ?? "default"} data-inset={inset ? "" : undefined} data-slot="dropdown-menu-item" class={cn(menuItemClass, attrs.class)} {...attrs}>{children}</a>
+    {:else}
+      <button type="button" role="menuitem" tabindex="-1" aria-disabled={disabled ? "true" : undefined} data-variant={variant ?? "default"} data-inset={inset ? "" : undefined} data-slot="dropdown-menu-item" class={cn(menuItemClass, attrs.class)} {...attrs}>{children}</button>
+    {/if}
+  }
+}
+
+component DropdownMenuCheckboxItem(checked?: boolean, disabled?: boolean, children: Html, ...attrs: Attrs) {
+  view {
+    <button type="button" role="menuitemcheckbox" tabindex="-1" aria-checked={checked ? "true" : "false"} aria-disabled={disabled ? "true" : undefined} data-keep-open="" data-slot="dropdown-menu-checkbox-item" class={cn(menuCheckClass, attrs.class)} {...attrs}>
+      <span class="pointer-events-none absolute left-2 hidden size-3.5 items-center justify-center group-aria-checked:flex">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+      </span>
+      {children}
+    </button>
+  }
+}
+
+component DropdownMenuRadioGroup(label?: string, children: Html, ...attrs: Attrs) {
+  view {
+    <div role="group" aria-label={label} data-slot="dropdown-menu-radio-group" class={cn(attrs.class)} {...attrs}>{children}</div>
+  }
+}
+
+component DropdownMenuRadioItem(value: string, checked?: boolean, disabled?: boolean, children: Html, ...attrs: Attrs) {
+  view {
+    <button type="button" role="menuitemradio" tabindex="-1" data-value={value} aria-checked={checked ? "true" : "false"} aria-disabled={disabled ? "true" : undefined} data-keep-open="" data-slot="dropdown-menu-radio-item" class={cn(menuCheckClass, attrs.class)} {...attrs}>
+      <span class="pointer-events-none absolute left-2 hidden size-3.5 items-center justify-center group-aria-checked:flex">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-2" aria-hidden="true"><circle cx="12" cy="12" r="10" /></svg>
+      </span>
+      {children}
+    </button>
+  }
+}
+
+component DropdownMenuLabel(inset?: boolean, children: Html, ...attrs: Attrs) {
+  view {
+    <div data-inset={inset ? "" : undefined} data-slot="dropdown-menu-label" class={cn("px-2 py-1.5 text-sm font-medium data-[inset]:pl-8", attrs.class)} {...attrs}>{children}</div>
+  }
+}
+
+component DropdownMenuSeparator(...attrs: Attrs) {
+  view {
+    <div role="separator" data-slot="dropdown-menu-separator" class={cn("bg-border -mx-1 my-1 h-px", attrs.class)} {...attrs}></div>
+  }
+}
+
+component DropdownMenuShortcut(children: Html, ...attrs: Attrs) {
+  view {
+    <span data-slot="dropdown-menu-shortcut" class={cn("text-muted-foreground ml-auto text-xs tracking-widest", attrs.class)} {...attrs}>{children}</span>
+  }
+}
+
+component DropdownMenuSubTrigger(menu: string, inset?: boolean, children: Html, ...attrs: Attrs) {
+  view {
+    <button type="button" role="menuitem" tabindex="-1" popovertarget={menu} aria-haspopup="menu" data-inset={inset ? "" : undefined} data-slot="dropdown-menu-sub-trigger" class={cn(menuItemClass, attrs.class)} {...attrs}>
+      {children}
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ml-auto size-4" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+    </button>
+  }
+}
+
+component DropdownMenuSubContent(id: string, children: Html, ...attrs: Attrs) {
+  view {
+    <div id={id} popover="auto" role="menu" data-slot="dropdown-menu-sub-content" class={cn(menuContentClass, "shadow-lg", attrs.class)} use:menu use:position={{ placement: "right-start", offset: 2 }} {...attrs}>{children}</div>
+  }
+}

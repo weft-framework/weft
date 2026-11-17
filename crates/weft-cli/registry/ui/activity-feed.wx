@@ -1,0 +1,35 @@
+import type { ActivityItem } from "@weft/data";
+import { cn } from "../../lib/utils.ts";
+
+export function activityWhen(at: number, now: number): string {
+  const s = Math.max(0, Math.round((now - at) / 1000));
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86_400) return `${Math.floor(s / 3600)} h ago`;
+  return new Date(at).toISOString().slice(0, 10);
+}
+
+export function activityActor(actor: string | null, names?: Record<string, string>): string {
+  if (actor === null) return "Someone";
+  return names !== undefined && Object.hasOwn(names, actor) ? names[actor]! : actor;
+}
+
+component ActivityFeed(items: ActivityItem[], names?: Record<string, string>, empty?: string, now?: number, ...attrs: Attrs) {
+  view {
+    <div data-slot="activity-feed" class={cn("flex flex-col gap-3", attrs.class)} {...attrs}>
+      {#if items.length == 0}
+        <p class="text-muted-foreground text-sm">{empty ?? "Nothing has happened here yet."}</p>
+      {:else}
+        <ol class="flex flex-col gap-3">
+          {#each items as item}
+            <li data-action={item.action} class="flex items-baseline gap-2 text-sm">
+              <span class="font-medium">{activityActor(item.actor, names)}</span>
+              <span class="min-w-0 flex-1">{item.text}</span>
+              <time class="text-muted-foreground shrink-0 tabular-nums" datetime={new Date(item.at).toISOString()}>{activityWhen(item.at, now ?? Date.now())}</time>
+            </li>
+          {/each}
+        </ol>
+      {/if}
+    </div>
+  }
+}

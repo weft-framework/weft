@@ -1,0 +1,125 @@
+import { redirect, type PageContext } from "@weft/server";
+import { fail } from "@weft/server/action";
+import type { WizardFieldView, WizardView } from "@weft/server/wizard";
+import { meOf, onboarding, type Me } from "../../lib/workspaces.ts";
+import { AppShell } from "../../components/AppShell.wx";
+import { Stepper } from "../../components/ui/stepper.wx";
+import { buttonVariants } from "../../components/ui/button.wx";
+import { inputClass } from "../../components/ui/input.wx";
+import { labelClass } from "../../components/ui/label.wx";
+import { Field, FieldDescription } from "../../components/ui/field.wx";
+import { NativeSelect, NativeSelectOption } from "../../components/ui/native-select.wx";
+
+export const meta = { title: "New workspace" };
+
+export async function load(ctx: PageContext) {
+  const me = meOf(ctx);
+  if (!me) return redirect("/sign-in?next=/app/welcome");
+  const form = await onboarding.view(ctx);
+  if (!form) return redirect("/app");
+  return { me, form, first: me.tenants().length === 0, path: ctx.url.pathname };
+}
+
+action saveOnboarding(step: string, go?: string, name?: string, kind?: string, review?: boolean, zone?: string, invites?: string) {
+  const input: Record<string, unknown> = { name, kind, zone, invites }
+  if (step === "habits") input.review = review === true
+  const r = await onboarding.save(ctx, step, input, { go: go === "back" ? "back" : "next" })
+  if (!r.ok) fail(r.reason === "invalid" ? Object.values(r.errors).join(" ") : "Start again from the first step.")
+  if (r.step !== null) return redirect("/app/welcome?step=" + encodeURIComponent(r.step))
+  const done = await onboarding.finish(ctx)
+  if (!done.ok) fail(done.reason === "invalid" ? Object.values(done.errors).join(" ") : "Some steps are not finished yet.")
+  return redirect("/app")
+}
+
+export function stepsOf(form: { steps: { id: string; label: string; done: boolean; current: boolean; reachable: boolean }[] }) {
+  return form.steps.map((s) => ({
+    label: s.label,
+    done: s.done,
+    current: s.current,
+    href: s.reachable && !s.current ? "/app/welcome?step=" + encodeURIComponent(s.id) : undefined,
+  }));
+}
+
+export const asText = (f: WizardFieldView) => (f.value === null ? "" : String(f.value));
+
+component Page(me: Me, form: WizardView, first: boolean, path: string) {
+  view {
+    <AppShell me={me} path={path} title={first ? "Welcome" : "New workspace"}>
+      <div class="max-w-xl">
+        {#if first}
+          <h2 class="text-2xl font-semibold tracking-[-0.02em]">Set up your workspace</h2>
+          <p class="text-muted-foreground mt-2 text-[15px]">Tasks, notes, chat and rooms all live in a workspace. Three short steps; your answers are kept if you leave.</p>
+        {:else}
+          <h2 class="text-2xl font-semibold tracking-[-0.02em]">Another workspace</h2>
+          <p class="text-muted-foreground mt-2 text-[15px]">Each workspace has its own people, roles and data. Switch between them in the sidebar.</p>
+        {/if}
+
+        <Stepper class="mt-8" label="Workspace setup" steps={stepsOf(form)} />
+
+        <form action={saveOnboarding} class="mt-8 flex flex-col gap-6" autocomplete="off">
+          <input type="hidden" name="step" value={form.step} />
+          {#each form.fields as f (f.name)}
+            {#if f.type === "boolean"}
+              <label class="flex items-start gap-3 rounded-lg border p-4">
+                <input type="checkbox" name={f.name} value="true" checked={f.value === true || (f.value === null && f.name === "review")} class="accent-primary mt-0.5 size-4" />
+                <span>
+                  <span class="block text-sm font-medium">{f.label}</span>
+                  {#if f.description}
+                    <span class="text-muted-foreground mt-0.5 block text-sm">{f.description}</span>
+                  {/if}
+                </span>
+              </label>
+            {:else if f.type === "choice" && (f.options?.length ?? 0) <= 4}
+              <fieldset class="flex flex-col gap-2">
+                <legend class={labelClass + " mb-2"}>{f.label}</legend>
+                <div class="grid gap-2 sm:grid-cols-3">
+                  {#each f.options ?? [] as o}
+                    <label class="has-checked:border-primary has-checked:bg-primary/5 flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2.5 text-sm transition-colors">
+                      <input type="radio" name={f.name} value={o} checked={f.value === o} required={f.required} class="accent-primary" />
+                      {o}
+                    </label>
+                  {/each}
+                </div>
+              </fieldset>
+            {:else if f.type === "choice"}
+              <Field>
+                <label for={"f-" + f.name} class={labelClass}>{f.label}</label>
+                <NativeSelect id={"f-" + f.name} name={f.name} required={f.required} class="w-full">
+                  {#each f.options ?? [] as o}
+                    <NativeSelectOption value={o} selected={f.value === o}>{o}</NativeSelectOption>
+                  {/each}
+                </NativeSelect>
+              </Field>
+            {:else if f.type === "textarea"}
+              <Field>
+                <label for={"f-" + f.name} class={labelClass}>{f.label}</label>
+                <textarea id={"f-" + f.name} name={f.name} rows="4" maxlength={f.maxLength} placeholder="ada@example.com, grace@example.com" class={inputClass + " h-auto min-h-24 py-2"}>{asText(f)}</textarea>
+                {#if f.description}
+                  <FieldDescription>{f.description}</FieldDescription>
+                {/if}
+              </Field>
+            {:else}
+              <Field>
+                <label for={"f-" + f.name} class={labelClass}>{f.label}</label>
+                <input id={"f-" + f.name} name={f.name} value={asText(f)} required={f.required} maxlength={f.maxLength} class={inputClass} />
+                {#if f.description}
+                  <FieldDescription>{f.description}</FieldDescription>
+                {/if}
+              </Field>
+            {/if}
+          {/each}
+          <p data-weft-message role="alert" class="text-destructive text-sm empty:hidden"></p>
+          <div class="flex items-center gap-2">
+            {#if form.back}
+              <button name="go" value="back" formnovalidate class={buttonVariants({ variant: "outline" })}>Back</button>
+            {/if}
+            <button name="go" value="next" class={buttonVariants({})}>{form.last ? "Create workspace" : "Continue"}</button>
+            {#if form.saved}
+              <span class="text-muted-foreground ml-auto text-xs">Draft saved</span>
+            {/if}
+          </div>
+        </form>
+      </div>
+    </AppShell>
+  }
+}

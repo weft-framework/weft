@@ -1,0 +1,29 @@
+// Rows kept sorted by name on the server. Typing a name that sorts first
+// moves the row being edited above the others: the browser blurs a moved
+// element, and the runtime has to put focus and caret back.
+import type { WeftEvent } from "@weft/runtime";
+
+interface Row {
+  id: number;
+  name: string;
+}
+
+component Page() {
+  signal rows = [{ id: 1, name: "m" }, { id: 2, name: "z" }] as Row[]
+
+  function rename(id: number, e: WeftEvent) {
+    const name = String(e.value ?? "")
+    rows = rows.map((r) => (r.id === id ? { ...r, name } : r)).sort((a, b) => a.name.localeCompare(b.name))
+  }
+
+  view {
+    <ul id="rows">
+      {#each rows as row (row.id)}
+        <li>
+          <span class="name">{row.name}</span>
+          <input name={"row" + row.id} aria-label="Name" @input={rename(row.id)} />
+        </li>
+      {/each}
+    </ul>
+  }
+}

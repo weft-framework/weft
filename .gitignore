@@ -1,0 +1,50 @@
+# Rust
+/target
+**/target
+Cargo.lock.bak
+**/*.rs.bk
+
+# Node / Bun
+node_modules
+dist
+*.tsbuildinfo
+.bun
+.npm
+*.tgz
+npm-debug.log*
+coverage
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# Logs and local environment
+*.log
+.env
+.env.*
+!.env.example
+
+# Weft build output
+.weft
+*.wx.js
+packages/*/test/.weft
+
+# Local app data: runtime SQLite databases and the dev signing key.
+# Anchored so it never touches the @weft/data source package.
+/data/
+/packages/server/data/
+**/data/app.db
+**/data/app.db-shm
+**/data/app.db-wal
+**/data/dev-key
+
+# made by create-weft prepack
+packages/create-weft/template/
+
+# VS Code extension packages: attach to a GitHub release instead
+*.vsix

@@ -1,0 +1,10 @@
+import { cn } from "../../lib/utils.ts";
+
+component Switch(...attrs: Attrs) {
+  view {
+    <span data-slot="switch" class="relative inline-flex h-[1.15rem] w-8 shrink-0 items-center">
+      <input type="checkbox" role="switch" class={cn("peer bg-input dark:bg-input/80 checked:bg-primary focus-visible:border-ring focus-visible:ring-ring/50 inline-flex h-[1.15rem] w-8 shrink-0 cursor-pointer appearance-none items-center rounded-full border border-transparent shadow-xs transition-all outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50", attrs.class)} {...attrs} />
+      <span aria-hidden="true" class="bg-background dark:bg-foreground dark:peer-checked:bg-primary-foreground pointer-events-none absolute left-px block size-4 rounded-full ring-0 transition-transform peer-checked:translate-x-[calc(100%-2px)]"></span>
+    </span>
+  }
+}

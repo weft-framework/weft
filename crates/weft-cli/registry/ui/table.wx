@@ -1,0 +1,51 @@
+import { cn } from "../../lib/utils.ts";
+
+component Table(children: Html, ...attrs: Attrs) {
+  view {
+    <div data-slot="table-container" class="relative w-full overflow-x-auto">
+      <table data-slot="table" class={cn("w-full caption-bottom text-sm", attrs.class)} {...attrs}>{children}</table>
+    </div>
+  }
+}
+
+component TableHeader(children: Html, ...attrs: Attrs) {
+  view {
+    <thead data-slot="table-header" class={cn("[&_tr]:border-b", attrs.class)} {...attrs}>{children}</thead>
+  }
+}
+
+component TableBody(children: Html, ...attrs: Attrs) {
+  view {
+    <tbody data-slot="table-body" class={cn("[&_tr:last-child]:border-0", attrs.class)} {...attrs}>{children}</tbody>
+  }
+}
+
+component TableFooter(children: Html, ...attrs: Attrs) {
+  view {
+    <tfoot data-slot="table-footer" class={cn("bg-muted/50 border-t font-medium [&>tr]:last:border-b-0", attrs.class)} {...attrs}>{children}</tfoot>
+  }
+}
+
+component TableRow(children: Html, ...attrs: Attrs) {
+  view {
+    <tr data-slot="table-row" class={cn("hover:bg-muted/50 data-[state=selected]:bg-muted border-b transition-colors", attrs.class)} {...attrs}>{children}</tr>
+  }
+}
+
+component TableHead(children?: Html, ...attrs: Attrs) {
+  view {
+    <th scope="col" data-slot="table-head" class={cn("text-foreground h-10 px-2 text-left align-middle font-medium whitespace-nowrap [&:has([role=checkbox])]:pr-0", attrs.class)} {...attrs}>{children}</th>
+  }
+}
+
+component TableCell(children?: Html, ...attrs: Attrs) {
+  view {
+    <td data-slot="table-cell" class={cn("p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0", attrs.class)} {...attrs}>{children}</td>
+  }
+}
+
+component TableCaption(children: Html, ...attrs: Attrs) {
+  view {
+    <caption data-slot="table-caption" class={cn("text-muted-foreground mt-4 text-sm", attrs.class)} {...attrs}>{children}</caption>
+  }
+}

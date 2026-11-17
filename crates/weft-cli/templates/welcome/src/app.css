@@ -1,0 +1,110 @@
+@import "tailwindcss";
+
+/* The site's global styles. Colours, radii and the dark variant come from
+   src/theme.ts; this file adds the type, and the few moments of motion:
+   a thread weaving in, a new row arriving, the current page's underline. */
+
+@theme {
+  --font-sans: "Inter Variable", "Inter", "Segoe UI Variable Display", "Segoe UI Variable Text", system-ui, -apple-system, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "cv11", "ss01", "ss03";
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  ::selection {
+    @apply bg-foreground text-background;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+  /* Code reads as typed: no => or /> ligatures from the system mono font. */
+  code,
+  pre,
+  kbd {
+    font-variant-ligatures: none;
+  }
+}
+
+/* The current page's underline slides in. */
+.nav-link::after {
+  content: "";
+  position: absolute;
+  inset: auto 0.5rem -0.8125rem;
+  height: 1.5px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 280ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.nav-link[aria-current="page"]::after {
+  transform: scaleX(1);
+}
+
+/* A weft thread weaves itself across the warp when a page opens; the warp
+   that passes over it settles in after. */
+.weft-line {
+  stroke-dasharray: 1;
+  animation: weft-draw 1400ms cubic-bezier(0.45, 0.05, 0.2, 1) both;
+}
+.weft-over {
+  animation: weft-settle 300ms 1100ms ease-out both;
+}
+@keyframes weft-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes weft-settle {
+  from {
+    opacity: 0;
+  }
+}
+
+/* A row that arrives in a live table is marked for a moment. */
+[data-slot="live-table"] tbody tr[data-key] {
+  animation: row-arrive 1800ms ease-out;
+}
+@keyframes row-arrive {
+  from {
+    background: color-mix(in oklch, var(--color-foreground) 8%, transparent);
+  }
+}
+
+/* Presence avatars arrive with a small lift. */
+[data-slot="presence-stack"] [data-slot="avatar"] {
+  animation: avatar-in 380ms cubic-bezier(0.2, 0.8, 0.3, 1.2) both;
+}
+@keyframes avatar-in {
+  from {
+    transform: translateY(4px) scale(0.85);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}

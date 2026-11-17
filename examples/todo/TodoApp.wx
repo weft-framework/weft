@@ -1,0 +1,82 @@
+import type { WeftEvent } from "@weft/runtime"
+
+interface Todo {
+  id: number
+  title: string
+  done: boolean
+}
+
+type Filter = "all" | "open" | "done"
+
+component TodoStats(total: number, open: number) uses none {
+  derived done = total - open
+
+  view {
+    <p class="stats">{open} open, {done} done, {total} total</p>
+  }
+}
+
+component TodoApp() {
+  signal todos = [] as Todo[]
+  signal filter = "all" as Filter
+  signal nextId = 1
+
+  derived open = todos.filter((t) => !t.done).length
+  derived visible = todos.filter((t) =>
+    filter === "all" ? true : filter === "open" ? !t.done : t.done,
+  )
+
+  function add(e: WeftEvent) {
+    const title = (e.form?.title ?? "").trim()
+    if (title === "") return
+    todos = [...todos, { id: nextId, title, done: false }]
+    nextId = nextId + 1
+  }
+
+  function show(next: Filter) { filter = next }
+  function toggle(id: number) {
+    todos = todos.map((t) => (t.id === id ? { ...t, done: !t.done } : t))
+  }
+  function remove(id: number) {
+    todos = todos.filter((t) => t.id !== id)
+  }
+  function clearDone() {
+    todos = todos.filter((t) => !t.done)
+  }
+
+  view {
+    <section class="todos">
+      <form @submit={add}>
+        <input name="title" aria-label="New task" placeholder="What needs doing?" />
+        <button :busy>Add</button>
+      </form>
+
+      <div class="filters" role="group" aria-label="Filter tasks">
+        <button class="chip" aria-pressed={filter === "all"} @click={show("all")}>All</button>
+        <button class="chip" aria-pressed={filter === "open"} @click={show("open")}>Open</button>
+        <button class="chip" aria-pressed={filter === "done"} @click={show("done")}>Done</button>
+      </div>
+
+      {#if visible.length === 0}
+        <p class="empty">Nothing here yet.</p>
+      {:else}
+        <ul>
+          {#each visible as todo (todo.id)}
+            <li class={todo.done ? "item done" : "item"}>
+              <label>
+                <input type="checkbox" checked={todo.done} @change={toggle(todo.id)} />
+                {todo.title}
+              </label>
+              <button @click.confirm("Remove this task?")={remove(todo.id)}>Remove</button>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+
+      <footer>
+        <TodoStats total={todos.length} open={open} />
+        <button class="link" hidden={open === todos.length} @click={clearDone}>Clear completed</button>
+      </footer>
+    </section>
+  }
+}

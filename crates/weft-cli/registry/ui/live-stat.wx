@@ -1,0 +1,13 @@
+import { cn } from "../../lib/utils.ts";
+
+component LiveStat(label: string, value: () => number, format?: (n: number) => string, hint?: string, ...attrs: Attrs) {
+  view {
+    <div data-slot="live-stat" class={cn("bg-card text-card-foreground flex flex-col gap-1 rounded-xl border px-5 py-4 shadow-sm", attrs.class)} {...attrs}>
+      <span class="text-muted-foreground text-sm">{label}</span>
+      <span data-slot="live-stat-value" class="text-2xl font-semibold tabular-nums" aria-live="polite">{format ? format(value()) : value().toLocaleString("en")}</span>
+      {#if hint}
+        <span class="text-muted-foreground text-xs">{hint}</span>
+      {/if}
+    </div>
+  }
+}

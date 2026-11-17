@@ -1,0 +1,52 @@
+import { cn } from "../../lib/utils.ts";
+client import { select } from "@weft/ui"
+
+export const selectTriggerClass =
+  "border-input data-[placeholder=true]:text-muted-foreground [&_svg:not([class*='text-'])]:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:bg-input/30 dark:hover:bg-input/50 flex h-9 w-fit min-w-[8rem] items-center justify-between gap-2 rounded-md border bg-transparent px-3 py-2 text-sm whitespace-nowrap shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
+
+component Select(id: string, name?: string, value?: string, placeholder?: string, label?: string, children: Html, ...attrs: Attrs) {
+  view {
+    <div data-slot="select" class={cn("relative inline-block", attrs.class)} use:select {...attrs}>
+      <input type="hidden" name={name} value={value ?? ""} />
+      <button type="button" id={id + "-trigger"} popovertarget={id} aria-label={label} data-slot="select-trigger" class={selectTriggerClass}>
+        <span data-slot="select-value" data-placeholder="true" class="line-clamp-1 flex items-center gap-2 data-[placeholder=true]:text-muted-foreground">{placeholder ?? ""}</span>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4 opacity-50" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+      </button>
+      <div id={id} popover="auto" role="listbox" aria-labelledby={id + "-trigger"} data-slot="select-content" class="bg-popover text-popover-foreground z-50 m-0 max-h-72 min-w-[8rem] overflow-x-hidden overflow-y-auto rounded-md border p-1 shadow-md">{children}</div>
+    </div>
+  }
+}
+
+component SelectGroup(label?: string, children: Html, ...attrs: Attrs) {
+  view {
+    <div role="group" aria-label={label} data-slot="select-group" class={cn(attrs.class)} {...attrs}>
+      {#if label}
+        <div aria-hidden="true" class="text-muted-foreground px-2 py-1.5 text-xs">{label}</div>
+      {/if}
+      {children}
+    </div>
+  }
+}
+
+component SelectItem(value: string, disabled?: boolean, children: Html, ...attrs: Attrs) {
+  view {
+    <div role="option" tabindex="-1" data-value={value} aria-selected="false" aria-disabled={disabled ? "true" : undefined} data-slot="select-item" class={cn("focus:bg-accent focus:text-accent-foreground hover:bg-accent [&_svg:not([class*='text-'])]:text-muted-foreground group relative flex w-full cursor-default items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm outline-hidden select-none aria-disabled:pointer-events-none aria-disabled:opacity-50", attrs.class)} {...attrs}>
+      <span class="absolute right-2 hidden size-3.5 items-center justify-center group-aria-selected:flex">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+      </span>
+      {children}
+    </div>
+  }
+}
+
+component SelectLabel(children: Html, ...attrs: Attrs) {
+  view {
+    <div data-slot="select-label" class={cn("text-muted-foreground px-2 py-1.5 text-xs", attrs.class)} {...attrs}>{children}</div>
+  }
+}
+
+component SelectSeparator(...attrs: Attrs) {
+  view {
+    <div role="separator" data-slot="select-separator" class={cn("bg-border pointer-events-none -mx-1 my-1 h-px", attrs.class)} {...attrs}></div>
+  }
+}

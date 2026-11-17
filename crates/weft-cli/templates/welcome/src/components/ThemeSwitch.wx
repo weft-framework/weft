@@ -1,0 +1,15 @@
+import { Icon } from "./Icon.wx";
+client import { setTheme, isDark } from "@weft/theme/client"
+
+component ThemeSwitch() {
+  client function flip() {
+    setTheme(isDark() ? "light" : "dark")
+  }
+
+  view {
+    <button type="button" @click={flip} aria-label="Switch between light and dark" title="Switch theme" class="text-muted-foreground hover:text-foreground hover:bg-accent ml-1 grid size-9 shrink-0 place-items-center rounded-md transition-colors">
+      <Icon name="moon" class="theme-icon dark:hidden" />
+      <Icon name="sun" class="theme-icon hidden dark:block" />
+    </button>
+  }
+}

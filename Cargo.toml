@@ -1,0 +1,28 @@
+# Weft toolchain workspace. The compiler, language server, formatter and CLI
+# are Rust crates; the runtime, server and data packages (packages/) are
+# TypeScript and live outside this workspace.
+[workspace]
+resolver = "2"
+members = [
+    "crates/weft-compiler",
+    "crates/weft-cli",
+    "crates/weft-fmt",
+    "crates/weft-lsp",
+]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+license = "MIT"
+authors = ["Vakea"]
+repository = "https://github.com/aleroycz/weft"
+rust-version = "1.80"
+
+[workspace.dependencies]
+weft-compiler = { path = "crates/weft-compiler" }
+weft-fmt = { path = "crates/weft-fmt" }
+weft-lsp = { path = "crates/weft-lsp" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

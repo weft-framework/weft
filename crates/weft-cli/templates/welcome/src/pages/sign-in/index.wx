@@ -1,0 +1,160 @@
+import { login, redirect, type PageContext } from "@weft/server";
+import type { WeftEvent } from "@weft/runtime";
+import { fail } from "@weft/server/action";
+import { email, passkeys } from "../../lib/accounts.ts";
+import { checkPassword, nextPath } from "../../lib/signin.ts";
+import { meOf } from "../../lib/workspaces.ts";
+import { AuthShell } from "../../components/AuthShell.wx";
+import { buttonVariants } from "../../components/ui/button.wx";
+import { inputClass } from "../../components/ui/input.wx";
+import { Field } from "../../components/ui/field.wx";
+import { labelClass } from "../../components/ui/label.wx";
+import { Separator } from "../../components/ui/separator.wx";
+client import { getPasskey, passkeysSupported } from "@weft/runtime"
+
+export const meta = { title: "Sign in" };
+
+const ERRORS: Record<string, string> = {
+  denied: "Sign-in was cancelled.",
+  failed: "Sign-in did not complete. Try again.",
+  refused: "No account uses that address. Sign up first.",
+  expired: "That took too long. Start again.",
+};
+
+export function load(ctx: PageContext) {
+  const next = nextPath(ctx.query.get("next"));
+  if (meOf(ctx)) return redirect(next);
+  const sendLink = (address: string) => email.request(ctx, address, { next });
+  return { next, error: ERRORS[ctx.query.get("error") ?? ""] ?? "", sendLink };
+}
+
+action signInWithPassword(address: string, password: string, next: string) {
+  const r = await checkPassword(address, password)
+  if (!r.ok) fail(r.error)
+  const step = await login(ctx, r.user)
+  return redirect(step === "two-factor" ? "/sign-in/two-factor?next=" + encodeURIComponent(nextPath(next)) : nextPath(next))
+}
+
+action signInWithCode(address: string, code: string, next: string) {
+  if (!(await email.verify(ctx, address, code))) fail("That code is wrong or has expired.")
+  return redirect(nextPath(next))
+}
+
+action passkeyStart() {
+  return passkeys.signInOptions(ctx)
+}
+
+action passkeyFinish(state: string, credential: string, next: string) {
+  if (!(await passkeys.signIn(ctx, state, credential))) fail("That passkey was not accepted.")
+  return nextPath(next)
+}
+
+component Page(next: string, error: string, sendLink: (address: string) => Promise<void>) {
+  signal sentTo = ""
+  signal linkError = ""
+  client signal keyError = ""
+
+  function requestLink(e: WeftEvent) {
+    const address = String(e.form?.address ?? "").trim()
+    if (!address.includes("@")) {
+      linkError = "Type the address you signed up with."
+      return
+    }
+    return sendLink(address).then(
+      () => {
+        sentTo = address
+        linkError = ""
+      },
+      (err) => {
+        linkError = err instanceof Error && err.name === "EmailSignInError" ? err.message : "Could not send the link. Try again in a minute."
+      },
+    )
+  }
+
+  function useOtherAddress() {
+    sentTo = ""
+  }
+
+  client function withPasskey() {
+    keyError = ""
+    if (!passkeysSupported()) {
+      keyError = "This browser cannot use passkeys."
+      return
+    }
+    passkeyStart()
+      .then((o) => o as { publicKey: Parameters<typeof getPasskey>[0]; state: string })
+      .then((o) => getPasskey(o.publicKey).then((credential) => passkeyFinish(o.state, credential, new URLSearchParams(location.search).get("next") ?? "")))
+      .then((to) => location.assign(String(to)))
+      .catch((err) => {
+        keyError = err?.name === "NotAllowedError" ? "" : (err?.message ?? "That passkey was not accepted.")
+      })
+  }
+
+  view {
+    <AuthShell title="Sign in" lead="Welcome back. Use your password, a link sent to your email, or a passkey.">
+      {#if error}
+        <p role="alert" class="text-destructive mb-6 text-sm">{error}</p>
+      {/if}
+
+      {#if sentTo}
+        <form action={signInWithCode} class="flex flex-col gap-4" autocomplete="off">
+          <p class="text-sm leading-relaxed">
+            If <strong class="font-medium">{sentTo}</strong> has an account, a link and a six-digit code are on their way. Open the link, or type the code here.
+          </p>
+          <input type="hidden" name="address" value={sentTo} />
+          <input type="hidden" name="next" value={next} />
+          <Field>
+            <label for="code" class={labelClass}>Code</label>
+            <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="10" required class={inputClass + " font-mono tracking-[0.3em]"} />
+          </Field>
+          <p data-weft-message role="alert" class="text-destructive text-sm empty:hidden"></p>
+          <button class={buttonVariants({})}>Sign in</button>
+          <button type="button" @click={useOtherAddress} class={buttonVariants({ variant: "link" }) + " self-start px-0"}>Use another address</button>
+        </form>
+      {:else}
+        <form action={signInWithPassword} class="flex flex-col gap-4">
+          <input type="hidden" name="next" value={next} />
+          <Field>
+            <label for="address" class={labelClass}>Email</label>
+            <input id="address" name="address" type="email" autocomplete="username webauthn" required class={inputClass} />
+          </Field>
+          <Field>
+            <div class="flex items-baseline justify-between">
+              <label for="password" class={labelClass}>Password</label>
+              <a href="/forgot-password" class="text-muted-foreground hover:text-foreground text-sm underline-offset-4 hover:underline">Forgot it?</a>
+            </div>
+            <input id="password" name="password" type="password" autocomplete="current-password" required class={inputClass} />
+          </Field>
+          <p data-weft-message role="alert" class="text-destructive text-sm empty:hidden"></p>
+          <button class={buttonVariants({})}>Sign in</button>
+        </form>
+
+        <div class="my-8 flex items-center gap-3 text-xs text-muted-foreground">
+          <Separator class="flex-1" />
+          or
+          <Separator class="flex-1" />
+        </div>
+
+        <form @submit={requestLink} class="flex flex-col gap-3" novalidate>
+          <Field>
+            <label for="link-address" class={labelClass}>Email me a sign-in link</label>
+            <div class="flex gap-2">
+              <input id="link-address" name="address" type="email" autocomplete="email" placeholder="you@example.com" class={inputClass} />
+              <button class={buttonVariants({ variant: "outline" })} :busy>Send</button>
+            </div>
+          </Field>
+          {#if linkError}
+            <p role="alert" class="text-destructive text-sm">{linkError}</p>
+          {/if}
+        </form>
+
+        <button type="button" @click={withPasskey} class={buttonVariants({ variant: "outline" }) + " mt-4 w-full"}>Sign in with a passkey</button>
+        <p role="alert" class="text-destructive mt-2 text-sm empty:hidden">{keyError}</p>
+      {/if}
+
+      <p class="text-muted-foreground mt-10 text-sm">
+        New here? <a href="/sign-up" class="text-foreground font-medium underline-offset-4 hover:underline">Create an account</a>
+      </p>
+    </AuthShell>
+  }
+}

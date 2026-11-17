@@ -1,0 +1,14 @@
+import { cn } from "../../lib/utils.ts";
+
+component Separator(orientation?: "horizontal" | "vertical", decorative?: boolean, ...attrs: Attrs) {
+  view {
+    <div
+      data-slot="separator"
+      role={decorative === false ? "separator" : "none"}
+      aria-orientation={decorative === false ? (orientation ?? "horizontal") : undefined}
+      data-orientation={orientation ?? "horizontal"}
+      class={cn("bg-border shrink-0 data-[orientation=horizontal]:h-px data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-px", attrs.class)}
+      {...attrs}
+    ></div>
+  }
+}

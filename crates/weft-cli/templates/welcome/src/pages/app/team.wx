@@ -1,0 +1,299 @@
+import { redirect, type PageContext } from "@weft/server";
+import { fail } from "@weft/server/action";
+import { transaction } from "@weft/data";
+import type { WeftEvent } from "@weft/runtime";
+import type { MemberInfo, RoleInfo } from "@weft/core";
+import { access } from "../../access.ts";
+import { gate, invite, meOf, type Me, type RoleId } from "../../lib/workspaces.ts";
+import { colorOf, initials, nameOf, userById } from "../../lib/users.ts";
+import { AppShell } from "../../components/AppShell.wx";
+import { Icon } from "../../components/Icon.wx";
+import { buttonVariants } from "../../components/ui/button.wx";
+import { inputClass } from "../../components/ui/input.wx";
+import { labelClass } from "../../components/ui/label.wx";
+import { NativeSelect, NativeSelectOption } from "../../components/ui/native-select.wx";
+import { activityWhen } from "../../components/ui/activity-feed.wx";
+
+export const meta = { title: "People" };
+
+export function load(ctx: PageContext) {
+  const g = gate(ctx, "access.members.read");
+  if (!g.ok) return g.redirect;
+  return { me: g.me, workspace: g.workspace.id, path: ctx.url.pathname, invited: ctx.query.get("invited") ?? "" };
+}
+
+const REFUSED: Record<string, string> = {
+  forbidden: "Your role cannot do that, or it would give someone more than you hold.",
+  "last-owner": "A workspace keeps at least one owner. Make someone else owner first.",
+  limit: "The workspace is full: no free seat, or too many pending invites or roles.",
+  conflict: "That already exists.",
+  invalid: "That is not valid here.",
+  "not-found": "That person, role or invite is no longer here.",
+  expired: "That invite has expired.",
+};
+
+export function refused(e: unknown): string {
+  const code = (e as { name?: string; code?: string })?.name === "AccessError" ? String((e as { code: string }).code) : "";
+  if (!code) throw e;
+  return REFUSED[code] ?? "That was refused.";
+}
+
+const EMAIL = /^[^\s@<>(),;:"]+@[^\s@<>(),;:"]+\.[^\s@<>(),;:"]+$/;
+
+action inviteSomeone(address: string, role: string) {
+  const me = meOf(ctx)
+  if (!me?.tenant) fail("Pick a workspace first.")
+  const email = address.trim().toLowerCase()
+  if (!EMAIL.test(email) || email.length > 254) fail("Enter an email address.")
+  try {
+    await invite(me.id, me.tenant, email, role as RoleId)
+  } catch (e) {
+    fail(refused(e))
+  }
+  return redirect("/app/team?invited=" + encodeURIComponent(email))
+}
+
+export interface Person {
+  user: string;
+  roles: MemberInfo[];
+}
+
+export function people(me: Me, workspace: string): Person[] {
+  const byUser = new Map<string, MemberInfo[]>();
+  for (const m of access.members(me, workspace)) {
+    const list = byUser.get(m.user) ?? [];
+    list.push(m);
+    byUser.set(m.user, list);
+  }
+  const rank = (r: string) => ["owner", "admin", "member", "guest"].indexOf(r) + 1 || 5;
+  return [...byUser.entries()]
+    .map(([user, roles]) => ({ user, roles: roles.sort((a, b) => rank(a.role) - rank(b.role)) }))
+    .sort((a, b) => rank(a.roles[0]!.role) - rank(b.roles[0]!.role) || nameOf(a.user).localeCompare(nameOf(b.user)));
+}
+
+export const roles = (me: Me, workspace: string): RoleInfo[] => access.roleList(me, workspace);
+
+export function seats(workspace: string): string {
+  const s = access.seatUse(workspace);
+  return s.limit === null ? `${s.used} people` : `${s.used} of ${s.limit} seats used`;
+}
+
+component Page(me: Me, workspace: string, path: string, invited: string) {
+  signal problem = ""
+  signal notice = invited ? "Invite sent to " + invited + "." : ""
+  signal making = false
+
+  function changeRole(user: string, from: string, e: WeftEvent) {
+    const to = String(e.value ?? "")
+    if (!to || to === from) return
+    try {
+      transaction(() => {
+        access.assign(me, { user, role: to as RoleId, scope: workspace })
+        access.revoke(me, { user, role: from, scope: workspace })
+      })
+      problem = ""
+      notice = nameOf(user) + " is now " + (roles(me, workspace).find((r) => r.role === to)?.label ?? to) + "."
+    } catch (err) {
+      problem = refused(err)
+    }
+  }
+
+  function removePerson(p: Person) {
+    try {
+      access.removeFromTenant(me, { user: p.user, tenant: workspace })
+      problem = ""
+      notice = p.user === me.id ? "You left the workspace." : nameOf(p.user) + " was removed."
+    } catch (err) {
+      problem = refused(err)
+    }
+  }
+
+  function withdraw(id: string) {
+    try {
+      access.revokeInvite(me, id)
+      notice = "Invite withdrawn. Its link no longer works."
+    } catch (err) {
+      problem = refused(err)
+    }
+  }
+
+  function toggleMaking() {
+    making = !making
+  }
+
+  function makeRole(e: WeftEvent) {
+    const f = e.form ?? {}
+    const permissions = Object.keys(f).filter((k) => k.startsWith("p:")).map((k) => k.slice(2))
+    if (String(f.name ?? "").trim() === "" || permissions.length === 0) {
+      problem = "Name the role and give it at least one permission."
+      return
+    }
+    try {
+      const r = access.createRole(me, {
+        tenant: workspace,
+        name: String(f.name).trim(),
+        description: String(f.description ?? "").trim(),
+        scopes: ["workspace"],
+        permissions: permissions as Parameters<typeof access.createRole>[1]["permissions"],
+      })
+      making = false
+      problem = ""
+      notice = "Role " + r.label + " made. Give it from the list above or with an invite."
+    } catch (err) {
+      problem = refused(err)
+    }
+  }
+
+  function dropRole(role: string) {
+    try {
+      access.deleteRole(me, role)
+      notice = "Role deleted. Everyone who held it lost it, and its invites were withdrawn."
+    } catch (err) {
+      problem = refused(err)
+    }
+  }
+
+  view {
+    <AppShell me={me} path={path} title="People">
+      <div class="flex flex-wrap items-baseline justify-between gap-3">
+        <p class="text-muted-foreground max-w-prose text-[15px]">Roles decide what each person can see and change here. You can give a role only if you hold everything it allows.</p>
+        <p class="text-muted-foreground text-sm tabular-nums">{seats(workspace)}</p>
+      </div>
+
+      <div aria-live="polite" class="mt-4 min-h-5 text-sm">
+        {#if problem}
+          <p role="alert" class="text-destructive">{problem}</p>
+        {:else if notice}
+          <p class="flex items-center gap-2"><Icon name="check" />{notice}</p>
+        {/if}
+      </div>
+
+      <section aria-labelledby="members-h" class="mt-4">
+        <h2 id="members-h" class="sr-only">Members</h2>
+        <ul class="divide-y rounded-lg border">
+          {#each people(me, workspace) as p (p.user)}
+            <li class="flex flex-wrap items-center gap-3 px-4 py-3">
+              <span aria-hidden="true" class="grid size-9 shrink-0 place-items-center rounded-full text-xs font-semibold text-white" style={"background:" + colorOf(p.user)}>{initials(nameOf(p.user))}</span>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-sm font-medium">{nameOf(p.user)}{p.user === me.id ? " (you)" : ""}</span>
+                <span class="text-muted-foreground block truncate text-xs">{userById(p.user)?.email ?? ""}</span>
+              </span>
+              {#if me.can("access.members.manage") && !p.roles[0]!.inherited}
+                <NativeSelect aria-label={"Role of " + nameOf(p.user)} @change={changeRole(p.user, p.roles[0]!.role)} class="w-40">
+                  {#each roles(me, workspace) as r (r.role)}
+                    <NativeSelectOption value={r.role} selected={r.role === p.roles[0]!.role}>{r.label}</NativeSelectOption>
+                  {/each}
+                </NativeSelect>
+                <button type="button" @click={removePerson(p)} class={buttonVariants({ variant: "ghost", size: "sm" }) + " text-destructive"}>{p.user === me.id ? "Leave" : "Remove"}</button>
+              {:else}
+                <span class="text-muted-foreground text-sm">{p.roles.map((r) => r.label).join(", ")}</span>
+                {#if p.user === me.id}
+                  <button type="button" @click={removePerson(p)} class={buttonVariants({ variant: "ghost", size: "sm" })}>Leave</button>
+                {/if}
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      </section>
+
+      {#if me.can("access.members.manage")}
+        <section aria-labelledby="invite-h" class="mt-10 grid gap-8 lg:grid-cols-2">
+          <div>
+            <h2 id="invite-h" class="mb-1 text-sm font-semibold">Invite someone</h2>
+            <p class="text-muted-foreground mb-4 text-sm">The link goes to their inbox, works once, and only for that address. It expires in 7 days.</p>
+            <form action={inviteSomeone} class="flex flex-col gap-3">
+              <div class="flex flex-col gap-1.5">
+                <label for="address" class={labelClass}>Email</label>
+                <input id="address" name="address" type="email" required autocomplete="off" maxlength="254" class={inputClass} />
+              </div>
+              <div class="flex flex-col gap-1.5">
+                <label for="role" class={labelClass}>Role</label>
+                <NativeSelect id="role" name="role">
+                  {#each roles(me, workspace).filter((r) => r.role !== "owner") as r (r.role)}
+                    <NativeSelectOption value={r.role} selected={r.role === "member"}>{r.label}: {r.description || r.permissions.length + " permissions"}</NativeSelectOption>
+                  {/each}
+                </NativeSelect>
+              </div>
+              <p data-weft-message role="alert" class="text-destructive text-sm empty:hidden"></p>
+              <button class={buttonVariants({}) + " w-fit"}>
+                <Icon name="send" />
+                Send invite
+              </button>
+            </form>
+          </div>
+          <div>
+            <h2 class="mb-3 text-sm font-semibold">Waiting to join</h2>
+            {#if access.invites(me, workspace).length === 0}
+              <p class="text-muted-foreground text-sm">No open invites.</p>
+            {:else}
+              <ul class="divide-y rounded-lg border">
+                {#each access.invites(me, workspace) as i (i.id)}
+                  <li class="flex items-center gap-3 px-4 py-2.5 text-sm">
+                    <span class="min-w-0 flex-1">
+                      <span class="block truncate">{i.email ?? "Anyone with the link"}</span>
+                      <span class="text-muted-foreground block text-xs">{roles(me, workspace).find((r) => r.role === i.role)?.label ?? i.role}, sent by {nameOf(i.by)} {activityWhen(i.created, Date.now())}</span>
+                    </span>
+                    <button type="button" @click={withdraw(i.id)} class={buttonVariants({ variant: "ghost", size: "sm" })}>Withdraw</button>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          </div>
+        </section>
+      {/if}
+
+      <section aria-labelledby="roles-h" class="mt-10">
+        <div class="mb-3 flex items-center justify-between gap-3">
+          <h2 id="roles-h" class="text-sm font-semibold">Roles</h2>
+          {#if me.can("access.roles.manage")}
+            <button type="button" @click={toggleMaking} aria-expanded={making ? "true" : "false"} class={buttonVariants({ variant: "outline", size: "sm" })}>
+              <Icon name="plus" />
+              New role
+            </button>
+          {/if}
+        </div>
+        {#if making}
+          <form @submit={makeRole} class="mb-6 grid gap-4 rounded-lg border p-4 sm:grid-cols-2">
+            <div class="flex flex-col gap-1.5">
+              <label for="role-name" class={labelClass}>Name</label>
+              <input id="role-name" name="name" required maxlength="40" placeholder="Reviewer" class={inputClass} />
+            </div>
+            <div class="flex flex-col gap-1.5">
+              <label for="role-desc" class={labelClass}>What it is for</label>
+              <input id="role-desc" name="description" maxlength="120" class={inputClass} />
+            </div>
+            <fieldset class="sm:col-span-2">
+              <legend class={labelClass + " mb-2"}>It allows</legend>
+              <div class="grid gap-2 sm:grid-cols-2">
+                {#each access.permissionList(me, workspace).filter((x) => me.can(x.name)) as x (x.name)}
+                  <label class="flex items-start gap-2 text-sm">
+                    <input type="checkbox" name={"p:" + x.name} value="1" class="accent-primary mt-0.5" />
+                    <span>{x.label}{#if x.description}<span class="text-muted-foreground block text-xs">{x.description}</span>{/if}</span>
+                  </label>
+                {/each}
+              </div>
+              <p class="text-muted-foreground mt-2 text-xs">Only what you hold yourself is listed.</p>
+            </fieldset>
+            <button class={buttonVariants({}) + " w-fit"}>Make role</button>
+          </form>
+        {/if}
+        <ul class="grid gap-3 sm:grid-cols-2">
+          {#each roles(me, workspace) as r (r.role)}
+            <li class="rounded-lg border p-4">
+              <p class="flex items-center gap-2 text-sm font-medium">
+                {r.label}
+                {#if r.custom}
+                  <span class="text-muted-foreground text-xs font-normal">made here</span>
+                {/if}
+              </p>
+              <p class="text-muted-foreground mt-1 text-xs">{r.permissions.includes("*") ? "Everything." : r.description || r.permissions.length + " permissions"}</p>
+              {#if r.custom && me.can("access.roles.manage")}
+                <button type="button" @click={dropRole(r.role)} class="text-destructive mt-2 text-xs underline-offset-2 hover:underline">Delete role</button>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      </section>
+    </AppShell>
+  }
+}

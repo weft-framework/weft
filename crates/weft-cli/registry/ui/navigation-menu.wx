@@ -1,0 +1,44 @@
+import { cn } from "../../lib/utils.ts";
+client import { navigationMenu } from "@weft/ui"
+
+export const navigationMenuTriggerStyle =
+  "group bg-background hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground disabled:pointer-events-none disabled:opacity-50 inline-flex h-9 w-max items-center justify-center rounded-md px-4 py-2 text-sm font-medium transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1";
+
+component NavigationMenu(label?: string, children: Html, ...attrs: Attrs) {
+  view {
+    <nav aria-label={label} data-slot="navigation-menu" class={cn("relative flex max-w-max flex-1 items-center justify-center", attrs.class)} use:navigationMenu {...attrs}>{children}</nav>
+  }
+}
+
+component NavigationMenuList(children: Html, ...attrs: Attrs) {
+  view {
+    <ul data-slot="navigation-menu-list" class={cn("flex flex-1 list-none items-center justify-center gap-1", attrs.class)} {...attrs}>{children}</ul>
+  }
+}
+
+component NavigationMenuItem(children: Html, ...attrs: Attrs) {
+  view {
+    <li data-slot="navigation-menu-item" class={cn("relative", attrs.class)} {...attrs}>{children}</li>
+  }
+}
+
+component NavigationMenuTrigger(panel: string, children: Html, ...attrs: Attrs) {
+  view {
+    <button type="button" popovertarget={panel} aria-haspopup="true" data-slot="navigation-menu-trigger" class={cn(navigationMenuTriggerStyle, attrs.class)} {...attrs}>
+      {children}
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="relative top-[1px] ml-1 size-3 transition duration-300 group-aria-expanded:rotate-180" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+    </button>
+  }
+}
+
+component NavigationMenuContent(id: string, children: Html, ...attrs: Attrs) {
+  view {
+    <div id={id} popover="auto" data-slot="navigation-menu-content" class={cn("bg-popover text-popover-foreground z-50 m-0 w-auto rounded-md border p-2 shadow md:w-[400px]", attrs.class)} {...attrs}>{children}</div>
+  }
+}
+
+component NavigationMenuLink(href: string, active?: boolean, children: Html, ...attrs: Attrs) {
+  view {
+    <a href={href} aria-current={active ? "page" : undefined} data-slot="navigation-menu-link" class={cn("hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground aria-[current=page]:bg-accent/50 flex flex-col gap-1 rounded-sm p-2 text-sm transition-all outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 [&_svg:not([class*='size-'])]:size-4", attrs.class)} {...attrs}>{children}</a>
+  }
+}

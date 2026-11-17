@@ -1,0 +1,18 @@
+import { rows, type Row } from "../lib/rows.ts";
+
+export const meta = { title: "List" };
+
+export function load() {
+  return { rows };
+}
+
+component Page(rows: Row[]) {
+  view {
+    <table>
+      <tr><th>Id</th><th>Name</th><th>Email</th><th>Score</th></tr>
+      {#each rows as row}
+        <tr><td>{row.id}</td><td>{row.name}</td><td>{row.email}</td><td>{row.score}</td></tr>
+      {/each}
+    </table>
+  }
+}

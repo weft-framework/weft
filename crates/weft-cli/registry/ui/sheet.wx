@@ -1,0 +1,66 @@
+import { cn, variants } from "../../lib/utils.ts";
+import { buttonVariants } from "./button.wx";
+import { closeIconClass } from "./dialog.wx";
+client import { dialog } from "@weft/ui"
+
+export type SheetSide = "top" | "right" | "bottom" | "left";
+
+export const sheetVariants = variants(
+  "bg-background text-foreground backdrop:bg-black/50 fixed z-50 m-0 max-h-none max-w-none flex-col gap-4 p-0 shadow-lg transition ease-in-out open:flex",
+  {
+    side: {
+      right: "inset-y-0 right-0 left-auto h-full w-3/4 border-l sm:max-w-sm",
+      left: "inset-y-0 left-0 right-auto h-full w-3/4 border-r sm:max-w-sm",
+      top: "inset-x-0 top-0 bottom-auto h-auto w-full border-b",
+      bottom: "inset-x-0 bottom-0 top-auto h-auto w-full border-t",
+    },
+  },
+  { side: "right" },
+);
+
+component SheetTrigger(target: string, children: Html, ...attrs: Attrs) {
+  view {
+    <button type="button" commandfor={target} command="show-modal" aria-haspopup="dialog" data-slot="sheet-trigger" class={cn(buttonVariants({ variant: "outline" }), attrs.class)} {...attrs}>{children}</button>
+  }
+}
+
+component Sheet(id: string, side?: SheetSide, closeLabel?: string, children: Html, ...attrs: Attrs) {
+  view {
+    <dialog id={id} aria-labelledby={id + "-title"} aria-describedby={id + "-description"} data-side={side ?? "right"} data-slot="sheet" class={sheetVariants({ side: side }, attrs.class)} use:dialog {...attrs}>
+      {children}
+      <button type="button" commandfor={id} command="close" class={closeIconClass} aria-label={closeLabel ?? "Close"}>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+      </button>
+    </dialog>
+  }
+}
+
+component SheetHeader(children: Html, ...attrs: Attrs) {
+  view {
+    <div data-slot="sheet-header" class={cn("flex flex-col gap-1.5 p-4", attrs.class)} {...attrs}>{children}</div>
+  }
+}
+
+component SheetFooter(children: Html, ...attrs: Attrs) {
+  view {
+    <div data-slot="sheet-footer" class={cn("mt-auto flex flex-col gap-2 p-4", attrs.class)} {...attrs}>{children}</div>
+  }
+}
+
+component SheetTitle(dialog: string, children: Html, ...attrs: Attrs) {
+  view {
+    <h2 id={dialog + "-title"} data-slot="sheet-title" class={cn("text-foreground font-semibold", attrs.class)} {...attrs}>{children}</h2>
+  }
+}
+
+component SheetDescription(dialog: string, children: Html, ...attrs: Attrs) {
+  view {
+    <p id={dialog + "-description"} data-slot="sheet-description" class={cn("text-muted-foreground text-sm", attrs.class)} {...attrs}>{children}</p>
+  }
+}
+
+component SheetClose(target: string, children: Html, ...attrs: Attrs) {
+  view {
+    <button type="button" commandfor={target} command="close" data-slot="sheet-close" class={cn(buttonVariants({ variant: "outline" }), attrs.class)} {...attrs}>{children}</button>
+  }
+}

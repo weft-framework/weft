@@ -1,0 +1,128 @@
+import { cn } from "../../lib/utils.ts";
+import { buttonVariants } from "./button.wx";
+import { inputClass } from "./input.wx";
+
+export interface DataColumn {
+  key: string;
+  label: string;
+  sortable?: boolean;
+  align?: "left" | "right";
+}
+
+export interface TableView<Row> {
+  rows: Row[];
+  total: number;
+  page: number;
+  pages: number;
+  sort: string;
+  dir: "asc" | "desc";
+  q: string;
+}
+
+export function tableView<Row extends Record<string, unknown>>(
+  rows: Row[],
+  params: URLSearchParams,
+  opts: { pageSize?: number; filter?: string[] } = {},
+): TableView<Row> {
+  const q = (params.get("q") ?? "").trim();
+  const sort = params.get("sort") ?? "";
+  const dir = params.get("dir") === "desc" ? "desc" : "asc";
+  const size = opts.pageSize ?? 10;
+  let out = rows;
+  if (q && opts.filter?.length) {
+    const needle = q.toLowerCase();
+    out = out.filter((r) => opts.filter!.some((k) => String(r[k] ?? "").toLowerCase().includes(needle)));
+  }
+  if (sort) {
+    out = [...out].sort((a, b) => {
+      const x = a[sort];
+      const y = b[sort];
+      const c = typeof x === "number" && typeof y === "number" ? x - y : String(x ?? "").localeCompare(String(y ?? ""));
+      return dir === "asc" ? c : -c;
+    });
+  }
+  const pages = Math.max(1, Math.ceil(out.length / size));
+  const page = Math.min(pages, Math.max(1, Number(params.get("page")) || 1));
+  return { rows: out.slice((page - 1) * size, page * size), total: out.length, page, pages, sort, dir, q };
+}
+
+export function withParams(url: URL, change: Record<string, string | number | null>): string {
+  const next = new URLSearchParams(url.searchParams);
+  for (const [k, v] of Object.entries(change)) {
+    if (v === null || v === "") next.delete(k);
+    else next.set(k, String(v));
+  }
+  const s = next.toString();
+  return s ? `?${s}` : url.pathname;
+}
+
+export function sortHref(url: URL, view: TableView<unknown>, key: string): string {
+  const dir = view.sort === key && view.dir === "asc" ? "desc" : "asc";
+  return withParams(url, { sort: key, dir, page: null });
+}
+
+export function ariaSort(view: TableView<unknown>, key: string): "ascending" | "descending" | "none" {
+  return view.sort !== key ? "none" : view.dir === "asc" ? "ascending" : "descending";
+}
+
+export function cellText(row: unknown, key: string): string {
+  const v = (row as Record<string, unknown>)[key];
+  return v === null || v === undefined ? "" : String(v);
+}
+
+component DataTable(columns: DataColumn[], state: TableView<unknown>, url: URL, filterLabel?: string, empty?: string, ...attrs: Attrs) {
+  view {
+    <div data-slot="data-table" class={cn("w-full", attrs.class)} {...attrs}>
+      {#if filterLabel}
+        <form method="get" role="search" class="flex items-center py-4">
+          <input type="search" name="q" value={state.q} placeholder={filterLabel} aria-label={filterLabel} class={cn(inputClass, "max-w-sm")} />
+          {#if state.sort}
+            <input type="hidden" name="sort" value={state.sort} />
+            <input type="hidden" name="dir" value={state.dir} />
+          {/if}
+        </form>
+      {/if}
+      <div class="overflow-hidden rounded-md border">
+        <table class="w-full caption-bottom text-sm">
+          <thead class="[&_tr]:border-b">
+            <tr class="border-b">
+              {#each columns as c}
+                <th scope="col" aria-sort={c.sortable ? ariaSort(state, c.key) : undefined} class={cn("text-foreground h-10 px-2 align-middle font-medium whitespace-nowrap", c.align === "right" ? "text-right" : "text-left")}>
+                  {#if c.sortable}
+                    <a href={sortHref(url, state, c.key)} class={cn(buttonVariants({ variant: "ghost", size: "sm" }), "-ml-3")}>
+                      {c.label}
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 16-4 4-4-4" /><path d="M17 20V4" /><path d="m3 8 4-4 4 4" /><path d="M7 4v16" /></svg>
+                    </a>
+                  {:else}
+                    {c.label}
+                  {/if}
+                </th>
+              {/each}
+            </tr>
+          </thead>
+          <tbody class="[&_tr:last-child]:border-0">
+            {#each state.rows as row}
+              <tr class="hover:bg-muted/50 border-b transition-colors">
+                {#each columns as c}
+                  <td class={cn("p-2 align-middle whitespace-nowrap", c.align === "right" ? "text-right" : "")}>{cellText(row, c.key)}</td>
+                {/each}
+              </tr>
+            {/each}
+            {#if state.rows.length === 0}
+              <tr><td colspan={String(columns.length)} class="h-24 text-center">{empty ?? "No results."}</td></tr>
+            {/if}
+          </tbody>
+        </table>
+      </div>
+      <div class="flex items-center justify-end gap-2 py-4">
+        <div class="text-muted-foreground flex-1 text-sm">{state.total} row(s), page {state.page} of {state.pages}</div>
+        {#if state.page > 1}
+          <a href={withParams(url, { page: state.page - 1 })} class={buttonVariants({ variant: "outline", size: "sm" })}>Previous</a>
+        {/if}
+        {#if state.page < state.pages}
+          <a href={withParams(url, { page: state.page + 1 })} class={buttonVariants({ variant: "outline", size: "sm" })}>Next</a>
+        {/if}
+      </div>
+    </div>
+  }
+}

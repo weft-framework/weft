@@ -1,0 +1,37 @@
+import { cn } from "../../lib/utils.ts";
+import { buttonVariants } from "./button.wx";
+client import { carousel } from "@weft/ui"
+
+component Carousel(label?: string, orientation?: "horizontal" | "vertical", children: Html, ...attrs: Attrs) {
+  view {
+    <div role="region" aria-roledescription="carousel" aria-label={label} data-orientation={orientation ?? "horizontal"} data-slot="carousel" class={cn("group/carousel relative", attrs.class)} use:carousel {...attrs}>{children}</div>
+  }
+}
+
+component CarouselContent(children: Html, ...attrs: Attrs) {
+  view {
+    <div data-slot="carousel-content" class={cn("flex snap-mandatory overflow-hidden [scrollbar-width:none] group-data-[orientation=horizontal]/carousel:-ml-4 group-data-[orientation=horizontal]/carousel:snap-x group-data-[orientation=horizontal]/carousel:overflow-x-auto group-data-[orientation=vertical]/carousel:-mt-4 group-data-[orientation=vertical]/carousel:flex-col group-data-[orientation=vertical]/carousel:snap-y group-data-[orientation=vertical]/carousel:overflow-y-auto", attrs.class)} {...attrs}>{children}</div>
+  }
+}
+
+component CarouselItem(children: Html, ...attrs: Attrs) {
+  view {
+    <div role="group" aria-roledescription="slide" data-slot="carousel-item" class={cn("min-w-0 shrink-0 grow-0 basis-full snap-start group-data-[orientation=horizontal]/carousel:pl-4 group-data-[orientation=vertical]/carousel:pt-4", attrs.class)} {...attrs}>{children}</div>
+  }
+}
+
+component CarouselPrevious(label?: string, ...attrs: Attrs) {
+  view {
+    <button type="button" data-carousel="prev" aria-label={label ?? "Previous slide"} data-slot="carousel-previous" class={cn(buttonVariants({ variant: "outline", size: "icon" }), "absolute size-8 rounded-full group-data-[orientation=horizontal]/carousel:top-1/2 group-data-[orientation=horizontal]/carousel:-left-12 group-data-[orientation=horizontal]/carousel:-translate-y-1/2 group-data-[orientation=vertical]/carousel:-top-12 group-data-[orientation=vertical]/carousel:left-1/2 group-data-[orientation=vertical]/carousel:-translate-x-1/2 group-data-[orientation=vertical]/carousel:rotate-90", attrs.class)} {...attrs}>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7" /><path d="M19 12H5" /></svg>
+    </button>
+  }
+}
+
+component CarouselNext(label?: string, ...attrs: Attrs) {
+  view {
+    <button type="button" data-carousel="next" aria-label={label ?? "Next slide"} data-slot="carousel-next" class={cn(buttonVariants({ variant: "outline", size: "icon" }), "absolute size-8 rounded-full group-data-[orientation=horizontal]/carousel:top-1/2 group-data-[orientation=horizontal]/carousel:-right-12 group-data-[orientation=horizontal]/carousel:-translate-y-1/2 group-data-[orientation=vertical]/carousel:-bottom-12 group-data-[orientation=vertical]/carousel:left-1/2 group-data-[orientation=vertical]/carousel:-translate-x-1/2 group-data-[orientation=vertical]/carousel:rotate-90", attrs.class)} {...attrs}>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg>
+    </button>
+  }
+}

@@ -1,0 +1,63 @@
+import type { PageContext } from "@weft/server";
+import { gate, type Me } from "../../../lib/workspaces.ts";
+import { Tasks, STATUS_LABEL, type Task } from "../../../lib/tasks.ts";
+import { AppShell } from "../../../components/AppShell.wx";
+import { Icon } from "../../../components/Icon.wx";
+import { buttonVariants } from "../../../components/ui/button.wx";
+
+export const meta = { title: "Trash" };
+
+export function load(ctx: PageContext) {
+  const g = gate(ctx, "tasks.read");
+  if (!g.ok) return g.redirect;
+  return { me: g.me, path: ctx.url.pathname };
+}
+
+export function trashed(me: Me): Task[] {
+  return Tasks.as(me).trash().all().sort((a, b) => (b.deleted ?? 0) - (a.deleted ?? 0));
+}
+
+export const daysLeft = (t: Task) => Math.max(0, 30 - Math.floor((Date.now() - (t.deleted ?? Date.now())) / 86_400_000));
+
+component Page(me: Me, path: string) {
+  signal problem = ""
+
+  function restore(id: string) {
+    problem = Tasks.as(me).trash().restore((t) => t.id === id) === 0 ? "Your role does not let you restore this task." : ""
+  }
+
+  function forget(id: string) {
+    problem = Tasks.as(me).trash().delete((t) => t.id === id) === 0 ? "Your role does not let you delete this task." : ""
+  }
+
+  view {
+    <AppShell me={me} path={path} title="Trash">
+      <a href="/app/tasks" class="text-muted-foreground hover:text-foreground mb-6 inline-flex items-center gap-1 text-sm">
+        <Icon name="undo" />
+        Board
+      </a>
+      <p class="text-muted-foreground max-w-prose text-[15px]">Deleted tasks stay here for 30 days, then they are removed for good. Their comments and history go with them.</p>
+      {#if problem}
+        <p role="alert" class="text-destructive mt-3 text-sm">{problem}</p>
+      {/if}
+      {#if trashed(me).length === 0}
+        <p class="text-muted-foreground mt-8 rounded-lg border border-dashed px-4 py-10 text-center text-sm">The trash is empty.</p>
+      {:else}
+        <ul class="mt-6 divide-y rounded-lg border">
+          {#each trashed(me) as t (t.id)}
+            <li class="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
+              <span class="min-w-0 flex-1">
+                <span class="block truncate font-medium">{t.title}</span>
+                <span class="text-muted-foreground text-xs">Was {STATUS_LABEL[t.status]?.toLowerCase()}; removed for good in {daysLeft(t)} days</span>
+              </span>
+              {#if me.can("tasks.edit")}
+                <button type="button" @click={restore(t.id)} class={buttonVariants({ variant: "outline", size: "sm" })}>Restore</button>
+                <button type="button" @click={forget(t.id)} class={buttonVariants({ variant: "ghost", size: "sm" }) + " text-destructive"}>Delete now</button>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </AppShell>
+  }
+}

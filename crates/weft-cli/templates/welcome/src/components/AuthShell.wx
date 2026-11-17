@@ -1,0 +1,16 @@
+import { Logo } from "./Logo.wx";
+
+component AuthShell(title: string, lead?: string, children: Html) {
+  view {
+    <div class="mx-auto flex min-h-[calc(100svh-3.5rem)] w-full max-w-[25rem] flex-col justify-center px-4 py-16">
+      <a href="/" class="mb-10 flex w-fit items-center gap-2 rounded-md" aria-label="{{name}} home">
+        <Logo class="size-7" />
+      </a>
+      <h1 class="text-[1.75rem] leading-tight font-semibold tracking-[-0.03em]">{title}</h1>
+      {#if lead}
+        <p class="text-muted-foreground mt-2 text-[15px] leading-relaxed text-pretty">{lead}</p>
+      {/if}
+      <div class="mt-8">{children}</div>
+    </div>
+  }
+}

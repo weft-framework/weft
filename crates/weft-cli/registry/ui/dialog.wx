@@ -1,0 +1,58 @@
+import { cn } from "../../lib/utils.ts";
+import { buttonVariants } from "./button.wx";
+client import { dialog } from "@weft/ui"
+
+export const dialogClass =
+  "bg-background text-foreground backdrop:bg-black/50 fixed top-[50%] left-[50%] z-50 m-0 w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg open:grid sm:max-w-lg";
+
+export const closeIconClass =
+  "ring-offset-background focus-visible:ring-ring absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
+
+component DialogTrigger(target: string, children: Html, ...attrs: Attrs) {
+  view {
+    <button type="button" commandfor={target} command="show-modal" aria-haspopup="dialog" data-slot="dialog-trigger" class={cn(buttonVariants({ variant: "outline" }), attrs.class)} {...attrs}>{children}</button>
+  }
+}
+
+component Dialog(id: string, showClose?: boolean, closeLabel?: string, children: Html, ...attrs: Attrs) {
+  view {
+    <dialog id={id} aria-labelledby={id + "-title"} aria-describedby={id + "-description"} data-slot="dialog" class={cn(dialogClass, attrs.class)} use:dialog {...attrs}>
+      {children}
+      {#if showClose !== false}
+        <button type="button" commandfor={id} command="close" class={closeIconClass} aria-label={closeLabel ?? "Close"}>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+        </button>
+      {/if}
+    </dialog>
+  }
+}
+
+component DialogHeader(children: Html, ...attrs: Attrs) {
+  view {
+    <div data-slot="dialog-header" class={cn("flex flex-col gap-2 text-center sm:text-left", attrs.class)} {...attrs}>{children}</div>
+  }
+}
+
+component DialogFooter(children: Html, ...attrs: Attrs) {
+  view {
+    <div data-slot="dialog-footer" class={cn("flex flex-col-reverse gap-2 sm:flex-row sm:justify-end", attrs.class)} {...attrs}>{children}</div>
+  }
+}
+
+component DialogTitle(dialog: string, children: Html, ...attrs: Attrs) {
+  view {
+    <h2 id={dialog + "-title"} data-slot="dialog-title" class={cn("text-lg leading-none font-semibold", attrs.class)} {...attrs}>{children}</h2>
+  }
+}
+
+component DialogDescription(dialog: string, children: Html, ...attrs: Attrs) {
+  view {
+    <p id={dialog + "-description"} data-slot="dialog-description" class={cn("text-muted-foreground text-sm", attrs.class)} {...attrs}>{children}</p>
+  }
+}
+
+component DialogClose(target: string, children: Html, ...attrs: Attrs) {
+  view {
+    <button type="button" commandfor={target} command="close" data-slot="dialog-close" class={cn(buttonVariants({ variant: "outline" }), attrs.class)} {...attrs}>{children}</button>
+  }
+}

@@ -1,0 +1,37 @@
+import { redirect, type PageContext } from "@weft/server";
+import { fail } from "@weft/server/action";
+import { account } from "../../../lib/accounts.ts";
+import { meOf } from "../../../lib/workspaces.ts";
+import { notify } from "../../../lib/notify.ts";
+import { AuthShell } from "../../../components/AuthShell.wx";
+import { buttonVariants } from "../../../components/ui/button.wx";
+
+export const meta = { title: "Confirm your new address" };
+
+export function load(ctx: PageContext) {
+  const token = ctx.query.get("token") ?? "";
+  if (!meOf(ctx)) return redirect("/sign-in?next=" + encodeURIComponent("/app/account/email?token=" + token));
+  return { token };
+}
+
+action confirmEmail(token: string) {
+  const me = meOf(ctx)
+  if (!me) fail("Sign in again.", 401)
+  const address = await account.confirmEmailChange(ctx, token)
+  if (!address) fail("This link was used, has expired, belongs to another account, or the address was taken meanwhile.")
+  await notify.send(me.id, "security", { title: "Your email address changed", body: "You now sign in as " + address + ".", url: "/app/account" })
+  return redirect("/app/account?done=email")
+}
+
+component Page(token: string) {
+  view {
+    <AuthShell title="Confirm your new address" lead="Your account's email changes to the address this link was sent to.">
+      <form action={confirmEmail} class="flex flex-col gap-4">
+        <input type="hidden" name="token" value={token} />
+        <p data-weft-message role="alert" class="text-destructive text-sm empty:hidden"></p>
+        <button class={buttonVariants({}) + " w-full"}>Use this address</button>
+      </form>
+      <a href="/app/account" class="text-muted-foreground mt-6 block text-center text-sm underline-offset-4 hover:underline">Keep my current address</a>
+    </AuthShell>
+  }
+}

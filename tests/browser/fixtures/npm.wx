@@ -1,0 +1,17 @@
+// npm packages in island code: `client import` of an installed package
+// (an ES module entry that pulls in a CommonJS file), resolved by the dev
+// server and run in the browser.
+
+client import { shout, count } from "weft-fixture-text"
+
+component Page() {
+  client signal word = "weft"
+  client derived loud = shout(word)
+  client function grow() { word = word + "!" }
+
+  view {
+    <h1>npm</h1>
+    <button id="grow" @click={grow}>{loud}</button>
+    <p id="count">{count(word)}</p>
+  }
+}

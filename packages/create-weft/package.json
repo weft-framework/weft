@@ -1,0 +1,26 @@
+{
+  "name": "create-weft",
+  "version": "0.0.1",
+  "description": "Scaffold a Weft project. `npm create weft <name>`",
+  "license": "MIT",
+  "author": "Vakea",
+  "repository": { "type": "git", "url": "git+https://github.com/aleroycz/weft.git", "directory": "packages/create-weft" },
+  "homepage": "https://github.com/aleroycz/weft#readme",
+  "bugs": { "url": "https://github.com/aleroycz/weft/issues" },
+  "type": "module",
+  "bin": {
+    "create-weft": "./bin.js"
+  },
+  "files": [
+    "bin.js",
+    "index.js",
+    "template"
+  ],
+  "scripts": {
+    "prepack": "node sync-template.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=22.6"
+  }
+}

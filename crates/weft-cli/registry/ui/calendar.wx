@@ -1,0 +1,26 @@
+import { cn } from "../../lib/utils.ts";
+import { buttonVariants } from "./button.wx";
+client import { calendar } from "@weft/ui"
+
+export const calendarDayClass =
+  "inline-flex size-8 items-center justify-center rounded-md p-0 text-sm font-normal hover:bg-accent hover:text-accent-foreground focus-visible:ring-ring/50 outline-none focus-visible:ring-[3px] disabled:pointer-events-none disabled:opacity-50 data-[outside]:text-muted-foreground data-[today]:bg-accent data-[today]:text-accent-foreground data-[selected]:bg-primary data-[selected]:text-primary-foreground data-[selected]:hover:bg-primary data-[selected]:hover:text-primary-foreground";
+
+component Calendar(id: string, name?: string, value?: string, min?: string, max?: string, weekStart?: number, output?: string, ...attrs: Attrs) {
+  view {
+    <div id={id} data-min={min} data-max={max} data-week-start={String(weekStart ?? 1)} data-output={output} data-day-class={calendarDayClass} data-weekday-class="text-muted-foreground w-8 text-center text-[0.8rem] font-normal" data-row-class="mt-2 flex w-full gap-0" data-head-class="flex gap-0" data-slot="calendar" class={cn("bg-background w-fit p-3", attrs.class)} use:calendar {...attrs}>
+      <input type="hidden" name={name} value={value ?? ""} />
+      <div class="relative flex h-8 items-center justify-center">
+        <button type="button" data-calendar="prev" aria-label="Previous month" class={cn(buttonVariants({ variant: "ghost", size: "icon" }), "absolute left-0 size-8")}>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+        </button>
+        <div id={id + "-caption"} aria-live="polite" data-slot="calendar-caption" class="text-sm font-medium"></div>
+        <button type="button" data-calendar="next" aria-label="Next month" class={cn(buttonVariants({ variant: "ghost", size: "icon" }), "absolute right-0 size-8")}>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+        </button>
+      </div>
+      <div data-slot="calendar-grid" class="mt-4">
+        <noscript><input type="date" name={name} value={value ?? ""} min={min} max={max} aria-label="Date" class="border-input rounded-md border px-3 py-1 text-sm" /></noscript>
+      </div>
+    </div>
+  }
+}

@@ -1,0 +1,12 @@
+export const subject = (p: { app: string }) => `Confirm your ${p.app} account`
+
+export const preview = { app: "Weft", link: "http://localhost:3000/signup/confirm?token=example", minutes: 30 }
+
+component ConfirmAccount(app: string, link: string, minutes: number) {
+  view {
+    <p>Open this link to create your account:</p>
+    <p><a href={link}>{link}</a></p>
+    <p>It works once, for {minutes} minutes. If you did not sign up, ignore this message.</p>
+    <p>-- <br>{app}</p>
+  }
+}

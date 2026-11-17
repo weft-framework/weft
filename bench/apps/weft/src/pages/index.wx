@@ -1,0 +1,16 @@
+export const meta = { title: "Static" };
+
+component Page() {
+  view {
+    <article>
+      <h1>A static page</h1>
+      <p>This page has text, a list and a link, and nothing to click that the server handles.</p>
+      <ul>
+        <li>First point</li>
+        <li>Second point</li>
+        <li>Third point</li>
+      </ul>
+      <p><a href="/list">The list</a></p>
+    </article>
+  }
+}

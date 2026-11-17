@@ -1,0 +1,36 @@
+import { acceptGrant, type PageContext } from "@weft/server";
+import { renderRichText } from "@weft/runtime";
+import { Notes, type Note } from "../../lib/notes.ts";
+import { nameOf } from "../../lib/users.ts";
+import { Icon } from "../../components/Icon.wx";
+
+export const meta = { title: "Shared note" };
+
+export async function load(ctx: PageContext) {
+  const grant = await acceptGrant(ctx, ctx.query.get("grant"));
+  const notes = Notes.as(ctx.user);
+  const note = grant ? notes.using(grant).get(String(ctx.params.id)) : notes.get(String(ctx.params.id));
+  return { note: note ?? null, expires: grant?.expires ?? null };
+}
+
+export const until = (at: number) => new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(at) + " UTC";
+
+component Page(note: Note | null, expires: number | null) {
+  view {
+    <section class="mx-auto max-w-2xl px-4 py-16 sm:px-6">
+      {#if note}
+        <p class="text-muted-foreground flex items-center gap-2 text-sm">
+          <Icon name="link" />
+          {expires ? "Shared by " + nameOf(note.author) + ". This link works until " + until(expires) + "." : "You can read this note in your workspace."}
+        </p>
+        <article class="mt-6">
+          <h1 class="text-3xl font-semibold tracking-[-0.03em]">{note.title}</h1>
+          <div class="mt-6 text-[15px] leading-relaxed [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:pl-3 [&_code]:bg-muted [&_code]:rounded [&_code]:px-1 [&_h2]:mt-6 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mt-4 [&_h3]:font-semibold [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-6">{renderRichText(note.body)}</div>
+        </article>
+      {:else}
+        <h1 class="text-3xl font-semibold tracking-[-0.03em]">This link does not open a note</h1>
+        <p class="text-muted-foreground mt-3 leading-relaxed">It has expired, it was changed, or the note was deleted. Ask the person who sent it for a new link.</p>
+      {/if}
+    </section>
+  }
+}

@@ -1,0 +1,25 @@
+import { Logo } from "./Logo.wx";
+import { ThemeSwitch } from "./ThemeSwitch.wx";
+import { buttonVariants } from "./ui/button.wx";
+
+export function current(path: string, href: string): boolean {
+  return href === "/" ? path === "/" : path === href || path.startsWith(href + "/");
+}
+
+component NavBar(path: string) {
+  view {
+    <header class="bg-background/85 supports-[backdrop-filter]:bg-background/70 sticky top-0 z-40 border-b backdrop-blur-lg">
+      <nav aria-label="Site" class="mx-auto flex h-14 max-w-6xl items-center gap-2 px-4 sm:px-6">
+        <a href="/" class="mr-2 flex shrink-0 items-center gap-2 rounded-md py-1 pr-1" aria-current={current(path, "/") ? "page" : null}>
+          <Logo class="size-6" />
+          <span class="text-[17px] font-semibold tracking-[-0.03em]">weft</span>
+        </a>
+        <a href="/components" aria-current={current(path, "/components") ? "page" : null} class="nav-link text-muted-foreground hover:text-foreground aria-[current=page]:text-foreground relative shrink-0 rounded-md px-2 py-1.5 text-sm transition-colors">Components</a>
+        <span class="flex-1"></span>
+        <a href="/sign-in" aria-current={current(path, "/sign-in") ? "page" : null} class="text-muted-foreground hover:text-foreground aria-[current=page]:text-foreground hidden shrink-0 rounded-md px-2 py-1.5 text-sm transition-colors sm:inline">Sign in</a>
+        <a href="/sign-up" class={buttonVariants({ size: "sm" }) + " shrink-0"}>Create account</a>
+        <ThemeSwitch />
+      </nav>
+    </header>
+  }
+}

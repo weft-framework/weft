@@ -1,0 +1,51 @@
+import { cn } from "../../lib/utils.ts";
+
+component Breadcrumb(label?: string, children: Html, ...attrs: Attrs) {
+  view {
+    <nav aria-label={label ?? "breadcrumb"} data-slot="breadcrumb" class={cn(attrs.class)} {...attrs}>{children}</nav>
+  }
+}
+
+component BreadcrumbList(children: Html, ...attrs: Attrs) {
+  view {
+    <ol data-slot="breadcrumb-list" class={cn("text-muted-foreground flex flex-wrap items-center gap-1.5 text-sm break-words sm:gap-2.5", attrs.class)} {...attrs}>{children}</ol>
+  }
+}
+
+component BreadcrumbItem(children: Html, ...attrs: Attrs) {
+  view {
+    <li data-slot="breadcrumb-item" class={cn("inline-flex items-center gap-1.5", attrs.class)} {...attrs}>{children}</li>
+  }
+}
+
+component BreadcrumbLink(href: string, children: Html, ...attrs: Attrs) {
+  view {
+    <a href={href} data-slot="breadcrumb-link" class={cn("hover:text-foreground transition-colors", attrs.class)} {...attrs}>{children}</a>
+  }
+}
+
+component BreadcrumbPage(children: Html, ...attrs: Attrs) {
+  view {
+    <span aria-current="page" data-slot="breadcrumb-page" class={cn("text-foreground font-normal", attrs.class)} {...attrs}>{children}</span>
+  }
+}
+
+component BreadcrumbSeparator(children?: Html, ...attrs: Attrs) {
+  view {
+    <li role="presentation" aria-hidden="true" data-slot="breadcrumb-separator" class={cn("[&>svg]:size-3.5", attrs.class)} {...attrs}>
+      {#if children}
+        {children}
+      {:else}
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></svg>
+      {/if}
+    </li>
+  }
+}
+
+component BreadcrumbEllipsis(...attrs: Attrs) {
+  view {
+    <span role="presentation" aria-hidden="true" data-slot="breadcrumb-ellipsis" class={cn("flex size-9 items-center justify-center", attrs.class)} {...attrs}>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="size-4"><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle cx="5" cy="12" r="1" /></svg>
+    </span>
+  }
+}

@@ -1,0 +1,20 @@
+// Tailwind: utilities from the site's src/app.css (compiled from the
+// classes used here), and a scoped component style built with `@apply`
+// against that app.css's theme. A live counter keeps the page live.
+
+component Page() {
+  signal n = 0
+
+  function bump() {
+    n = n + 1
+  }
+
+  view {
+    <h1 id="tw-title" class="text-3xl font-bold text-brand">Tailwind</h1>
+    <button id="tw-go" class="go" @click={bump}>Pressed {n}</button>
+  }
+
+  style {
+    .go { @apply rounded-lg px-4 py-2 bg-brand text-white; @variant hover { @apply opacity-80 } }
+  }
+}

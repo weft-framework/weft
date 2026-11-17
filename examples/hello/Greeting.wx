@@ -1,0 +1,7 @@
+component Greeting(name: string, greeting: string = "Hello") {
+  derived who = name.trim() || "world"
+
+  view {
+    <h1>{greeting}, {who}!</h1>
+  }
+}

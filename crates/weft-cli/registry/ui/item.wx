@@ -1,0 +1,93 @@
+import { cn, variants } from "../../lib/utils.ts";
+
+component ItemGroup(children: Html, ...attrs: Attrs) {
+  view {
+    <div role="list" data-slot="item-group" class={cn("group/item-group flex flex-col", attrs.class)} {...attrs}>{children}</div>
+  }
+}
+
+component ItemSeparator(...attrs: Attrs) {
+  view {
+    <div role="separator" data-slot="item-separator" class={cn("bg-border my-0 h-px w-full", attrs.class)} {...attrs}></div>
+  }
+}
+
+export const itemVariants = variants(
+  "group/item flex items-center border border-transparent text-sm rounded-md transition-colors [a]:hover:bg-accent/50 [a]:transition-colors duration-100 flex-wrap outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
+  {
+    variant: {
+      default: "bg-transparent",
+      outline: "border-border",
+      muted: "bg-muted/50",
+    },
+    size: {
+      default: "p-4 gap-4",
+      sm: "py-3 px-4 gap-2.5",
+    },
+  },
+  { variant: "default", size: "default" },
+);
+
+component Item(href?: string, variant?: "default" | "outline" | "muted", size?: "default" | "sm", children: Html, ...attrs: Attrs) {
+  view {
+    {#if href}
+      <a href={href} role="listitem" data-variant={variant ?? "default"} data-size={size ?? "default"} data-slot="item" class={itemVariants({ variant: variant, size: size }, attrs.class)} {...attrs}>{children}</a>
+    {:else}
+      <div role="listitem" data-variant={variant ?? "default"} data-size={size ?? "default"} data-slot="item" class={itemVariants({ variant: variant, size: size }, attrs.class)} {...attrs}>{children}</div>
+    {/if}
+  }
+}
+
+export const itemMediaVariants = variants(
+  "flex shrink-0 items-center justify-center gap-2 group-has-[[data-slot=item-description]]/item:self-start [&_svg]:pointer-events-none group-has-[[data-slot=item-description]]/item:translate-y-0.5",
+  {
+    variant: {
+      default: "bg-transparent",
+      icon: "size-8 border rounded-sm bg-muted [&_svg:not([class*='size-'])]:size-4",
+      image: "size-10 rounded-sm overflow-hidden [&_img]:size-full [&_img]:object-cover",
+    },
+  },
+  { variant: "default" },
+);
+
+component ItemMedia(variant?: "default" | "icon" | "image", children: Html, ...attrs: Attrs) {
+  view {
+    <div data-variant={variant ?? "default"} data-slot="item-media" class={itemMediaVariants({ variant: variant }, attrs.class)} {...attrs}>{children}</div>
+  }
+}
+
+component ItemContent(children: Html, ...attrs: Attrs) {
+  view {
+    <div data-slot="item-content" class={cn("flex flex-1 flex-col gap-1 [&+[data-slot=item-content]]:flex-none", attrs.class)} {...attrs}>{children}</div>
+  }
+}
+
+component ItemTitle(children: Html, ...attrs: Attrs) {
+  view {
+    <div data-slot="item-title" class={cn("flex w-fit items-center gap-2 text-sm leading-snug font-medium", attrs.class)} {...attrs}>{children}</div>
+  }
+}
+
+component ItemDescription(children: Html, ...attrs: Attrs) {
+  view {
+    <p data-slot="item-description" class={cn("text-muted-foreground line-clamp-2 text-sm leading-normal font-normal text-balance [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4", attrs.class)} {...attrs}>{children}</p>
+  }
+}
+
+component ItemActions(children: Html, ...attrs: Attrs) {
+  view {
+    <div data-slot="item-actions" class={cn("flex items-center gap-2", attrs.class)} {...attrs}>{children}</div>
+  }
+}
+
+component ItemHeader(children: Html, ...attrs: Attrs) {
+  view {
+    <div data-slot="item-header" class={cn("flex basis-full items-center justify-between gap-2", attrs.class)} {...attrs}>{children}</div>
+  }
+}
+
+component ItemFooter(children: Html, ...attrs: Attrs) {
+  view {
+    <div data-slot="item-footer" class={cn("flex basis-full items-center justify-between gap-2", attrs.class)} {...attrs}>{children}</div>
+  }
+}

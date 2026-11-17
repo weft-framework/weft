@@ -1,0 +1,237 @@
+import { redirect, type PageContext } from "@weft/server";
+import { fail } from "@weft/server/action";
+import type { Booking, Slot } from "@weft/server/calendar";
+import { gate, type Me } from "../../lib/workspaces.ts";
+import { bookings, resourceId, roomOf, ROOMS } from "../../lib/rooms.ts";
+import { nameOf } from "../../lib/users.ts";
+import { AppShell } from "../../components/AppShell.wx";
+import { Icon } from "../../components/Icon.wx";
+import { buttonVariants } from "../../components/ui/button.wx";
+import { inputClass } from "../../components/ui/input.wx";
+
+export const meta = { title: "Rooms" };
+
+const DAY = 86_400_000;
+
+export interface Shown {
+  id: string;
+  room: string;
+  owner: string;
+  when: string;
+  note: string;
+  mine: boolean;
+}
+
+export interface SlotDay {
+  key: string;
+  label: string;
+  slots: { start: number; time: string }[];
+}
+
+const dayKey = (at: number, zone: string) => new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).format(at);
+const dayLabel = (at: number, zone: string) => new Intl.DateTimeFormat("en-GB", { timeZone: zone, weekday: "short", day: "numeric", month: "short" }).format(at);
+const timeOf = (at: number, zone: string) => new Intl.DateTimeFormat("en-GB", { timeZone: zone, hour: "2-digit", minute: "2-digit" }).format(at);
+
+function byDay(slots: Slot[], zone: string): SlotDay[] {
+  const days = new Map<string, SlotDay>();
+  for (const s of slots) {
+    const key = dayKey(s.start, zone);
+    let d = days.get(key);
+    if (!d) days.set(key, (d = { key, label: dayLabel(s.start, zone), slots: [] }));
+    d.slots.push({ start: s.start, time: timeOf(s.start, zone) });
+  }
+  return [...days.values()];
+}
+
+function show(b: Booking, me: Me, zone: string): Shown {
+  return {
+    id: b.id,
+    room: roomOf(b.resource)?.name ?? "Room",
+    owner: b.owner,
+    when: dayLabel(b.start, zone) + ", " + timeOf(b.start, zone) + " to " + timeOf(b.end, zone),
+    note: b.note,
+    mine: b.owner === me.id,
+  };
+}
+
+export async function load(ctx: PageContext) {
+  const g = gate(ctx, "calendar.book");
+  if (!g.ok) return g.redirect;
+  const me = g.me;
+  const zone = String(me.setting("calendar.zone") ?? "UTC");
+  const hours = String(me.setting("calendar.hours") ?? "09:00-18:00");
+  const room = ROOMS.find((r) => r.id === ctx.query.get("room")) ?? ROOMS[0]!;
+  const resource = resourceId(g.workspace.id, room.id);
+  const now = Date.now();
+  const days = byDay(await bookings.slots(ctx, resource, { from: now, to: now + 14 * DAY }), zone);
+  const day = days.find((d) => d.key === ctx.query.get("day")) ?? days[0] ?? null;
+  const mine = (await bookings.mine(ctx, { from: now, to: now + 30 * DAY }))
+    .filter((b) => b.status === "active" && roomOf(b.resource) && b.resource.startsWith(g.workspace.id + "~"))
+    .sort((a, b) => a.start - b.start)
+    .map((b) => show(b, me, zone));
+  const all = await bookings.forResource(ctx, resource, { from: now, to: now + 30 * DAY });
+  const others = all ? all.filter((b) => b.status === "active" && b.owner !== me.id).map((b) => show(b, me, zone)) : null;
+  const moving = mine.find((b) => b.id === ctx.query.get("move")) ?? others?.find((b) => b.id === ctx.query.get("move")) ?? null;
+  return {
+    me, path: ctx.url.pathname, room: room.id, days, day, mine, others, moving, zone, hours,
+    notice: ctx.query.get("done") ?? "",
+  };
+}
+
+const REFUSED: Record<string, string> = {
+  "not-found": "That booking or room does not exist here.",
+  forbidden: "Your role does not let you book or change this.",
+  unavailable: "Someone took that time a moment ago. Pick another.",
+  "too-late": "Bookings can be changed until 10 minutes before they start.",
+  invalid: "That is not one of the free times.",
+};
+
+const back = (room: string, day: string, done: string) =>
+  redirect(`/app/rooms?room=${encodeURIComponent(room)}&day=${encodeURIComponent(day)}&done=${done}`);
+
+action bookRoom(room: Held<string>, day: Held<string>, start: number, note?: string) {
+  const workspace = (ctx.user as Me | null)?.tenant
+  if (!workspace || !ROOMS.some((r) => r.id === room)) fail("Pick a room in your workspace.")
+  const r = await bookings.book(ctx, resourceId(workspace, room), start, { note: String(note ?? "").trim().slice(0, 140) })
+  if (!r.ok) fail(REFUSED[r.reason] ?? "Not booked.")
+  return back(room, day, "booked")
+}
+
+action moveBooking(id: Held<string>, room: Held<string>, day: Held<string>, start: number) {
+  const r = await bookings.reschedule(ctx, id, start)
+  if (!r.ok) fail(REFUSED[r.reason] ?? "Not moved.")
+  return back(room, day, "moved")
+}
+
+action cancelBooking(id: Held<string>, room: Held<string>, day: Held<string>) {
+  const r = await bookings.cancel(ctx, id)
+  if (!r.ok) fail(REFUSED[r.reason] ?? "Not cancelled.")
+  return back(room, day, "cancelled")
+}
+
+component BookingRow(b: Shown, room: string, day: string, staff: boolean) {
+  view {
+    <li class="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-sm">
+      <span class="min-w-0 flex-1">
+        <span class="block font-medium">{b.room}, {b.when}</span>
+        <span class="text-muted-foreground block text-xs">{b.mine ? "You" : nameOf(b.owner)}{b.note ? ": " + b.note : ""}</span>
+      </span>
+      {#if b.mine || staff}
+        <a href={`/app/rooms?room=${room}&day=${day}&move=${b.id}`} class={buttonVariants({ variant: "ghost", size: "sm" })}>Move</a>
+        <form action={cancelBooking.with(b.id, room, day)} class="flex items-center gap-2">
+          <button class={buttonVariants({ variant: "ghost", size: "sm" }) + " text-destructive"}>Cancel</button>
+          <p data-weft-message role="alert" class="text-destructive text-xs empty:hidden"></p>
+        </form>
+      {/if}
+    </li>
+  }
+}
+
+component Page(me: Me, path: string, room: string, days: SlotDay[], day: SlotDay | null, mine: Shown[], others: Shown[] | null, moving: Shown | null, zone: string, hours: string, notice: string) {
+  view {
+    <AppShell me={me} path={path} title="Rooms">
+      <p class="text-muted-foreground max-w-prose text-[15px]">Open {hours.replace("-", " to ")}, Monday to Friday, in {zone} time. Book up to 30 days ahead; you get a reminder 15 minutes before.</p>
+
+      <nav aria-label="Rooms" class="mt-6 flex flex-wrap gap-2">
+        {#each ROOMS as r (r.id)}
+          <a href={"/app/rooms?room=" + r.id} aria-current={r.id === room ? "page" : null} class="hover:border-foreground/30 aria-[current=page]:border-foreground rounded-lg border px-4 py-3 text-sm">
+            <span class="block font-medium">{r.name}</span>
+            <span class="text-muted-foreground block text-xs">{r.note}</span>
+          </a>
+        {/each}
+      </nav>
+
+      {#if notice}
+        <p role="status" class="mt-6 flex items-center gap-2 text-sm"><Icon name="check" />{notice === "booked" ? "Booked. It is in your list below." : notice === "moved" ? "Moved to the new time." : "Cancelled. The time is free again."}</p>
+      {/if}
+      {#if moving}
+        <p role="status" class="bg-muted mt-6 flex flex-wrap items-center gap-2 rounded-lg px-4 py-3 text-sm">
+          <Icon name="clock" />
+          Moving {moving.room}, {moving.when}. Pick a new time below.
+          <a href={`/app/rooms?room=${room}&day=${day?.key ?? ""}`} class="ml-auto underline-offset-4 hover:underline">Keep it</a>
+        </p>
+      {/if}
+
+      <section aria-labelledby="free-h" class="mt-8">
+        <h2 id="free-h" class="mb-3 text-sm font-semibold">Free times</h2>
+        {#if days.length === 0}
+          <p class="text-muted-foreground rounded-lg border border-dashed px-4 py-8 text-center text-sm">No free times in the next two weeks.</p>
+        {:else}
+          <nav aria-label="Days" class="-mx-1 flex gap-1 overflow-x-auto pb-2">
+            {#each days as d (d.key)}
+              <a
+                href={`/app/rooms?room=${room}&day=${d.key}${moving ? "&move=" + moving.id : ""}`}
+                aria-current={d.key === day?.key ? "date" : null}
+                class="hover:bg-muted aria-[current=date]:bg-primary aria-[current=date]:text-primary-foreground shrink-0 rounded-md px-3 py-2 text-center text-sm"
+              >
+                <span class="block whitespace-nowrap">{d.label}</span>
+                <span class="block text-xs opacity-70">{d.slots.length} free</span>
+              </a>
+            {/each}
+          </nav>
+          {#if day}
+            {#if moving}
+              <form action={moveBooking.with(moving.id, room, day.key)} class="mt-3 flex flex-col gap-3">
+                <div class="flex flex-wrap gap-2" role="group" aria-label="New start time">
+                  {#each day.slots as s (s.start)}
+                    <button name="start" value={String(s.start)} class={buttonVariants({ variant: "outline", size: "sm" }) + " tabular-nums"}>{s.time}</button>
+                  {/each}
+                </div>
+                <p data-weft-message role="alert" class="text-destructive text-sm empty:hidden"></p>
+              </form>
+            {:else}
+              <form action={bookRoom.with(room, day.key)} class="mt-3 flex flex-col gap-3">
+                <fieldset class="flex flex-wrap gap-2">
+                  <legend class="sr-only">Start time</legend>
+                  {#each day.slots as s, i (s.start)}
+                    <label class="has-checked:bg-primary has-checked:text-primary-foreground hover:bg-muted cursor-pointer rounded-md border px-3 py-1.5 text-sm tabular-nums">
+                      <input type="radio" name="start" value={String(s.start)} checked={i === 0} class="sr-only" />
+                      {s.time}
+                    </label>
+                  {/each}
+                </fieldset>
+                <div class="flex max-w-lg gap-2">
+                  <input name="note" aria-label="What it is for" placeholder="What it is for (optional)" maxlength="140" class={inputClass} />
+                  <button class={buttonVariants({})}>
+                    <Icon name="calendar" />
+                    Book
+                  </button>
+                </div>
+                <p data-weft-message role="alert" class="text-destructive text-sm empty:hidden"></p>
+              </form>
+            {/if}
+          {/if}
+        {/if}
+      </section>
+
+      <section aria-labelledby="mine-h" class="mt-10">
+        <h2 id="mine-h" class="mb-3 text-sm font-semibold">Your bookings</h2>
+        {#if mine.length === 0}
+          <p class="text-muted-foreground text-sm">None yet.</p>
+        {:else}
+          <ul class="divide-y rounded-lg border">
+            {#each mine as b (b.id)}
+              <BookingRow b={b} room={room} day={day?.key ?? ""} staff={false} />
+            {/each}
+          </ul>
+        {/if}
+      </section>
+
+      {#if others}
+        <section aria-labelledby="others-h" class="mt-10">
+          <h2 id="others-h" class="mb-1 text-sm font-semibold">Everyone else in this room</h2>
+          <p class="text-muted-foreground mb-3 text-xs">You see these because your role can manage rooms.</p>
+          {#if others.length === 0}
+            <p class="text-muted-foreground text-sm">Nobody else has booked it.</p>
+          {:else}
+            <ul class="divide-y rounded-lg border">
+              {#each others as b (b.id)}
+                <BookingRow b={b} room={room} day={day?.key ?? ""} staff={true} />
+              {/each}
+            </ul>
+          {/if}
+        </section>
+      {/if}
+    </AppShell>
+  }
+}

@@ -1,0 +1,24 @@
+import { cn } from "../../lib/utils.ts";
+
+export function sliderFill(value: number, min: number, max: number): string {
+  const pct = max > min ? ((value - min) / (max - min)) * 100 : 0;
+  return `--fill: ${Math.max(0, Math.min(100, pct))}%`;
+}
+
+client function fill(el: HTMLInputElement) {
+  const sync = () => {
+    const min = Number(el.min || 0)
+    const max = Number(el.max || 100)
+    const pct = max > min ? ((Number(el.value) - min) / (max - min)) * 100 : 0
+    el.style.setProperty("--fill", `${pct}%`)
+  }
+  sync()
+  el.addEventListener("input", sync)
+  return () => el.removeEventListener("input", sync)
+}
+
+component Slider(value?: number, min?: number, max?: number, step?: number, ...attrs: Attrs) {
+  view {
+    <input type="range" value={String(value ?? 0)} min={String(min ?? 0)} max={String(max ?? 100)} step={String(step ?? 1)} style={sliderFill(value ?? 0, min ?? 0, max ?? 100)} data-slot="slider" class={cn("focus-visible:ring-ring/50 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-[linear-gradient(to_right,var(--color-primary)_var(--fill),var(--color-muted)_var(--fill))] outline-none disabled:cursor-not-allowed disabled:opacity-50 [&::-moz-range-thumb]:border-primary [&::-moz-range-thumb]:bg-background [&::-moz-range-thumb]:size-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border [&::-moz-range-thumb]:shadow-sm [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:bg-background [&::-webkit-slider-thumb]:size-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:shadow-sm [&::-webkit-slider-thumb]:transition-[color,box-shadow] focus-visible:[&::-webkit-slider-thumb]:ring-4 focus-visible:[&::-webkit-slider-thumb]:ring-ring/50", attrs.class)} use:fill {...attrs} />
+  }
+}

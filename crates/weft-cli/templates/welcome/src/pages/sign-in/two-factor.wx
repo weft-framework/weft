@@ -1,0 +1,42 @@
+import { redirect, type PageContext } from "@weft/server";
+import { fail } from "@weft/server/action";
+import { twoFactor } from "../../lib/accounts.ts";
+import { nextPath } from "../../lib/signin.ts";
+import { AuthShell } from "../../components/AuthShell.wx";
+import { buttonVariants } from "../../components/ui/button.wx";
+import { inputClass } from "../../components/ui/input.wx";
+import { labelClass } from "../../components/ui/label.wx";
+import { Field, FieldDescription } from "../../components/ui/field.wx";
+
+export const meta = { title: "Two-factor sign-in" };
+
+export async function load(ctx: PageContext) {
+  const s = await twoFactor.status(ctx);
+  if (!s?.pending) return redirect(s ? "/app" : "/sign-in");
+  return { next: nextPath(ctx.query.get("next")) };
+}
+
+action verifySecondFactor(code: string, next: string) {
+  if (!(await twoFactor.verify(ctx, code.replace(/\s+/g, "")))) fail("That code is not right, or was already used.")
+  return redirect(nextPath(next))
+}
+
+component Page(next: string) {
+  view {
+    <AuthShell title="Enter your code" lead="Open your authenticator app and type the six digits it shows for this account.">
+      <form action={verifySecondFactor} class="flex flex-col gap-4" autocomplete="off">
+        <input type="hidden" name="next" value={next} />
+        <Field>
+          <label for="code" class={labelClass}>Code</label>
+          <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="20" required autofocus class={inputClass + " font-mono tracking-[0.3em]"} aria-describedby="code-hint" />
+          <FieldDescription id="code-hint">Lost the phone? Type one of your recovery codes instead. Each works once.</FieldDescription>
+        </Field>
+        <p data-weft-message role="alert" class="text-destructive text-sm empty:hidden"></p>
+        <button class={buttonVariants({})}>Continue</button>
+      </form>
+      <p class="text-muted-foreground mt-10 text-sm">
+        <a href="/sign-in" class="text-foreground underline-offset-4 hover:underline">Start over</a>
+      </p>
+    </AuthShell>
+  }
+}

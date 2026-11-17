@@ -1,0 +1,25 @@
+{
+  "name": "@weft/core",
+  "version": "0.0.1",
+  "description": "Weft core: permissions and tenancy for any app. Scoped roles over a tenant's tree of scopes, typed permissions, per-tenant custom roles and permissions, invites, with privilege escalation and owner lockout refused.",
+  "license": "MIT",
+  "author": "Vakea",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./notifications": "./src/notifications.ts",
+    "./billing": "./src/billing.ts",
+    "./chat": "./src/chat.ts",
+    "./scim": "./src/scim.ts",
+    "./flags": "./src/flags.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "test": "node --test --experimental-strip-types test/*.test.ts"
+  },
+  "dependencies": {
+    "@weft/data": "0.0.1"
+  }
+}

@@ -1,0 +1,32 @@
+// A translated live page: /intl (English), /cs/mezinarodni, /ar/intl.
+
+import type { PageContext } from "@weft/server";
+import type { Translator } from "@weft/i18n";
+import { i18n } from "../i18n.ts";
+import type en from "../locales/en.ts";
+
+export async function load(ctx: PageContext) {
+  const t = await i18n.translator(i18n.locale(ctx.request));
+  return { t, links: i18n.alternates(ctx.url.pathname) };
+}
+
+component Page(t: Translator<typeof en>, links: { locale: string; href: string }[]) {
+  signal count = 0
+
+  function add() {
+    count = count + 1
+  }
+
+  view {
+    <h1 id="intl-title">{t("title")}</h1>
+    <p id="intl-items">{t("cart.items", { count })}</p>
+    <button id="intl-add" @click={add}>{t("cart.add")}</button>
+    <p id="intl-fallback">{t("untranslated")}</p>
+    <p id="intl-date">{t.date(Date.UTC(2026, 10, 14, 12), { dateStyle: "long", timeZone: "UTC" })}</p>
+    <nav>
+      {#each links as link}
+        <a href={link.href} hreflang={link.locale}>{link.locale}</a>
+      {/each}
+    </nav>
+  }
+}

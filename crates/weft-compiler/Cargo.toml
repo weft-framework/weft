@@ -1,0 +1,16 @@
+[package]
+name = "weft-compiler"
+description = "Lexer, parser and lowering for the Weft (.wx) language."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "weft_compiler"
+path = "src/lib.rs"
+
+[dependencies]
+unicode-ident = "1.0.27"

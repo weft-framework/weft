@@ -1,0 +1,31 @@
+{
+  "name": "weft-workspace",
+  "private": true,
+  "license": "MIT",
+  "author": "Vakea",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "npm test --workspaces --if-present && npm run test:registry",
+    "test:registry": "node --test --experimental-strip-types tests/registry/*.test.ts",
+    "dev": "node --experimental-strip-types packages/server/src/dev.ts",
+    "test:browser": "node --test tests/browser/*.test.mjs",
+    "test:packages": "node --test tests/packaging/packages.test.mjs",
+    "build:packages": "node scripts/build-packages.mjs",
+    "typecheck": "tsc -p .",
+    "bench": "node --expose-gc --experimental-strip-types bench/run.ts"
+  },
+  "engines": {
+    "node": ">=22.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.5",
+    "@types/node": "^24.19.2",
+    "@types/pg": "^8.23.1",
+    "pg": "^8.23.1",
+    "tailwindcss": "^4.3.5",
+    "typescript": "^5.9.3"
+  }
+}

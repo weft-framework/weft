@@ -1,0 +1,301 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Weft",
+  "scopeName": "source.weft",
+  "fileTypes": ["wx"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#component" },
+    { "include": "#model" },
+    { "include": "#store" },
+    { "include": "#actor" },
+    { "include": "#placed" },
+    { "include": "#action" },
+    { "include": "source.ts" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        { "name": "comment.block.documentation.weft", "begin": "/\\*\\*(?!/)", "end": "\\*/" },
+        { "name": "comment.block.weft", "begin": "/\\*", "end": "\\*/" },
+        { "name": "comment.line.double-slash.weft", "match": "//.*$" }
+      ]
+    },
+    "component": {
+      "name": "meta.component.weft",
+      "begin": "\\b(component)\\s+([A-Za-z_$][\\w$]*)",
+      "beginCaptures": {
+        "1": { "name": "storage.type.component.weft" },
+        "2": { "name": "entity.name.type.class.weft" }
+      },
+      "end": "(?<=\\})",
+      "patterns": [
+        { "include": "#comments" },
+        { "include": "#uses" },
+        { "include": "#type-params" },
+        { "include": "#params" },
+        { "include": "#component-body" }
+      ]
+    },
+    "uses": {
+      "match": "\\b(uses)\\s+((?:[A-Za-z]+\\s*,\\s*)*[A-Za-z]+)",
+      "captures": {
+        "1": { "name": "keyword.other.uses.weft" },
+        "2": { "name": "support.constant.capability.weft" }
+      }
+    },
+    "type-params": {
+      "begin": "<",
+      "end": ">",
+      "beginCaptures": { "0": { "name": "punctuation.definition.typeparameters.begin.weft" } },
+      "endCaptures": { "0": { "name": "punctuation.definition.typeparameters.end.weft" } },
+      "patterns": [{ "include": "source.ts#type" }]
+    },
+    "params": {
+      "begin": "\\(",
+      "end": "\\)",
+      "beginCaptures": { "0": { "name": "punctuation.definition.parameters.begin.weft" } },
+      "endCaptures": { "0": { "name": "punctuation.definition.parameters.end.weft" } },
+      "patterns": [
+        {
+          "match": "([A-Za-z_$][\\w$]*)\\s*(\\?)?\\s*(:)",
+          "captures": {
+            "1": { "name": "variable.parameter.weft" },
+            "2": { "name": "keyword.operator.optional.weft" },
+            "3": { "name": "keyword.operator.type.annotation.weft" }
+          }
+        },
+        { "match": ",", "name": "punctuation.separator.parameter.weft" },
+        { "include": "source.ts#type" }
+      ]
+    },
+    "component-body": {
+      "begin": "\\{",
+      "end": "\\}",
+      "beginCaptures": { "0": { "name": "punctuation.definition.block.weft" } },
+      "endCaptures": { "0": { "name": "punctuation.definition.block.weft" } },
+      "patterns": [
+        { "include": "#comments" },
+        { "include": "#view" },
+        { "include": "#style" },
+        { "include": "#member" },
+        { "include": "source.ts" }
+      ]
+    },
+    "member": {
+      "patterns": [
+        {
+          "match": "^\\s*(client|server)\\b",
+          "captures": { "1": { "name": "storage.modifier.side.weft" } }
+        },
+        {
+          "match": "\\b(signal|derived)\\s+([A-Za-z_$][\\w$]*)",
+          "captures": {
+            "1": { "name": "storage.type.reactive.weft" },
+            "2": { "name": "variable.other.readwrite.weft" }
+          }
+        },
+        { "match": "\\b(onMount|onDestroy)\\b", "name": "support.function.lifecycle.weft" }
+      ]
+    },
+    "view": {
+      "begin": "\\b(view)\\s*(\\{)",
+      "end": "\\}",
+      "beginCaptures": {
+        "1": { "name": "storage.type.view.weft" },
+        "2": { "name": "punctuation.definition.block.weft" }
+      },
+      "endCaptures": { "0": { "name": "punctuation.definition.block.weft" } },
+      "contentName": "meta.view.weft",
+      "patterns": [{ "include": "#markup" }]
+    },
+    "style": {
+      "begin": "\\b(style)\\s*(\\{)",
+      "end": "\\}",
+      "beginCaptures": {
+        "1": { "name": "storage.type.style.weft" },
+        "2": { "name": "punctuation.definition.block.weft" }
+      },
+      "endCaptures": { "0": { "name": "punctuation.definition.block.weft" } },
+      "contentName": "meta.embedded.block.css.weft",
+      "patterns": [{ "include": "source.css" }]
+    },
+    "model": {
+      "name": "meta.model.weft",
+      "begin": "\\b(model)\\s+([A-Za-z_$][\\w$]*)\\s*(\\{)",
+      "beginCaptures": {
+        "1": { "name": "storage.type.model.weft" },
+        "2": { "name": "entity.name.type.class.weft" },
+        "3": { "name": "punctuation.definition.block.weft" }
+      },
+      "end": "\\}",
+      "endCaptures": { "0": { "name": "punctuation.definition.block.weft" } },
+      "patterns": [
+        { "include": "#comments" },
+        {
+          "begin": "(@)(read|write|default)\\s*(\\()",
+          "beginCaptures": {
+            "1": { "name": "punctuation.decorator.weft" },
+            "2": { "name": "storage.modifier.policy.weft" },
+            "3": { "name": "punctuation.definition.arguments.begin.weft" }
+          },
+          "end": "\\)",
+          "endCaptures": { "0": { "name": "punctuation.definition.arguments.end.weft" } },
+          "contentName": "meta.embedded.expression.weft",
+          "patterns": [{ "include": "source.ts#expression" }]
+        },
+        {
+          "match": "(@)([A-Za-z]+)",
+          "captures": {
+            "1": { "name": "punctuation.decorator.weft" },
+            "2": { "name": "storage.modifier.attribute.weft" }
+          }
+        },
+        {
+          "match": "^\\s*([A-Za-z_$][\\w$]*)\\s*(\\?)?\\s*(:)",
+          "captures": {
+            "1": { "name": "variable.other.property.weft" },
+            "2": { "name": "keyword.operator.optional.weft" },
+            "3": { "name": "keyword.operator.type.annotation.weft" }
+          }
+        },
+        { "include": "source.ts#type" }
+      ]
+    },
+    "store": {
+      "match": "\\b(store)\\s+(app|session)\\s+([A-Za-z_$][\\w$]*)",
+      "captures": {
+        "1": { "name": "storage.type.store.weft" },
+        "2": { "name": "storage.modifier.scope.weft" },
+        "3": { "name": "variable.other.constant.weft" }
+      }
+    },
+    "actor": {
+      "match": "^\\s*(actor)\\b",
+      "captures": { "1": { "name": "storage.type.actor.weft" } }
+    },
+    "placed": {
+      "match": "^\\s*(client|server)(?=\\s+(?:function|const)\\b)",
+      "captures": { "1": { "name": "storage.modifier.side.weft" } }
+    },
+    "action": {
+      "match": "\\b(action|job)\\s+([A-Za-z_$][\\w$]*)(?=\\s*\\()",
+      "captures": {
+        "1": { "name": "storage.type.action.weft" },
+        "2": { "name": "entity.name.function.weft" }
+      }
+    },
+    "markup": {
+      "patterns": [
+        { "include": "#html-comment" },
+        { "include": "#block" },
+        { "include": "#interpolation" },
+        { "include": "#tag-close" },
+        { "include": "#tag-open" },
+        { "include": "#entity" }
+      ]
+    },
+    "html-comment": {
+      "name": "comment.block.html.weft",
+      "begin": "<!--",
+      "end": "-->"
+    },
+    "block": {
+      "name": "meta.block.weft",
+      "begin": "(\\{)\\s*([#:/])\\s*(else\\s+if|if|each|await|can|else|then|catch)\\b",
+      "beginCaptures": {
+        "1": { "name": "punctuation.section.embedded.begin.weft" },
+        "2": { "name": "keyword.control.flow.weft" },
+        "3": { "name": "keyword.control.flow.weft" }
+      },
+      "end": "\\}",
+      "endCaptures": { "0": { "name": "punctuation.section.embedded.end.weft" } },
+      "contentName": "meta.embedded.expression.weft",
+      "patterns": [
+        { "match": "\\b(as|then)\\b", "name": "keyword.control.flow.weft" },
+        { "include": "source.ts#expression" }
+      ]
+    },
+    "interpolation": {
+      "begin": "\\{",
+      "end": "\\}",
+      "beginCaptures": { "0": { "name": "punctuation.section.embedded.begin.weft" } },
+      "endCaptures": { "0": { "name": "punctuation.section.embedded.end.weft" } },
+      "contentName": "meta.embedded.expression.weft",
+      "patterns": [{ "include": "source.ts#expression" }]
+    },
+    "tag-close": {
+      "patterns": [
+        {
+          "match": "(</)([A-Z][\\w$.]*)\\s*(>)",
+          "captures": {
+            "1": { "name": "punctuation.definition.tag.begin.weft" },
+            "2": { "name": "entity.name.type.class.component.weft" },
+            "3": { "name": "punctuation.definition.tag.end.weft" }
+          }
+        },
+        {
+          "match": "(</)([A-Za-z][\\w.:-]*)\\s*(>)",
+          "captures": {
+            "1": { "name": "punctuation.definition.tag.begin.weft" },
+            "2": { "name": "entity.name.tag.weft" },
+            "3": { "name": "punctuation.definition.tag.end.weft" }
+          }
+        }
+      ]
+    },
+    "tag-open": {
+      "patterns": [
+        {
+          "name": "meta.tag.component.weft",
+          "begin": "(<)([A-Z][\\w$.]*)",
+          "beginCaptures": {
+            "1": { "name": "punctuation.definition.tag.begin.weft" },
+            "2": { "name": "entity.name.type.class.component.weft" }
+          },
+          "end": "/?>",
+          "endCaptures": { "0": { "name": "punctuation.definition.tag.end.weft" } },
+          "patterns": [{ "include": "#attributes" }]
+        },
+        {
+          "name": "meta.tag.weft",
+          "begin": "(<)([A-Za-z][\\w.:-]*)",
+          "beginCaptures": {
+            "1": { "name": "punctuation.definition.tag.begin.weft" },
+            "2": { "name": "entity.name.tag.weft" }
+          },
+          "end": "/?>",
+          "endCaptures": { "0": { "name": "punctuation.definition.tag.end.weft" } },
+          "patterns": [{ "include": "#attributes" }]
+        }
+      ]
+    },
+    "attributes": {
+      "patterns": [
+        {
+          "match": "(@)([\\w-]+(?:\\([^)]*\\))?(?:\\.[\\w-]+(?:\\([^)]*\\))?)*)",
+          "captures": {
+            "1": { "name": "punctuation.definition.directive.weft" },
+            "2": { "name": "entity.other.attribute-name.event.weft" }
+          }
+        },
+        {
+          "match": "(:)([\\w-]+)",
+          "captures": {
+            "1": { "name": "punctuation.definition.directive.weft" },
+            "2": { "name": "entity.other.attribute-name.bind.weft" }
+          }
+        },
+        { "match": "[A-Za-z_][\\w.:-]*", "name": "entity.other.attribute-name.weft" },
+        { "match": "=", "name": "punctuation.separator.key-value.weft" },
+        { "match": "\"[^\"]*\"", "name": "string.quoted.double.weft" },
+        { "match": "'[^']*'", "name": "string.quoted.single.weft" },
+        { "include": "#interpolation" }
+      ]
+    },
+    "entity": {
+      "match": "&(?:[A-Za-z][A-Za-z0-9]*|#[0-9]+|#x[0-9A-Fa-f]+);",
+      "name": "constant.character.entity.weft"
+    }
+  }
+}

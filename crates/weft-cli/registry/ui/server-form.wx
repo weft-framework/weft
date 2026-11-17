@@ -1,0 +1,60 @@
+import type { WeftEvent } from "@weft/runtime";
+import { cn } from "../../lib/utils.ts";
+import { buttonVariants } from "./button.wx";
+import { inputClass } from "./input.wx";
+import { textareaClass } from "./textarea.wx";
+import { Field, FieldLabel, FieldDescription, FieldError } from "./field.wx";
+
+export interface FormField {
+  name: string;
+  label: string;
+  type?: "text" | "email" | "password" | "number" | "url" | "tel" | "textarea";
+  placeholder?: string;
+  required?: boolean;
+  description?: string;
+}
+
+export type FieldErrors = Record<string, string>;
+
+export type FormResult = { errors?: Record<string, string>; message?: string } | void;
+
+component ServerForm(fields: FormField[], submit: (values: Record<string, string>) => FormResult | Promise<FormResult>, button?: string, id?: string, ...attrs: Attrs) {
+  signal errors = {} as FieldErrors
+  signal message = ""
+
+  function send(e: WeftEvent) {
+    const values: Record<string, string> = {}
+    for (const f of fields) {
+      values[f.name] = String(e.form?.[f.name] ?? "")
+    }
+    return Promise.resolve(submit(values)).then((result) => {
+      errors = result?.errors ?? {}
+      message = result?.message ?? ""
+    })
+  }
+
+  view {
+    <form data-slot="server-form" novalidate class={cn("flex flex-col gap-5", attrs.class)} @submit={send} {...attrs}>
+      {#each fields as f (f.name)}
+        <Field invalid={Boolean(errors[f.name])}>
+          <FieldLabel target={(id ?? "sf") + "-" + f.name}>{f.label}</FieldLabel>
+          {#if f.type == "textarea"}
+            <textarea id={(id ?? "sf") + "-" + f.name} name={f.name} placeholder={f.placeholder} required={f.required} aria-invalid={errors[f.name] ? "true" : null} aria-describedby={errors[f.name] ? (id ?? "sf") + "-" + f.name + "-error" : null} class={textareaClass}></textarea>
+          {:else}
+            <input id={(id ?? "sf") + "-" + f.name} name={f.name} type={f.type ?? "text"} placeholder={f.placeholder} required={f.required} aria-invalid={errors[f.name] ? "true" : null} aria-describedby={errors[f.name] ? (id ?? "sf") + "-" + f.name + "-error" : null} class={inputClass} />
+          {/if}
+          {#if f.description}
+            <FieldDescription>{f.description}</FieldDescription>
+          {/if}
+          <FieldError message={errors[f.name]} id={(id ?? "sf") + "-" + f.name + "-error"} />
+        </Field>
+      {/each}
+      <div class="flex items-center gap-3">
+        <button class={buttonVariants({})} :busy>{button ?? "Submit"}</button>
+        {#if message}
+          <p role="status" class="text-sm">{message}</p>
+        {/if}
+      </div>
+    </form>
+  }
+}

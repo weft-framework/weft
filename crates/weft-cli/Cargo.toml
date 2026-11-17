@@ -1,0 +1,19 @@
+[package]
+name = "weft-cli"
+description = "The `weft` command-line interface."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "weft"
+path = "src/main.rs"
+
+[dependencies]
+weft-compiler.workspace = true
+weft-fmt.workspace = true
+weft-lsp.workspace = true
+serde_json = "1"

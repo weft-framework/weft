@@ -1,0 +1,51 @@
+import { cn } from "../../lib/utils.ts";
+import { buttonVariants } from "./button.wx";
+import { inputClass } from "./input.wx";
+client import { copy } from "@weft/ui"
+
+component ShareLink(make: () => Promise<string> | string, label?: string, expires?: string, ...attrs: Attrs) {
+  signal link = ""
+  signal failed = false
+
+  function create() {
+    return Promise.resolve()
+      .then(() => make())
+      .then(
+        (url) => {
+          link = url
+          failed = false
+        },
+        () => {
+          failed = true
+        },
+      )
+  }
+
+  function reset() {
+    link = ""
+  }
+
+  view {
+    <div data-slot="share-link" class={cn("flex flex-col gap-2", attrs.class)} {...attrs}>
+      {#if link}
+        <div class="flex gap-2">
+          <input readonly value={link} aria-label="Share link" class={cn(inputClass, "font-mono text-xs")} />
+          <button type="button" class={cn(buttonVariants({ variant: "outline" }), "group")} use:copy={link}>
+            <span class="group-data-[state=copied]:hidden group-data-[state=failed]:hidden">Copy</span>
+            <span class="hidden group-data-[state=copied]:inline">Copied</span>
+            <span class="hidden group-data-[state=failed]:inline">Copy failed</span>
+          </button>
+        </div>
+        <p class="text-muted-foreground text-xs">
+          {expires ? "Anyone with this link has access. It expires " + expires + "." : "Anyone with this link has access until it expires."}
+          <button type="button" class="ml-1 underline underline-offset-4" @click={reset}>Make another</button>
+        </p>
+      {:else}
+        <button type="button" class={buttonVariants({})} @click={create} :busy>{label ?? "Create share link"}</button>
+        {#if failed}
+          <p role="alert" class="text-destructive text-sm">The link could not be created.</p>
+        {/if}
+      {/if}
+    </div>
+  }
+}

@@ -1,0 +1,11 @@
+import { cn } from "../../lib/utils.ts";
+
+export function aspectStyle(ratio: number): string {
+  return `aspect-ratio: ${Number.isFinite(ratio) && ratio > 0 ? ratio : 1}`;
+}
+
+component AspectRatio(ratio?: number, children: Html, ...attrs: Attrs) {
+  view {
+    <div data-slot="aspect-ratio" style={aspectStyle(ratio ?? 1)} class={cn("relative w-full overflow-hidden", attrs.class)} {...attrs}>{children}</div>
+  }
+}

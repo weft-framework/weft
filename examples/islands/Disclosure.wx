@@ -1,0 +1,29 @@
+component Disclosure() {
+  client signal open = false
+  client derived label = open ? "Hide details" : "Show details"
+  client signal localClicks = 0
+  client signal hydratedAt = ""
+
+  client function toggle() { open = !open }
+  client function tally() { localClicks = localClicks + 1 }
+
+  client onMount(() => {
+    hydratedAt = new Date().toLocaleTimeString()
+  })
+
+  signal likes = 0
+  function like() { likes = likes + 1 }
+
+  view {
+    <section class="island">
+      <h1>Islands</h1>
+      <p class="meta" hidden={hydratedAt === ""}>Hydrated in the browser at {hydratedAt}</p>
+
+      <button @click={toggle} aria-expanded={open}>{label}</button>
+      <p hidden={!open}>These details were revealed without a round trip to the server.</p>
+
+      <button @click.optimistic(tally)={like}>Like ({likes})</button>
+      <p>Counted on this device: {localClicks}</p>
+    </section>
+  }
+}

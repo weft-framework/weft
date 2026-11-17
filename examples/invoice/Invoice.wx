@@ -1,0 +1,37 @@
+interface User {
+  id: string
+}
+
+actor User
+
+type Money = number
+
+model Invoice {
+  id: string
+  owner: User
+  amount: Money
+  @read(actor.id == owner.id)
+  @write(actor.id == owner.id)
+}
+
+component InvoiceCard(me: User, invoice: Invoice) {
+  derived formatted = "$" + invoice.amount.toFixed(2)
+
+  view {
+    <article class="invoice">
+      <header>
+        <h2>Invoice {invoice.id}</h2>
+        <span class="amount">{formatted}</span>
+      </header>
+
+      {#can write(invoice)}
+        <div class="actions">
+          <button>Edit</button>
+          <button class="danger">Void</button>
+        </div>
+      {:else}
+        <p class="readonly">You can view this invoice, but only its owner may change it.</p>
+      {/can}
+    </article>
+  }
+}

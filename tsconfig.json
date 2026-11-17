@@ -1,0 +1,17 @@
+{
+  "//": "Type-checks the TypeScript packages as Node runs them (type stripping): `npm run typecheck`.",
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "target": "es2023",
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["packages/runtime/src", "packages/server/src", "packages/data/src", "packages/core/src", "packages/core/test", "packages/theme/src", "packages/i18n/src", "packages/i18n/test", "crates/weft-cli/registry/lib", "tests/registry"]
+}

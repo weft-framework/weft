@@ -1,0 +1,56 @@
+import { cn } from "../../lib/utils.ts";
+import { buttonVariants } from "./button.wx";
+import { dialogClass } from "./dialog.wx";
+client import { dialog } from "@weft/ui"
+
+component AlertDialogTrigger(target: string, children: Html, ...attrs: Attrs) {
+  view {
+    <button type="button" commandfor={target} command="show-modal" aria-haspopup="dialog" data-slot="alert-dialog-trigger" class={cn(buttonVariants({ variant: "outline" }), attrs.class)} {...attrs}>{children}</button>
+  }
+}
+
+component AlertDialog(id: string, children: Html, ...attrs: Attrs) {
+  view {
+    <dialog id={id} role="alertdialog" aria-modal="true" aria-labelledby={id + "-title"} aria-describedby={id + "-description"} data-dismissable="false" data-slot="alert-dialog" class={cn(dialogClass, attrs.class)} use:dialog {...attrs}>{children}</dialog>
+  }
+}
+
+component AlertDialogHeader(children: Html, ...attrs: Attrs) {
+  view {
+    <div data-slot="alert-dialog-header" class={cn("flex flex-col gap-2 text-center sm:text-left", attrs.class)} {...attrs}>{children}</div>
+  }
+}
+
+component AlertDialogFooter(children: Html, ...attrs: Attrs) {
+  view {
+    <div data-slot="alert-dialog-footer" class={cn("flex flex-col-reverse gap-2 sm:flex-row sm:justify-end", attrs.class)} {...attrs}>{children}</div>
+  }
+}
+
+component AlertDialogTitle(dialog: string, children: Html, ...attrs: Attrs) {
+  view {
+    <h2 id={dialog + "-title"} data-slot="alert-dialog-title" class={cn("text-lg font-semibold", attrs.class)} {...attrs}>{children}</h2>
+  }
+}
+
+component AlertDialogDescription(dialog: string, children: Html, ...attrs: Attrs) {
+  view {
+    <p id={dialog + "-description"} data-slot="alert-dialog-description" class={cn("text-muted-foreground text-sm", attrs.class)} {...attrs}>{children}</p>
+  }
+}
+
+component AlertDialogAction(target?: string, children: Html, ...attrs: Attrs) {
+  view {
+    {#if target}
+      <button type="button" commandfor={target} command="close" data-slot="alert-dialog-action" class={cn(buttonVariants({}), attrs.class)} {...attrs}>{children}</button>
+    {:else}
+      <button type="submit" data-slot="alert-dialog-action" class={cn(buttonVariants({}), attrs.class)} {...attrs}>{children}</button>
+    {/if}
+  }
+}
+
+component AlertDialogCancel(target: string, children: Html, ...attrs: Attrs) {
+  view {
+    <button type="button" commandfor={target} command="close" value="cancel" data-slot="alert-dialog-cancel" class={cn(buttonVariants({ variant: "outline" }), attrs.class)} {...attrs}>{children}</button>
+  }
+}

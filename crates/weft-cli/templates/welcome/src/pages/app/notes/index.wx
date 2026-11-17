@@ -1,0 +1,85 @@
+import { redirect, type PageContext } from "@weft/server";
+import { fail } from "@weft/server/action";
+import { emptyRichText } from "@weft/runtime";
+import { gate, meOf, type Me } from "../../../lib/workspaces.ts";
+import { Notes, excerpt, newNoteId, type Note } from "../../../lib/notes.ts";
+import { nameOf } from "../../../lib/users.ts";
+import { AppShell } from "../../../components/AppShell.wx";
+import { Icon } from "../../../components/Icon.wx";
+import { buttonVariants } from "../../../components/ui/button.wx";
+import { activityWhen } from "../../../components/ui/activity-feed.wx";
+
+export const meta = { title: "Notes" };
+
+export function load(ctx: PageContext) {
+  const g = gate(ctx, "notes.read");
+  if (!g.ok) return g.redirect;
+  return { me: g.me, path: ctx.url.pathname };
+}
+
+action newNote() {
+  const me = meOf(ctx)
+  if (!me?.tenant) fail("Pick a workspace first.")
+  const note = Notes.as(me).create({
+    id: newNoteId(),
+    workspace: me.tenant,
+    title: "Untitled",
+    body: JSON.stringify(emptyRichText()),
+    author: me.id,
+    shared: false,
+    updated: Date.now(),
+    deleted: null,
+  })
+  if (!note) fail("Your role does not let you write notes.")
+  return redirect("/app/notes/" + note.id)
+}
+
+export function notes(me: Me, mine: boolean): Note[] {
+  return Notes.as(me)
+    .where((n) => (mine ? n.author === me.id : n.author !== me.id))
+    .sort((a, b) => b.updated - a.updated);
+}
+
+component Page(me: Me, path: string) {
+  view {
+    <AppShell me={me} path={path} title="Notes">
+      <div class="flex items-center justify-between gap-4">
+        <p class="text-muted-foreground max-w-prose text-[15px]">A note is yours alone until you share it with the workspace. A share link opens one note for anyone who has it, for a day.</p>
+        {#if me.can("notes.edit")}
+          <form action={newNote}>
+            <button class={buttonVariants({})}>
+              <Icon name="plus" />
+              New note
+            </button>
+          </form>
+        {/if}
+      </div>
+
+      {#each [true, false] as mine}
+        <section aria-labelledby={mine ? "mine-h" : "shared-h"} class="mt-10">
+          <h2 id={mine ? "mine-h" : "shared-h"} class="mb-3 text-sm font-semibold">{mine ? "Yours" : "Shared with the workspace"}</h2>
+          {#if notes(me, mine).length === 0}
+            <p class="text-muted-foreground rounded-lg border border-dashed px-4 py-8 text-center text-sm">{mine ? "You have not written a note yet." : "Nobody has shared a note yet."}</p>
+          {:else}
+            <ul class="grid gap-3 sm:grid-cols-2">
+              {#each notes(me, mine) as n (n.id)}
+                <li>
+                  <a href={"/app/notes/" + n.id} class="hover:border-foreground/30 block h-full rounded-lg border p-4 transition-colors">
+                    <span class="flex items-center gap-2">
+                      <span class="min-w-0 flex-1 truncate font-medium">{n.title}</span>
+                      {#if mine && n.shared}
+                        <span class="text-muted-foreground flex items-center gap-1 text-xs"><Icon name="users" class="size-3.5" />Shared</span>
+                      {/if}
+                    </span>
+                    <span class="text-muted-foreground mt-1.5 line-clamp-2 block text-sm">{excerpt(n) || "Empty"}</span>
+                    <span class="text-muted-foreground mt-3 block text-xs">{mine ? "" : nameOf(n.author) + ", "}{activityWhen(n.updated, Date.now())}</span>
+                  </a>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        </section>
+      {/each}
+    </AppShell>
+  }
+}

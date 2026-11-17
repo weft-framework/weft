@@ -1,0 +1,157 @@
+import type { PageContext } from "@weft/server";
+import { activity, type ActivityItem } from "@weft/data";
+import { gate, type Me } from "../../lib/workspaces.ts";
+import { Tasks, taskHistory, STATUS_LABEL, type Task } from "../../lib/tasks.ts";
+import { Notes, noteHistory } from "../../lib/notes.ts";
+import { bookings, roomOf } from "../../lib/rooms.ts";
+import { notify } from "../../lib/notify.ts";
+import { nameOf, namesFor } from "../../lib/users.ts";
+import { AppShell } from "../../components/AppShell.wx";
+import { Icon } from "../../components/Icon.wx";
+import { LiveStat } from "../../components/ui/live-stat.wx";
+import { ActivityFeed } from "../../components/ui/activity-feed.wx";
+import { Badge } from "../../components/ui/badge.wx";
+import { buttonVariants } from "../../components/ui/button.wx";
+
+export const meta = { title: "Overview" };
+
+export async function load(ctx: PageContext) {
+  const g = gate(ctx);
+  if (!g.ok) return g.redirect;
+  const now = Date.now();
+  const upcoming = g.me.can("calendar.book") ? await bookings.mine(ctx, { from: now, to: now + 7 * 86_400_000 }) : [];
+  const zone = String(g.me.setting("calendar.zone") ?? "UTC");
+  return {
+    me: g.me,
+    workspace: g.workspace.name,
+    path: ctx.url.pathname,
+    upcoming: upcoming
+      .filter((b) => b.status === "active" && b.resource.startsWith(g.workspace.id + "~"))
+      .slice(0, 4)
+      .map((b) => ({ id: b.id, room: roomOf(b.resource)?.name ?? "Room", when: when(b.start, zone), note: b.note })),
+  };
+}
+
+export function when(at: number, zone: string): string {
+  return new Intl.DateTimeFormat("en-GB", { timeZone: zone, weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(at);
+}
+
+export function feed(me: Me): ActivityItem[] {
+  return activity(
+    [
+      {
+        history: taskHistory,
+        scoped: Tasks.as(me),
+        describe: (v) => {
+          const title = v.row.title ?? "a task";
+          if (v.action === "create") return `added ${title}`;
+          if (v.action === "trash") return `moved ${title} to the trash`;
+          if (v.action === "restore") return `restored ${title}`;
+          const status = v.changes.find((c) => c.field === "status");
+          if (status) return `moved ${title} to ${STATUS_LABEL[String(status.after)] ?? status.after}`;
+          const assignee = v.changes.find((c) => c.field === "assignee");
+          if (assignee) return assignee.after ? `gave ${title} to ${nameOf(String(assignee.after))}` : `unassigned ${title}`;
+          return `edited ${title}`;
+        },
+      },
+      {
+        history: noteHistory,
+        scoped: Notes.as(me),
+        describe: (v) => (v.action === "create" ? `wrote ${v.row.title ?? "a note"}` : v.action === "update" ? `edited ${v.row.title ?? "a note"}` : null),
+      },
+    ],
+    { limit: 12 },
+  );
+}
+
+export function mine(me: Me): Task[] {
+  return Tasks.as(me)
+    .where((t) => t.assignee === me.id && t.status !== "done")
+    .sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999") || a.created - b.created)
+    .slice(0, 6);
+}
+
+component Page(me: Me, workspace: string, path: string, upcoming: { id: string; room: string; when: string; note: string }[]) {
+  view {
+    <AppShell me={me} path={path} title={workspace}>
+      <h2 class="text-2xl font-semibold tracking-[-0.02em]">Hello, {nameOf(me.id).split(" ")[0]}</h2>
+      <p class="text-muted-foreground mt-1 text-[15px]">Here is what is moving in {workspace}. Everything on this page updates as it happens.</p>
+
+      <div class="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <LiveStat label="Open tasks" value={() => Tasks.as(me).where((t) => t.status !== "done").length} />
+        <LiveStat label="Waiting for review" value={() => Tasks.as(me).where((t) => t.status === "review").length} hint={me.can("tasks.approve") ? "you may approve" : undefined} />
+        <LiveStat label="Given to you" value={() => mine(me).length} />
+        <LiveStat label="Unread" value={() => notify.unread(me.id)} />
+      </div>
+
+      <div class="mt-10 grid gap-10 lg:grid-cols-[1fr_20rem]">
+        <section aria-labelledby="mine-h">
+          <div class="mb-3 flex items-center justify-between">
+            <h3 id="mine-h" class="text-sm font-semibold">Your tasks</h3>
+            {#if me.can("tasks.read")}
+              <a href="/app/tasks" class="text-muted-foreground hover:text-foreground text-sm">All tasks</a>
+            {/if}
+          </div>
+          {#if mine(me).length === 0}
+            <div class="text-muted-foreground rounded-lg border border-dashed px-4 py-8 text-center text-sm">
+              Nothing is given to you.
+              {#if me.can("tasks.edit")}
+                <a href="/app/tasks" class="text-foreground ml-1 underline-offset-4 hover:underline">Add a task</a>
+              {/if}
+            </div>
+          {:else}
+            <ul class="divide-y rounded-lg border">
+              {#each mine(me) as t (t.id)}
+                <li>
+                  <a href={"/app/tasks/" + t.id} class="hover:bg-muted/50 flex items-center gap-3 px-4 py-3 text-sm transition-colors">
+                    <span class="min-w-0 flex-1 truncate">{t.title}</span>
+                    {#if t.due}
+                      <span class="text-muted-foreground text-xs tabular-nums">due {t.due}</span>
+                    {/if}
+                    <Badge variant={t.status === "review" ? "default" : "secondary"}>{STATUS_LABEL[t.status]}</Badge>
+                  </a>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+
+          <h3 class="mt-10 mb-3 text-sm font-semibold">Activity</h3>
+          <ActivityFeed items={feed(me)} names={namesFor(feed(me).map((i) => i.actor))} empty="Nothing yet. Add a task or write a note and it shows up here." />
+        </section>
+
+        <aside class="flex flex-col gap-8">
+          {#if me.can("calendar.book")}
+            <section aria-labelledby="rooms-h">
+              <h3 id="rooms-h" class="mb-3 text-sm font-semibold">Your bookings this week</h3>
+              {#if upcoming.length === 0}
+                <p class="text-muted-foreground text-sm">No rooms booked.</p>
+              {:else}
+                <ul class="flex flex-col gap-2">
+                  {#each upcoming as b (b.id)}
+                    <li class="rounded-lg border px-3 py-2.5 text-sm">
+                      <span class="flex items-center gap-2 font-medium"><Icon name="calendar" class="text-muted-foreground" />{b.room}</span>
+                      <span class="text-muted-foreground mt-0.5 block tabular-nums">{b.when}</span>
+                      {#if b.note}
+                        <span class="text-muted-foreground mt-0.5 block truncate">{b.note}</span>
+                      {/if}
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
+              <a href="/app/rooms" class={buttonVariants({ variant: "outline", size: "sm" }) + " mt-3"}>Book a room</a>
+            </section>
+          {/if}
+          <section aria-labelledby="try-h" class="text-sm">
+            <h3 id="try-h" class="mb-3 font-semibold">Things to try</h3>
+            <ul class="text-muted-foreground flex flex-col gap-2.5">
+              <li>Open this page in a second window and add a task in the first: the numbers change in both.</li>
+              <li>Invite someone as a guest from People, then sign in as them: what they can do follows their role.</li>
+              <li>Turn on two-factor sign-in or add a passkey on your Account page.</li>
+              <li>Mail never leaves your machine in development: read it at <a href="/_weft/dev/mail" class="text-foreground underline-offset-4 hover:underline">/_weft/dev/mail</a>.</li>
+            </ul>
+          </section>
+        </aside>
+      </div>
+    </AppShell>
+  }
+}

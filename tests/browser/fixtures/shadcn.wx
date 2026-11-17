@@ -1,0 +1,77 @@
+// Components from `weft add --all`, used as an app would use them.
+
+import { buttonVariants } from "../components/ui/button.wx";
+import { Dialog, DialogTrigger, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "../components/ui/dialog.wx";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs.wx";
+import { DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuCheckboxItem } from "../components/ui/dropdown-menu.wx";
+import { Select, SelectItem } from "../components/ui/select.wx";
+import { ToggleGroup, ToggleGroupItem } from "../components/ui/toggle-group.wx";
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "../components/ui/accordion.wx";
+import { Calendar } from "../components/ui/calendar.wx";
+import { InputOTP } from "../components/ui/input-otp.wx";
+import { Badge } from "../components/ui/badge.wx";
+
+component Page() {
+  signal hits = 0
+
+  function hit() {
+    hits = hits + 1
+  }
+
+  view {
+    <h1>shadcn</h1>
+    <p id="hits">hits {hits}</p>
+    <button id="hit" type="button" class={buttonVariants({})} @click={hit}>Hit</button>
+    <Badge variant="secondary">new</Badge>
+
+    <DialogTrigger target="edit">Edit profile</DialogTrigger>
+    <Dialog id="edit">
+      <DialogHeader>
+        <DialogTitle dialog="edit">Edit profile</DialogTitle>
+        <DialogDescription dialog="edit">Make changes here.</DialogDescription>
+      </DialogHeader>
+      <input id="edit-name" aria-label="Name" />
+      <DialogFooter><DialogClose id="edit-cancel" target="edit">Cancel</DialogClose></DialogFooter>
+    </Dialog>
+
+    <Tabs id="t">
+      <TabsList label="Settings">
+        <TabsTrigger value="account" active>Account</TabsTrigger>
+        <TabsTrigger value="password">Password</TabsTrigger>
+      </TabsList>
+      <TabsContent value="account" active>Account panel</TabsContent>
+      <TabsContent value="password">Password panel</TabsContent>
+    </Tabs>
+
+    <DropdownMenuTrigger id="menu-open" menu="m">Open menu</DropdownMenuTrigger>
+    <DropdownMenuContent id="m">
+      <DropdownMenuItem id="menu-first">Profile</DropdownMenuItem>
+      <DropdownMenuItem>Billing</DropdownMenuItem>
+      <DropdownMenuCheckboxItem id="menu-check">Status bar</DropdownMenuCheckboxItem>
+    </DropdownMenuContent>
+
+    <form id="f">
+      <Select id="fruit" name="fruit" placeholder="Pick a fruit" label="Fruit">
+        <SelectItem value="apple">Apple</SelectItem>
+        <SelectItem value="banana">Banana</SelectItem>
+      </Select>
+      <ToggleGroup mode="single" name="align" label="Align">
+        <ToggleGroupItem value="left" pressed>Left</ToggleGroupItem>
+        <ToggleGroupItem value="right">Right</ToggleGroupItem>
+      </ToggleGroup>
+      <InputOTP name="code" length={4} label="Code" />
+      <Calendar id="cal" name="due" value="2026-11-14" />
+    </form>
+
+    <Accordion>
+      <AccordionItem name="faq" open>
+        <AccordionTrigger>One</AccordionTrigger>
+        <AccordionContent>First</AccordionContent>
+      </AccordionItem>
+      <AccordionItem name="faq">
+        <AccordionTrigger>Two</AccordionTrigger>
+        <AccordionContent>Second</AccordionContent>
+      </AccordionItem>
+    </Accordion>
+  }
+}

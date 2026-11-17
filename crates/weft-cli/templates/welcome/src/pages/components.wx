@@ -1,0 +1,69 @@
+import type { PageContext } from "@weft/server";
+import { visit } from "../lib/presence.ts";
+import { groups, title } from "../lib/catalog.ts";
+import { buttonVariants } from "../components/ui/button.wx";
+import { Badge } from "../components/ui/badge.wx";
+import { inputClass } from "../components/ui/input.wx";
+import { Switch } from "../components/ui/switch.wx";
+import { Progress } from "../components/ui/progress.wx";
+import { Kbd } from "../components/ui/kbd.wx";
+
+export const meta = { title: "Components" };
+
+export function load(ctx: PageContext) {
+  visit(ctx, "/components");
+  return {};
+}
+
+export function total(): number {
+  return groups.reduce((n, g) => n + g.names.length, 0);
+}
+
+component Page() {
+  view {
+    <article class="mx-auto max-w-6xl px-4 pt-14 pb-20 sm:px-6 sm:pt-20">
+      <header class="max-w-3xl">
+        <h1 class="text-[clamp(2.25rem,5vw,3.5rem)] leading-[1] font-semibold tracking-[-0.04em]">Components</h1>
+        <p class="text-muted-foreground mt-5 max-w-2xl text-lg leading-relaxed text-pretty">{total()} components, already copied into src/components/ui. They are your code now: read them, change them, delete the ones you do not use. Projects without them get any one back with weft add.</p>
+      </header>
+
+      <section aria-label="A few of them" class="bg-card mt-10 flex flex-wrap items-center gap-x-8 gap-y-5 rounded-xl border p-6">
+        <div class="flex flex-wrap gap-2">
+          <button type="button" class={buttonVariants({})}>Primary</button>
+          <button type="button" class={buttonVariants({ variant: "secondary" })}>Secondary</button>
+          <button type="button" class={buttonVariants({ variant: "outline" })}>Outline</button>
+          <button type="button" class={buttonVariants({ variant: "ghost" })}>Ghost</button>
+        </div>
+        <div class="flex gap-2">
+          <Badge>New</Badge>
+          <Badge variant="secondary">Draft</Badge>
+          <Badge variant="outline">v1.2</Badge>
+        </div>
+        <label class="flex items-center gap-3 text-sm">
+          <Switch name="alerts" checked={true} />
+          Email alerts
+        </label>
+        <input class={inputClass + " max-w-56"} placeholder="Search" aria-label="Search" />
+        <div class="w-40"><Progress value={64} label="Upload progress" /></div>
+        <p class="text-muted-foreground flex items-center gap-1.5 text-sm">Press <Kbd>Ctrl</Kbd><Kbd>K</Kbd></p>
+      </section>
+
+      {#each groups as g (g.title)}
+        <section class="mt-14" aria-labelledby={"g-" + g.names[0]}>
+          <div class="flex flex-wrap items-baseline justify-between gap-2 border-b pb-3">
+            <h2 id={"g-" + g.names[0]} class="text-lg font-semibold tracking-tight">{g.title}</h2>
+            <p class="text-muted-foreground text-sm">{g.note}</p>
+          </div>
+          <ul class="mt-2 grid sm:grid-cols-2 lg:grid-cols-3">
+            {#each g.names as n (n)}
+              <li class="flex items-center justify-between gap-3 border-b py-3 sm:pr-6">
+                <span class="font-medium">{title(n)}</span>
+                <code class="text-muted-foreground font-mono text-xs">weft add {n}</code>
+              </li>
+            {/each}
+          </ul>
+        </section>
+      {/each}
+    </article>
+  }
+}

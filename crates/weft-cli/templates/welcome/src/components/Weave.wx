@@ -1,0 +1,52 @@
+import type { Visitor } from "../lib/presence.ts";
+import { THREADS } from "../lib/guest.ts";
+import { MIN_ROWS, WEAVE_WIDTH, thread, warpXs, weaveHeight, type WeftThread } from "../lib/weave.ts";
+
+const PAGES: Record<string, string> = { "/": "the front page", "/components": "Components", "/sign-in": "Sign in", "/sign-up": "Sign up" };
+
+export function pageName(path: string): string {
+  return PAGES[path] ?? path;
+}
+
+export function rows(visitors: readonly Visitor[]): { v: Visitor; t: WeftThread; color: string }[] {
+  const skip = Math.max(0, Math.floor((MIN_ROWS - visitors.length) / 2));
+  return visitors.map((v, i) => ({ v, t: thread(i + skip), color: THREADS[v.color % THREADS.length] }));
+}
+
+component Weave(visitors: readonly Visitor[], me: string) {
+  view {
+    <figure class="weave">
+      <svg viewBox={"0 0 " + WEAVE_WIDTH + " " + weaveHeight(visitors.length)} preserveAspectRatio="xMidYMid slice" class="block h-auto min-h-40 w-full" role="img" aria-label={visitors.length === 1 ? "One page open: yours" : visitors.length + " pages open on this site"}>
+        <g class="text-foreground/12" stroke="currentColor" stroke-width="2">
+          {#each warpXs() as x}
+            <line x1={String(x)} x2={String(x)} y1="0" y2={String(weaveHeight(visitors.length))} />
+          {/each}
+        </g>
+        {#each rows(visitors) as r (r.v.tab)}
+          <g class="weft-thread">
+            <path d={r.t.d} pathLength="1" class="weft-line" fill="none" stroke={r.color} stroke-width={r.v.tab === me ? "7" : "5"} stroke-linecap="round" />
+            <g class="weft-over text-background" stroke="currentColor" stroke-width="4">
+              {#each r.t.over as o}
+                <line x1={String(o.x)} x2={String(o.x)} y1={String(o.y1)} y2={String(o.y2)} />
+              {/each}
+            </g>
+            <g class="weft-over text-foreground/12" stroke="currentColor" stroke-width="2">
+              {#each r.t.over as o}
+                <line x1={String(o.x)} x2={String(o.x)} y1={String(o.y1)} y2={String(o.y2)} />
+              {/each}
+            </g>
+          </g>
+        {/each}
+      </svg>
+      <figcaption class="mx-auto flex max-w-6xl flex-wrap gap-x-6 gap-y-2 px-4 pt-5 text-sm sm:px-6">
+        {#each visitors as v (v.tab)}
+          <span class="flex items-center gap-2">
+            <svg viewBox="0 0 10 10" class="size-2.5" aria-hidden="true"><circle cx="5" cy="5" r="5" fill={THREADS[v.color % THREADS.length]} /></svg>
+            <span class="font-medium">{v.name}</span>
+            <span class="text-muted-foreground">{v.tab === me ? "you, on " + pageName(v.page) : pageName(v.page)}</span>
+          </span>
+        {/each}
+      </figcaption>
+    </figure>
+  }
+}

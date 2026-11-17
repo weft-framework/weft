@@ -1,0 +1,32 @@
+import type { PageMeta } from "@weft/server";
+import { NavBar } from "../components/NavBar.wx";
+import { Logo } from "../components/Logo.wx";
+
+export const meta: PageMeta = {
+  titleTemplate: "%s | {{name}}",
+  description: "A team workspace built with Weft: live tasks, notes, chat, room booking, sign-in and teams.",
+};
+
+export function inApp(path: string): boolean {
+  return path === "/app" || path.startsWith("/app/");
+}
+
+component Layout(children: Html, path: string) {
+  view {
+    {#if inApp(path)}
+      {children}
+    {:else}
+      <NavBar path={path} />
+      <main id="main">{children}</main>
+      <footer class="border-t">
+        <div class="text-muted-foreground mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-8 text-sm sm:px-6">
+          <p>Every page here is a file in <code class="text-foreground font-mono text-[13px]">src/pages</code>. Edit one and save: the browser updates.</p>
+          <p class="flex items-center gap-2">
+            <Logo class="text-foreground size-4" />
+            Something off? Run <code class="text-foreground font-mono text-[13px]">weft doctor</code>
+          </p>
+        </div>
+      </footer>
+    {/if}
+  }
+}

@@ -1,0 +1,24 @@
+// Streaming SSR: the page is sent with the pending branch, the settled
+// value follows in the same response and is swapped in before the client
+// runtime boots; the live page then carries on from that state.
+
+export function load() {
+  return { slow: new Promise<string>((resolve) => setTimeout(() => resolve("ready"), 300)) }
+}
+
+component Page(slow: Promise<string>) {
+  signal n = 0
+
+  function inc() {
+    n += 1
+  }
+
+  view {
+    {#await slow}
+      <p id="state">loading</p>
+    {:then v}
+      <p id="state">{v}</p>
+    {/await}
+    <button id="inc" @click={inc}>{n}</button>
+  }
+}

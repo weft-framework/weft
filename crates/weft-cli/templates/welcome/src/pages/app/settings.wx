@@ -1,0 +1,138 @@
+import { redirect, type PageContext } from "@weft/server";
+import { fail } from "@weft/server/action";
+import { access } from "../../access.ts";
+import { gate, meOf, ZONES, type Me } from "../../lib/workspaces.ts";
+import { AppShell } from "../../components/AppShell.wx";
+import { Icon } from "../../components/Icon.wx";
+import { buttonVariants } from "../../components/ui/button.wx";
+import { inputClass } from "../../components/ui/input.wx";
+import { labelClass } from "../../components/ui/label.wx";
+import { NativeSelect, NativeSelectOption } from "../../components/ui/native-select.wx";
+
+export const meta = { title: "Workspace settings" };
+
+const HOURS = ["08:00-17:00", "09:00-18:00", "10:00-19:00"] as const;
+type Hours = (typeof HOURS)[number];
+
+export function load(ctx: PageContext) {
+  const g = gate(ctx, "access.settings.manage");
+  if (!g.ok) return g.redirect;
+  const values = access.settings(g.me, g.workspace.id);
+  return {
+    me: g.me,
+    path: ctx.url.pathname,
+    name: g.workspace.name,
+    review: values["tasks.review"] === true,
+    hours: String(values["calendar.hours"]),
+    zone: String(values["calendar.zone"]),
+    seats: access.seatUse(g.workspace.id),
+    canRename: g.me.can("access.tenant.manage"),
+    saved: ctx.query.get("saved") ?? "",
+  };
+}
+
+const refusedBy = (e: unknown) => {
+  if ((e as { name?: string })?.name !== "AccessError") throw e;
+  return (e as { code: string }).code === "forbidden" ? "Your role cannot change this." : "That value is not allowed.";
+};
+
+action saveSettings(review: boolean, hours: string, zone: string) {
+  const me = meOf(ctx)
+  if (!me?.tenant) fail("Pick a workspace first.")
+  if (!(HOURS as readonly string[]).includes(hours)) fail("Pick opening hours from the list.")
+  if (!ZONES.includes(zone)) fail("Pick a time zone from the list.")
+  try {
+    access.updateSettings(me, me.tenant, { "tasks.review": review, "calendar.hours": hours as Hours, "calendar.zone": zone })
+  } catch (e) {
+    fail(refusedBy(e))
+  }
+  return redirect("/app/settings?saved=settings")
+}
+
+action renameWorkspace(name: string) {
+  const me = meOf(ctx)
+  if (!me?.tenant) fail("Pick a workspace first.")
+  const next = name.trim().replace(/\s+/g, " ")
+  if (next.length < 2 || next.length > 60) fail("A name is 2 to 60 characters.")
+  try {
+    access.renameScope(me, me.tenant, next)
+  } catch (e) {
+    fail(refusedBy(e))
+  }
+  return redirect("/app/settings?saved=name")
+}
+
+export interface Seats {
+  used: number;
+  limit: number | null;
+}
+
+component Page(me: Me, path: string, name: string, review: boolean, hours: string, zone: string, seats: Seats, canRename: boolean, saved: string) {
+  view {
+    <AppShell me={me} path={path} title="Workspace settings">
+      {#if saved}
+        <p role="status" class="mb-6 flex items-center gap-2 text-sm"><Icon name="check" />{saved === "name" ? "Workspace renamed." : "Settings saved. They apply to everyone here at once."}</p>
+      {/if}
+      <div class="flex max-w-2xl flex-col gap-10">
+        {#if canRename}
+          <section aria-labelledby="name-h">
+            <h2 id="name-h" class="text-sm font-semibold">Name</h2>
+            <p class="text-muted-foreground mt-1 mb-4 text-sm">Shown in the sidebar, in invites and in emails.</p>
+            <form action={renameWorkspace} class="flex gap-2">
+              <input name="name" aria-label="Workspace name" value={name} required minlength="2" maxlength="60" class={inputClass + " max-w-sm"} />
+              <button class={buttonVariants({ variant: "outline" })}>Rename</button>
+              <p data-weft-message role="alert" class="text-destructive self-center text-sm empty:hidden"></p>
+            </form>
+          </section>
+        {/if}
+
+        <form action={saveSettings} class="flex flex-col gap-8">
+          <section aria-labelledby="review-h">
+            <h2 id="review-h" class="text-sm font-semibold">Tasks</h2>
+            <label class="mt-4 flex items-start gap-3">
+              <input type="checkbox" name="review" value="true" checked={review} class="accent-primary mt-0.5 size-4" />
+              <span class="text-sm">
+                Review before done
+                <span class="text-muted-foreground block">Finished tasks wait in review until an admin or owner approves them. Off: whoever finishes a task marks it done.</span>
+              </span>
+            </label>
+          </section>
+
+          <section aria-labelledby="rooms-h" class="grid gap-4 sm:grid-cols-2">
+            <h2 id="rooms-h" class="text-sm font-semibold sm:col-span-2">Rooms</h2>
+            <div class="flex flex-col gap-1.5">
+              <label for="hours" class={labelClass}>Open</label>
+              <NativeSelect id="hours" name="hours" class="w-full">
+                {#each HOURS as h}
+                  <NativeSelectOption value={h} selected={h === hours}>{h.replace("-", " to ")}, Monday to Friday</NativeSelectOption>
+                {/each}
+              </NativeSelect>
+            </div>
+            <div class="flex flex-col gap-1.5">
+              <label for="zone" class={labelClass}>Time zone</label>
+              <NativeSelect id="zone" name="zone" class="w-full">
+                {#each ZONES as z}
+                  <NativeSelectOption value={z} selected={z === zone}>{z.replace("_", " ")}</NativeSelectOption>
+                {/each}
+              </NativeSelect>
+            </div>
+            <p class="text-muted-foreground text-sm sm:col-span-2">Free times and reminders follow these. Bookings already made keep their time.</p>
+          </section>
+
+          <div class="flex items-center gap-3">
+            <button class={buttonVariants({}) + " w-fit"}>Save settings</button>
+            <p data-weft-message role="alert" class="text-destructive text-sm empty:hidden"></p>
+          </div>
+        </form>
+
+        <section aria-labelledby="seats-h">
+          <h2 id="seats-h" class="text-sm font-semibold">Seats</h2>
+          <p class="text-muted-foreground mt-1 text-sm">
+            {seats.limit === null ? seats.used + " people." : seats.used + " of " + seats.limit + " seats used. An invite cannot be accepted when every seat is taken."}
+            The seat count is set by the app (it is not editable here), the way a plan would set it.
+          </p>
+        </section>
+      </div>
+    </AppShell>
+  }
+}

@@ -1,0 +1,29 @@
+import { redirect, type PageContext } from "@weft/server";
+import { fail } from "@weft/server/action";
+import { account } from "../../lib/accounts.ts";
+import { AuthShell } from "../../components/AuthShell.wx";
+import { buttonVariants } from "../../components/ui/button.wx";
+
+export const meta = { title: "Confirm your account" };
+
+export function load(ctx: PageContext) {
+  return { token: ctx.query.get("token") ?? "" };
+}
+
+action confirmSignUp(token: string) {
+  const r = await account.completeSignUp(ctx, token)
+  if (!r) fail("This link has been used or has expired. Sign up again to get a new one.")
+  return redirect(r.login === "two-factor" ? "/sign-in/two-factor" : "/app/welcome")
+}
+
+component Page(token: string) {
+  view {
+    <AuthShell title="Confirm your account" lead="One step left: create the account for the address this link was sent to.">
+      <form action={confirmSignUp} class="flex flex-col gap-4">
+        <input type="hidden" name="token" value={token} />
+        <p data-weft-message role="alert" class="text-destructive text-sm empty:hidden"></p>
+        <button class={buttonVariants({})}>Create my account</button>
+      </form>
+    </AuthShell>
+  }
+}

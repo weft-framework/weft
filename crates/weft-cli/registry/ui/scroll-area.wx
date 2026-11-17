@@ -1,0 +1,7 @@
+import { cn } from "../../lib/utils.ts";
+
+component ScrollArea(label?: string, orientation?: "vertical" | "horizontal" | "both", children: Html, ...attrs: Attrs) {
+  view {
+    <div role="region" tabindex="0" aria-label={label} data-orientation={orientation ?? "vertical"} data-slot="scroll-area" class={cn("focus-visible:ring-ring/50 relative overscroll-contain rounded-[inherit] transition-[color,box-shadow] outline-none [scrollbar-color:var(--color-border)_transparent] [scrollbar-width:thin] focus-visible:ring-[3px] data-[orientation=vertical]:overflow-y-auto data-[orientation=horizontal]:overflow-x-auto data-[orientation=both]:overflow-auto", attrs.class)} {...attrs}>{children}</div>
+  }
+}

@@ -1,0 +1,28 @@
+import { cn } from "../../lib/utils.ts";
+import { Avatar } from "./avatar.wx";
+
+export interface Present {
+  name: string;
+  image?: string;
+}
+
+export function initials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  return words.slice(0, 2).map((w) => w[0].toUpperCase()).join("") || "?";
+}
+
+component PresenceStack(presence: { in(room: string): readonly Present[] }, room: string, max?: number, ...attrs: Attrs) {
+  view {
+    <div data-slot="presence-stack" data-count={String(presence.in(room).length)} class={cn("flex items-center gap-2", attrs.class)} {...attrs}>
+      <div class="flex -space-x-2">
+        {#each presence.in(room).slice(0, max ?? 5) as p}
+          <Avatar src={p.image} alt={p.name} fallback={initials(p.name)} title={p.name} class="ring-background ring-2 [&_[data-slot=avatar-fallback]]:text-xs [&_[data-slot=avatar-fallback]]:font-medium" />
+        {/each}
+        {#if presence.in(room).length > (max ?? 5)}
+          <span class="bg-muted text-muted-foreground ring-background relative flex size-8 items-center justify-center rounded-full text-xs ring-2">+{presence.in(room).length - (max ?? 5)}</span>
+        {/if}
+      </div>
+      <span class="text-muted-foreground text-sm" aria-live="polite">{presence.in(room).length == 1 ? "1 viewing" : presence.in(room).length + " viewing"}</span>
+    </div>
+  }
+}

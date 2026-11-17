@@ -1,0 +1,23 @@
+{
+  "name": "@weft/i18n",
+  "version": "0.0.1",
+  "description": "Weft translations: ICU message catalogs with type-checked keys and parameters, locale negotiation (URL prefix, cookie, Accept-Language), localised routes, Intl formatting, lang/dir on <html>.",
+  "license": "MIT",
+  "author": "Vakea",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": {
+      "types": "./client.d.ts",
+      "default": "./client.js"
+    }
+  },
+  "files": [
+    "src",
+    "client.js",
+    "client.d.ts"
+  ],
+  "scripts": {
+    "test": "node --test --experimental-strip-types test/*.test.ts"
+  }
+}

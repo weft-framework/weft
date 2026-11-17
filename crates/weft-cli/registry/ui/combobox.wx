@@ -1,0 +1,36 @@
+import { cn } from "../../lib/utils.ts";
+import { inputClass } from "./input.wx";
+client import { combobox } from "@weft/ui"
+
+export interface ComboboxOption {
+  value: string;
+  label: string;
+  disabled?: boolean;
+}
+
+component Combobox(id: string, options: ComboboxOption[], name?: string, value?: string, label?: string, placeholder?: string, empty?: string, ...attrs: Attrs) {
+  client function syncValue(el: HTMLElement) {
+    const hidden = el.querySelector<HTMLInputElement>("input[type=hidden]")
+    const onChange = (e: Event) => {
+      if (hidden) hidden.value = String((e as CustomEvent).detail ?? "")
+    }
+    el.addEventListener("weft:change", onChange)
+    return () => el.removeEventListener("weft:change", onChange)
+  }
+
+  view {
+    <div data-slot="combobox" class={cn("relative w-[200px]", attrs.class)} use:combobox use:syncValue {...attrs}>
+      <input type="hidden" name={name} value={value ?? ""} />
+      <input id={id} role="combobox" aria-expanded="false" aria-label={label} placeholder={placeholder} autocomplete="off" value={options.find((o) => o.value === value)?.label ?? ""} class={inputClass} />
+      <div role="listbox" hidden aria-label={label} data-slot="combobox-list" class="bg-popover text-popover-foreground absolute top-full z-50 mt-1 max-h-72 w-full overflow-y-auto rounded-md border p-1 shadow-md">
+        {#each options as o}
+          <div role="option" data-value={o.value} aria-selected={o.value === value ? "true" : "false"} aria-disabled={o.disabled ? "true" : undefined} class="data-[active]:bg-accent data-[active]:text-accent-foreground group relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none aria-disabled:pointer-events-none aria-disabled:opacity-50">
+            {o.label}
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ml-auto hidden size-4 group-aria-selected:block" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+          </div>
+        {/each}
+        <div data-weft-empty hidden class="py-6 text-center text-sm">{empty ?? "No results."}</div>
+      </div>
+    </div>
+  }
+}

@@ -1,0 +1,53 @@
+import { fail } from "@weft/server/action"
+
+interface Entry {
+  name: string
+  stars: number
+}
+
+store app entries: Entry[] = []
+store session mine = 0
+
+action sign(name: string, stars: number, anonymous: boolean): Promise<number> {
+  const who = anonymous ? "Anonymous" : name.trim()
+  if (who === "") fail("Please give a name")
+  if (stars < 1 || stars > 5) fail("Stars go from 1 to 5")
+  entries.value = [...entries.value, { name: who, stars }]
+  mine.value = mine.value + 1
+  return entries.value.length
+}
+
+component Guestbook() {
+  derived count = entries.value.length
+  derived average = count === 0 ? 0 : entries.value.reduce((sum, e) => sum + e.stars, 0) / count
+
+  view {
+    <section class="guestbook">
+      <h1>Guestbook</h1>
+      <p class="summary" hidden={count === 0}>{count} signatures, {average.toFixed(1)} stars on average</p>
+
+      <form action={sign}>
+        <label>Name <input name="name" /></label>
+        <label>Stars <input name="stars" type="number" min="1" max="5" value="5" /></label>
+        <label><input name="anonymous" type="checkbox" /> Sign anonymously</label>
+        <button>Sign</button>
+        <p class="error" data-weft-message role="alert"></p>
+      </form>
+
+      {#if count === 0}
+        <p class="empty">Be the first to sign.</p>
+      {:else}
+        <ul>
+          {#each entries.value as entry, i (i)}
+            <li>
+              <strong>{entry.name}</strong>
+              <span class="stars" aria-label={entry.stars + " out of 5"}>{"*".repeat(entry.stars)}</span>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+
+      <p class="mine">You have signed {mine.value} times.</p>
+    </section>
+  }
+}

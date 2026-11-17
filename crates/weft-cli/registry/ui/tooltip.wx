@@ -1,0 +1,15 @@
+import { cn } from "../../lib/utils.ts";
+client import { tooltip } from "@weft/ui"
+
+client const tooltipClass = "bg-foreground text-background z-50 m-0 w-fit rounded-md border-0 px-3 py-1.5 text-xs text-balance";
+
+component Tooltip(content: string, placement?: "top" | "bottom" | "left" | "right", delay?: number, children: Html, ...attrs: Attrs) {
+  client function tip(el: HTMLElement, o: { text: string, side: "top" | "bottom" | "left" | "right", wait: number }) {
+    const target = el.querySelector<HTMLElement>("a[href],button,input,select,textarea,[tabindex]") ?? el;
+    return tooltip(target, { text: o.text, placement: o.side, delay: o.wait, class: tooltipClass })
+  }
+
+  view {
+    <span data-slot="tooltip" class={cn("inline-flex", attrs.class)} use:tip={{ text: content, side: placement ?? "top", wait: delay ?? 400 }} {...attrs}>{children}</span>
+  }
+}

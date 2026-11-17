@@ -1,0 +1,203 @@
+import type { PageContext } from "@weft/server";
+import type { WeftEvent } from "@weft/runtime";
+import { parseCsv, transaction } from "@weft/data";
+import { gate, type Me } from "../../../lib/workspaces.ts";
+import { createTask } from "../../../lib/tasks.ts";
+import { userByEmail } from "../../../lib/users.ts";
+import { access } from "../../../access.ts";
+import { AppShell } from "../../../components/AppShell.wx";
+import { Icon } from "../../../components/Icon.wx";
+import { buttonVariants } from "../../../components/ui/button.wx";
+import { inputClass } from "../../../components/ui/input.wx";
+import { labelClass } from "../../../components/ui/label.wx";
+
+export const meta = { title: "Import and export" };
+
+export function load(ctx: PageContext) {
+  const g = gate(ctx, "tasks.read");
+  if (!g.ok) return g.redirect;
+  return { me: g.me, path: ctx.url.pathname };
+}
+
+export interface Planned {
+  line: number;
+  title: string;
+  assignee: string | null;
+  assigneeText: string;
+  due: string;
+  notes: string;
+  problem: string;
+}
+
+const squash = (s: string) => s.toLowerCase().replace(/[^a-z]/g, "");
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+export function plan(me: Me, text: string): { rows: Planned[]; error: string } {
+  let cells: string[][];
+  try {
+    cells = parseCsv(text, { maxBytes: 1_000_000, maxRows: 500, maxColumns: 20, maxCell: 4000 });
+  } catch (err) {
+    return { rows: [], error: err instanceof Error ? err.message : "That is not CSV." };
+  }
+  if (cells.length < 2) return { rows: [], error: "Give a header row and at least one task." };
+  const head = cells[0]!.map(squash);
+  const col = (...names: string[]) => head.findIndex((h) => names.includes(h));
+  const at = { title: col("title", "task", "name"), assignee: col("assignee", "assignedto", "owner", "email"), due: col("due", "duedate", "deadline"), notes: col("notes", "description", "details") };
+  if (at.title < 0) return { rows: [], error: "No title column: name one column Title." };
+  const rows = cells.slice(1).map((r, i) => {
+    const cell = (k: number) => (k >= 0 ? (r[k] ?? "").trim() : "");
+    const raw = cell(at.title);
+    const title = raw.startsWith("'") ? raw.slice(1) : raw;
+    const assigneeText = cell(at.assignee);
+    const due = cell(at.due);
+    const user = assigneeText ? userByEmail(assigneeText) : null;
+    let problem = "";
+    if (title === "") problem = "no title";
+    else if (title.length > 140) problem = "title longer than 140 characters";
+    else if (due !== "" && !DAY.test(due)) problem = "due is not a day such as 2026-12-01";
+    else if (assigneeText && (!user || !access.memberOf(user.id, me.tenant ?? ""))) problem = "assignee is not a member here";
+    return { line: i + 2, title, assignee: user?.id ?? null, assigneeText, due, notes: cell(at.notes), problem };
+  });
+  return { rows, error: "" };
+}
+
+component Page(me: Me, path: string) {
+  signal text = ""
+  signal preview = [] as Planned[]
+  signal error = ""
+  signal done = ""
+
+  function check(e: WeftEvent) {
+    text = String(e.form?.csv ?? "")
+    const p = plan(me, text)
+    preview = p.rows
+    error = p.error
+    done = ""
+  }
+
+  function commit() {
+    const p = plan(me, text)
+    if (p.error || p.rows.some((r) => r.problem)) {
+      preview = p.rows
+      error = p.error || "Fix the rows marked below first."
+      return
+    }
+    let refused = ""
+    try {
+      transaction(() => {
+        for (const r of p.rows) {
+          const made = createTask(me, { title: r.title, assignee: r.assignee, due: r.due || null, notes: r.notes })
+          if (typeof made === "string") {
+            refused = "Line " + r.line + ": " + made
+            throw new Error(refused)
+          }
+        }
+      })
+    } catch {
+      error = refused || "Nothing was imported."
+      return
+    }
+    done = p.rows.length + (p.rows.length === 1 ? " task" : " tasks") + " imported."
+    preview = []
+    text = ""
+    error = ""
+  }
+
+  client function pick(e: Event) {
+    const input = e.target as HTMLInputElement
+    const file = input.files?.[0]
+    const area = document.getElementById("csv") as HTMLTextAreaElement | null
+    if (!file || !area) return
+    if (file.size > 1_000_000) {
+      area.value = ""
+      alertText("That file is over 1 MB.")
+      return
+    }
+    file.text().then((t) => {
+      area.value = t
+    })
+  }
+
+  client function alertText(msg: string) {
+    const out = document.getElementById("pick-msg")
+    if (out) out.textContent = msg
+  }
+
+  view {
+    <AppShell me={me} path={path} title="Import and export">
+      <a href="/app/tasks" class="text-muted-foreground hover:text-foreground mb-6 inline-flex items-center gap-1 text-sm">
+        <Icon name="undo" />
+        Board
+      </a>
+      <section aria-labelledby="export-h" class="max-w-2xl">
+        <h2 id="export-h" class="text-lg font-semibold">Export</h2>
+        <p class="text-muted-foreground mt-1 text-sm">Every task you can see, as a CSV file for a spreadsheet: title, status, assignee's email, due day, notes and when it was added.</p>
+        <a href="/api/tasks/export" download class={buttonVariants({ variant: "outline" }) + " mt-4"}>
+          <Icon name="download" />
+          Download CSV
+        </a>
+      </section>
+
+      {#if me.can("tasks.edit")}
+        <section aria-labelledby="import-h" class="mt-12 max-w-3xl">
+          <h2 id="import-h" class="text-lg font-semibold">Import</h2>
+          <p class="text-muted-foreground mt-1 text-sm">A header row, then one task per row. Title is needed; Assignee (an email of a member), Due (2026-12-01) and Notes are optional. Up to 500 rows.</p>
+          <form @submit={check} class="mt-4 flex flex-col gap-3">
+            <label for="csv" class={labelClass}>CSV</label>
+            <textarea id="csv" name="csv" rows="7" maxlength="1000000" spellcheck="false" placeholder={"Title,Assignee,Due\nWrite the launch post,ada@example.com,2026-12-01"} class={inputClass + " h-auto py-2 font-mono text-xs"}>{text}</textarea>
+            <div class="flex flex-wrap items-center gap-3">
+              <label class={buttonVariants({ variant: "ghost", size: "sm" }) + " cursor-pointer"}>
+                <Icon name="upload" />
+                Choose a file
+                <input type="file" accept=".csv,text/csv" class="sr-only" @change={pick} />
+              </label>
+              <span id="pick-msg" class="text-muted-foreground text-xs" aria-live="polite"></span>
+              <button class={buttonVariants({ variant: "secondary" }) + " ml-auto"} :busy>Preview</button>
+            </div>
+          </form>
+
+          {#if error}
+            <p role="alert" class="text-destructive mt-4 text-sm">{error}</p>
+          {/if}
+          {#if done}
+            <p role="status" class="mt-4 flex items-center gap-2 text-sm"><Icon name="check" />{done} <a href="/app/tasks" class="underline-offset-4 hover:underline">See the board</a></p>
+          {/if}
+
+          {#if preview.length > 0}
+            <div class="mt-6 overflow-x-auto rounded-lg border">
+              <table class="w-full text-sm">
+                <caption class="sr-only">Rows to import</caption>
+                <thead class="bg-muted/50 text-muted-foreground text-left text-xs">
+                  <tr>
+                    <th scope="col" class="px-3 py-2 font-medium">Line</th>
+                    <th scope="col" class="px-3 py-2 font-medium">Title</th>
+                    <th scope="col" class="px-3 py-2 font-medium">Assignee</th>
+                    <th scope="col" class="px-3 py-2 font-medium">Due</th>
+                    <th scope="col" class="px-3 py-2 font-medium">Check</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y">
+                  {#each preview.slice(0, 100) as r (r.line)}
+                    <tr>
+                      <td class="text-muted-foreground px-3 py-2 tabular-nums">{r.line}</td>
+                      <td class="max-w-64 truncate px-3 py-2">{r.title}</td>
+                      <td class="px-3 py-2">{r.assigneeText}</td>
+                      <td class="px-3 py-2 tabular-nums">{r.due}</td>
+                      <td class={r.problem ? "text-destructive px-3 py-2" : "text-muted-foreground px-3 py-2"}>{r.problem || "ready"}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+            {#if preview.length > 100}
+              <p class="text-muted-foreground mt-2 text-xs">Showing the first 100 of {preview.length} rows.</p>
+            {/if}
+            <button type="button" @click={commit} class={buttonVariants({}) + " mt-4"} disabled={preview.some((r) => r.problem !== "")}>
+              Import {preview.length} {preview.length === 1 ? "task" : "tasks"}
+            </button>
+          {/if}
+        </section>
+      {/if}
+    </AppShell>
+  }
+}

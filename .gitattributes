@@ -1,0 +1,10 @@
+# LF everywhere, on every platform: the compiler, formatter and starter
+# templates compare source text line by line.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary
+*.vsix binary
+*.tgz binary

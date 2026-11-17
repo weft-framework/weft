@@ -1,0 +1,46 @@
+import { cn } from "../../lib/utils.ts";
+
+export interface Editor {
+  name: string;
+  at: number;
+}
+
+store app editingNow: Record<string, Editor[]> = {}
+
+export const EDITING_TTL_MS = 120_000;
+
+export function editorsIn(all: Record<string, Editor[]>, room: string, self: string): Editor[] {
+  const now = Date.now();
+  return (all[room] ?? []).filter((e) => e.name !== self && now - e.at < EDITING_TTL_MS);
+}
+
+export function editingSentence(names: string[]): string {
+  if (names.length === 0) return "";
+  if (names.length === 1) return names[0] + " is editing...";
+  if (names.length === 2) return names[0] + " and " + names[1] + " are editing...";
+  return names[0] + " and " + (names.length - 1) + " others are editing...";
+}
+
+component EditingNow(room: string, name: string, children: Html, ...attrs: Attrs) {
+  function start() {
+    const others = (editingNow.value[room] ?? []).filter((e) => e.name !== name && Date.now() - e.at < EDITING_TTL_MS)
+    editingNow.value = { ...editingNow.value, [room]: [{ name, at: Date.now() }, ...others] }
+  }
+
+  function stop() {
+    const left = (editingNow.value[room] ?? []).filter((e) => e.name !== name)
+    editingNow.value = { ...editingNow.value, [room]: left }
+  }
+
+  view {
+    <div data-slot="editing-now" class={cn("flex flex-col gap-2", attrs.class)} @focusin={start} @focusout={stop} {...attrs}>
+      {children}
+      <p class="text-muted-foreground flex h-5 items-center gap-2 text-sm" aria-live="polite">
+        {#if editorsIn(editingNow.value, room, name).length > 0}
+          <span class="bg-primary inline-block size-2 animate-pulse rounded-full" aria-hidden="true"></span>
+          {editingSentence(editorsIn(editingNow.value, room, name).map((e) => e.name))}
+        {/if}
+      </p>
+    </div>
+  }
+}

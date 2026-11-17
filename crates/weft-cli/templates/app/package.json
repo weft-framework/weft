@@ -1,0 +1,19 @@
+{
+  "name": "{{name}}",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "weft dev",
+    "check": "weft compile src --out .weft/check",
+    "build": "weft build",
+    "start": "node --experimental-strip-types --disable-warning=ExperimentalWarning dist/server.mjs"
+  },
+  "dependencies": {
+    "@weft/runtime": "^0.0.1",
+    "@weft/server": "^0.0.1"
+  },
+  "engines": {
+    "node": ">=22.6"
+  }
+}

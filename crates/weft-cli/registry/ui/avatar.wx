@@ -1,0 +1,14 @@
+import { cn } from "../../lib/utils.ts";
+
+component Avatar(src?: string, alt: string, fallback: string, ...attrs: Attrs) {
+  view {
+    <span data-slot="avatar" class={cn("relative flex size-8 shrink-0 overflow-hidden rounded-full", attrs.class)} {...attrs}>
+      <span data-slot="avatar-fallback" aria-hidden="true" class="bg-muted flex size-full items-center justify-center rounded-full text-sm">{fallback}</span>
+      {#if src}
+        <img data-slot="avatar-image" src={src} alt={alt} class="absolute inset-0 aspect-square size-full object-cover" />
+      {:else}
+        <span class="sr-only">{alt}</span>
+      {/if}
+    </span>
+  }
+}

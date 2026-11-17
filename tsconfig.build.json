@@ -1,0 +1,13 @@
+{
+  "//": "Compiles the packages to JavaScript and declarations for publishing: `npm run build:packages` (scripts/build-packages.mjs).",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "rewriteRelativeImportExtensions": true,
+    "rootDir": "packages",
+    "outDir": "target/npm-build",
+    "newLine": "lf"
+  },
+  "include": ["packages/runtime/src", "packages/server/src", "packages/data/src", "packages/core/src", "packages/theme/src", "packages/i18n/src"]
+}

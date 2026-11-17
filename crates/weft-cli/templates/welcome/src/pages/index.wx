@@ -1,0 +1,127 @@
+import type { PageContext } from "@weft/server";
+import { visit, site } from "../lib/presence.ts";
+import { THREADS } from "../lib/guest.ts";
+import { meOf } from "../lib/workspaces.ts";
+import { Weave } from "../components/Weave.wx";
+import { buttonVariants } from "../components/ui/button.wx";
+
+export const meta = { title: "Welcome" };
+
+export function load(ctx: PageContext) {
+  const me = visit(ctx, "/");
+  return { me: me.tab, name: me.name, color: THREADS[me.color], signedIn: meOf(ctx) !== null };
+}
+
+interface Area {
+  name: string;
+  does: string;
+  uses: string;
+  file: string;
+}
+
+export const AREAS: Area[] = [
+  {
+    name: "Tasks",
+    does: "A board that moves in every open tab. Tasks go through review, keep every earlier version, show who has them open, and list each change and refused attempt.",
+    uses: "defineModel rules, defineWorkflow, row history, presence, the audit hook, CSV import and export",
+    file: "src/pages/app/tasks",
+  },
+  {
+    name: "Notes",
+    does: "Private to whoever wrote them until shared. Rich text that saves as you type, and read-only links that stop working after a day.",
+    uses: "rich text with checked links, signed grants",
+    file: "src/pages/app/notes",
+  },
+  {
+    name: "Chat",
+    does: "Direct and group conversations between people in the same workspace, with typing, seen-by, and edits for fifteen minutes.",
+    uses: "@weft/server/chat, live handlers",
+    file: "src/pages/app/chat.wx",
+  },
+  {
+    name: "Rooms",
+    does: "Book a meeting room in the workspace's time zone, move it, cancel it, and get a reminder by email.",
+    uses: "@weft/server/calendar, jobs, mail",
+    file: "src/pages/app/rooms.wx",
+  },
+  {
+    name: "People and roles",
+    does: "Invite by email, change roles, make custom ones. Nobody can hand out more than they hold, and a workspace always keeps an owner.",
+    uses: "@weft/core memberships, roles, invites and seats",
+    file: "src/pages/app/team.wx",
+  },
+  {
+    name: "Your account",
+    does: "Passkeys, two-factor with a QR code and recovery codes, the devices you are signed in on, and which notifications reach your email.",
+    uses: "twoFactor, passkeys, sessions, notifications",
+    file: "src/pages/app/account",
+  },
+  {
+    name: "Signing in",
+    does: "A password (five wrong tries per address, then a pause), a link or code by email, or a passkey. Sign-up confirms the address first.",
+    uses: "login, rate limits, magic links, WebAuthn",
+    file: "src/pages/sign-in",
+  },
+];
+
+component Page(me: string, name: string, color: string, signedIn: boolean) {
+  view {
+    <section class="mx-auto max-w-6xl px-4 pt-16 pb-12 sm:px-6 sm:pt-24">
+      <h1 class="max-w-4xl text-[clamp(2.75rem,7.5vw,5.75rem)] leading-[0.95] font-semibold tracking-[-0.045em]">A team workspace that stays connected.</h1>
+      <div class="mt-8 grid gap-8 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+        <div class="max-w-xl">
+          <p class="text-muted-foreground text-lg leading-relaxed text-pretty">
+            This starter is a whole app: tasks with review, notes, chat, room booking, teams with roles, and sign-in with passkeys and two-factor. Each page keeps a connection to the server, so it changes when the data does. Every open page on this site is one thread below.
+          </p>
+          <div class="mt-8 flex flex-wrap gap-3">
+            {#if signedIn}
+              <a href="/app" class={buttonVariants({ size: "lg" })}>Open the app</a>
+            {:else}
+              <a href="/sign-up" class={buttonVariants({ size: "lg" })}>Create an account</a>
+              <a href="/sign-in" class={buttonVariants({ size: "lg", variant: "outline" })}>Sign in</a>
+            {/if}
+          </div>
+        </div>
+        <dl class="flex gap-10 text-sm md:justify-end">
+          <div>
+            <dt class="text-muted-foreground">You are</dt>
+            <dd class="mt-1 flex items-center gap-2 font-medium">
+              <svg viewBox="0 0 10 10" class="size-2.5" aria-hidden="true"><circle cx="5" cy="5" r="5" fill={color} /></svg>
+              {name}
+            </dd>
+          </div>
+          <div>
+            <dt class="text-muted-foreground">Open now</dt>
+            <dd class="mt-1 font-medium tabular-nums">{site.in("all").length === 1 ? "1 page" : site.in("all").length + " pages"}</dd>
+          </div>
+        </dl>
+      </div>
+    </section>
+
+    <section aria-label="Everyone on this site" class="border-y pb-6">
+      <Weave visitors={site.in("all")} me={me} />
+      <p class="text-muted-foreground mx-auto max-w-6xl px-4 pt-3 text-xs sm:px-6">Public pages show a guest name made from a one-way hash of the session, never who is signed in.</p>
+    </section>
+
+    <section aria-labelledby="inside" class="mx-auto max-w-6xl px-4 pt-20 pb-24 sm:px-6">
+      <div class="flex flex-wrap items-baseline justify-between gap-3">
+        <h2 id="inside" class="text-2xl font-semibold tracking-[-0.025em]">What is inside</h2>
+        <p class="text-muted-foreground text-sm">Sign up in two windows, as two people, to see it work.</p>
+      </div>
+      <dl class="mt-6 border-t">
+        {#each AREAS as a (a.name)}
+          <div class="grid gap-x-8 gap-y-2 border-b py-6 sm:grid-cols-[12rem_minmax(0,1fr)]">
+            <dt class="text-lg font-medium tracking-[-0.015em]">{a.name}</dt>
+            <dd>
+              <p class="leading-relaxed text-pretty">{a.does}</p>
+              <p class="text-muted-foreground mt-2 text-sm">Built with {a.uses}. Read it in <code class="text-foreground font-mono text-[13px]">{a.file}</code>.</p>
+            </dd>
+          </div>
+        {/each}
+      </dl>
+      <p class="text-muted-foreground mt-8 max-w-2xl text-sm leading-relaxed">
+        While you develop, the mail the app sends (sign-up links, invites, reminders) is kept in memory and listed at <a href="/_weft/dev/mail" class="text-foreground underline underline-offset-4">/_weft/dev/mail</a>. In production it goes through SMTP_HOST.
+      </p>
+    </section>
+  }
+}

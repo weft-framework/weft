@@ -1,0 +1,20 @@
+import { cn } from "../../lib/utils.ts";
+import { toggleVariants } from "./toggle.wx";
+client import { toggleGroup } from "@weft/ui"
+
+component ToggleGroup(mode?: "single" | "multiple", name?: string, value?: string, label?: string, variant?: "default" | "outline", children: Html, ...attrs: Attrs) {
+  view {
+    <div role="group" aria-label={label} data-variant={variant ?? "default"} data-slot="toggle-group" class={cn("group/toggle-group flex w-fit items-center rounded-md data-[variant=outline]:shadow-xs", attrs.class)} use:toggleGroup={{ type: mode ?? "single" }} {...attrs}>
+      {#if name}
+        <input type="hidden" name={name} value={value ?? ""} />
+      {/if}
+      {children}
+    </div>
+  }
+}
+
+component ToggleGroupItem(value: string, pressed?: boolean, variant?: "default" | "outline", size?: "default" | "sm" | "lg", children: Html, ...attrs: Attrs) {
+  view {
+    <button type="button" data-value={value} aria-pressed={pressed ? "true" : "false"} data-slot="toggle-group-item" class={cn(toggleVariants({ variant: variant, size: size }), "min-w-0 flex-1 shrink-0 rounded-none shadow-none first:rounded-l-md last:rounded-r-md focus:z-10 focus-visible:z-10 group-data-[variant=outline]/toggle-group:border-l-0 group-data-[variant=outline]/toggle-group:first:border-l", attrs.class)} {...attrs}>{children}</button>
+  }
+}

@@ -1,0 +1,23 @@
+const links = [
+  { href: "/", label: "Home" },
+  { href: "/blog", label: "Blog" },
+  { href: "/about", label: "About" },
+];
+
+component Nav(path: string) {
+  function current(href: string): boolean {
+    return href === path || (href !== "/" && path.startsWith(href + "/"))
+  }
+
+  view {
+    <nav>
+      {#each links as link (link.href)}
+        <a
+          href={link.href}
+          class={current(link.href) ? "active" : ""}
+          aria-current={current(link.href) ? "page" : false}
+        >{link.label}</a>
+      {/each}
+    </nav>
+  }
+}

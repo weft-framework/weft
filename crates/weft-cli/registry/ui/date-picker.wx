@@ -1,0 +1,19 @@
+import { cn } from "../../lib/utils.ts";
+import { buttonVariants } from "./button.wx";
+import { Calendar } from "./calendar.wx";
+import { popoverClass } from "./popover.wx";
+client import { position } from "@weft/ui"
+
+component DatePicker(id: string, name?: string, value?: string, label?: string, placeholder?: string, min?: string, max?: string, ...attrs: Attrs) {
+  view {
+    <div data-slot="date-picker" class={cn("inline-block", attrs.class)} {...attrs}>
+      <button type="button" popovertarget={id + "-popover"} aria-haspopup="dialog" aria-label={label} class={cn(buttonVariants({ variant: "outline" }), "w-[240px] justify-start text-left font-normal")}>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4" aria-hidden="true"><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
+        <span id={id + "-label"} data-placeholder={value ? undefined : ""} class="data-[placeholder]:text-muted-foreground">{value ?? placeholder ?? "Pick a date"}</span>
+      </button>
+      <div id={id + "-popover"} popover="auto" class={cn(popoverClass, "w-auto p-0")} use:position={{ placement: "bottom-start", offset: 4 }}>
+        <Calendar id={id} name={name} value={value} min={min} max={max} output={id + "-label"} />
+      </div>
+    </div>
+  }
+}

@@ -1,0 +1,43 @@
+import { cn } from "../../lib/utils.ts";
+
+export interface StepperStep {
+  label: string;
+  done?: boolean;
+  current?: boolean;
+  href?: string;
+}
+
+export function stepState(s: StepperStep): "current" | "done" | "todo" {
+  return s.current ? "current" : s.done ? "done" : "todo";
+}
+
+component Stepper(steps: StepperStep[], label?: string, orientation?: "horizontal" | "vertical", ...attrs: Attrs) {
+  view {
+    <nav aria-label={label ?? "Progress"} data-slot="stepper" {...attrs} class={cn("w-full", attrs.class)}>
+      <ol data-orientation={orientation ?? "horizontal"} class="flex gap-2 data-[orientation=horizontal]:items-center data-[orientation=vertical]:flex-col">
+        {#each steps as s, i}
+          <li data-state={stepState(s)} aria-current={s.current ? "step" : null} class="group/step flex min-w-0 items-center gap-2 text-sm">
+            <span aria-hidden="true" class="border-border text-muted-foreground grid size-6 shrink-0 place-items-center rounded-full border text-xs font-medium tabular-nums transition-colors group-data-[state=current]/step:border-primary group-data-[state=current]/step:text-primary group-data-[state=done]/step:bg-primary group-data-[state=done]/step:border-primary group-data-[state=done]/step:text-primary-foreground">
+              {#if s.done && !s.current}
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="size-3.5"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+              {:else}
+                {i + 1}
+              {/if}
+            </span>
+            {#if s.href}
+              <a href={s.href} class="text-muted-foreground hover:text-foreground truncate underline-offset-4 hover:underline">{s.label}</a>
+            {:else}
+              <span class="text-muted-foreground truncate group-data-[state=current]/step:text-foreground group-data-[state=current]/step:font-medium">{s.label}</span>
+            {/if}
+            {#if s.done}
+              <span class="sr-only">(done)</span>
+            {/if}
+            {#if i < steps.length - 1 && (orientation ?? "horizontal") === "horizontal"}
+              <span aria-hidden="true" class="bg-border mx-1 h-px w-6 shrink-0 sm:w-10"></span>
+            {/if}
+          </li>
+        {/each}
+      </ol>
+    </nav>
+  }
+}

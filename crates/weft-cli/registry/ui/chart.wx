@@ -1,0 +1,166 @@
+import { cn } from "../../lib/utils.ts";
+
+export interface ChartSeries {
+  key: string;
+  label: string;
+  color?: string;
+}
+
+export type ChartRow = Record<string, string | number>;
+
+const W = 600;
+const H = 240;
+const PAD = { top: 12, right: 12, bottom: 28, left: 40 };
+
+export function seriesColor(s: ChartSeries, i: number): string {
+  return s.color ?? `var(--color-chart-${(i % 5) + 1})`;
+}
+
+export function chartTicks(data: ChartRow[], series: ChartSeries[], stacked = false): number[] {
+  let max = 0;
+  for (const row of data) {
+    const values = series.map((s) => Number(row[s.key]) || 0);
+    max = Math.max(max, stacked ? values.reduce((a, b) => a + b, 0) : Math.max(0, ...values));
+  }
+  const step = niceStep(max / 4);
+  return [0, step, step * 2, step * 3, step * 4];
+}
+
+function niceStep(raw: number): number {
+  if (raw <= 0) return 1;
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const n = raw / mag;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag;
+}
+
+function yOf(v: number, top: number): number {
+  return PAD.top + (H - PAD.top - PAD.bottom) * (1 - v / top);
+}
+
+export interface Bar {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  color: string;
+  title: string;
+}
+
+export function barRects(data: ChartRow[], x: string, series: ChartSeries[], stacked = false): Bar[] {
+  const top = chartTicks(data, series, stacked)[4];
+  const band = (W - PAD.left - PAD.right) / Math.max(1, data.length);
+  const inner = band * 0.8;
+  const out: Bar[] = [];
+  data.forEach((row, i) => {
+    let base = 0;
+    series.forEach((s, j) => {
+      const v = Number(row[s.key]) || 0;
+      const w = stacked ? inner : inner / series.length;
+      const bx = PAD.left + band * i + band * 0.1 + (stacked ? 0 : w * j);
+      const y1 = yOf(base + v, top);
+      const y0 = yOf(base, top);
+      out.push({ x: bx, y: y1, w: Math.max(1, w - 2), h: Math.max(0, y0 - y1), color: seriesColor(s, j), title: `${row[x]}: ${s.label} ${v}` });
+      if (stacked) base += v;
+    });
+  });
+  return out;
+}
+
+export interface Line {
+  d: string;
+  color: string;
+  points: { x: number; y: number; title: string }[];
+}
+
+export function linePaths(data: ChartRow[], x: string, series: ChartSeries[]): Line[] {
+  const top = chartTicks(data, series)[4];
+  const step = (W - PAD.left - PAD.right) / Math.max(1, data.length - 1);
+  return series.map((s, j) => {
+    const points = data.map((row, i) => ({ x: PAD.left + step * i, y: yOf(Number(row[s.key]) || 0, top), title: `${row[x]}: ${s.label} ${row[s.key]}` }));
+    return { d: points.map((p, i) => `${i ? "L" : "M"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" "), color: seriesColor(s, j), points };
+  });
+}
+
+export function tickLines(data: ChartRow[], series: ChartSeries[], stacked = false): { y: number; label: string }[] {
+  const ticks = chartTicks(data, series, stacked);
+  return ticks.map((t) => ({ y: yOf(t, ticks[4]), label: t.toLocaleString() }));
+}
+
+export function xLabels(data: ChartRow[], x: string, line = false): { x: number; label: string }[] {
+  const n = Math.max(1, data.length);
+  const band = (W - PAD.left - PAD.right) / (line ? Math.max(1, n - 1) : n);
+  return data.map((row, i) => ({ x: PAD.left + band * i + (line ? 0 : band / 2), label: String(row[x]) }));
+}
+
+export const chartViewBox = `0 0 ${W} ${H}`;
+export const chartLeft = PAD.left;
+export const chartRight = W - PAD.right;
+
+component ChartLegend(series: ChartSeries[], ...attrs: Attrs) {
+  view {
+    <ul data-slot="chart-legend" class={cn("flex flex-wrap items-center justify-center gap-4 pt-3 text-xs", attrs.class)} {...attrs}>
+      {#each series as s}
+        <li class="flex items-center gap-1.5"><span class="size-2 shrink-0 rounded-[2px]" style={"background:" + seriesColor(s, series.indexOf(s))}></span>{s.label}</li>
+      {/each}
+    </ul>
+  }
+}
+
+component ChartTable(label: string, data: ChartRow[], x: string, series: ChartSeries[]) {
+  view {
+    <table class="sr-only">
+      <caption>{label}</caption>
+      <thead><tr><th scope="col">{x}</th>{#each series as s}<th scope="col">{s.label}</th>{/each}</tr></thead>
+      <tbody>
+        {#each data as row}
+          <tr><th scope="row">{String(row[x])}</th>{#each series as s}<td>{String(row[s.key] ?? "")}</td>{/each}</tr>
+        {/each}
+      </tbody>
+    </table>
+  }
+}
+
+component BarChart(label: string, data: ChartRow[], x: string, series: ChartSeries[], stacked?: boolean, ...attrs: Attrs) {
+  view {
+    <figure data-slot="chart" class={cn("text-muted-foreground w-full text-xs", attrs.class)} {...attrs}>
+      <svg viewBox={chartViewBox} role="img" aria-label={label} class="h-auto w-full overflow-visible">
+        {#each tickLines(data, series, stacked ?? false) as t}
+          <line x1={String(chartLeft)} x2={String(chartRight)} y1={String(t.y)} y2={String(t.y)} stroke="var(--color-border)" stroke-dasharray="3 3" />
+          <text x={String(chartLeft - 6)} y={String(t.y + 4)} text-anchor="end" fill="currentColor">{t.label}</text>
+        {/each}
+        {#each barRects(data, x, series, stacked ?? false) as b}
+          <rect x={String(b.x)} y={String(b.y)} width={String(b.w)} height={String(b.h)} rx="4" fill={b.color}><title>{b.title}</title></rect>
+        {/each}
+        {#each xLabels(data, x) as l}
+          <text x={String(l.x)} y="234" text-anchor="middle" fill="currentColor">{l.label}</text>
+        {/each}
+      </svg>
+      <ChartLegend series={series} />
+      <ChartTable label={label} data={data} x={x} series={series} />
+    </figure>
+  }
+}
+
+component LineChart(label: string, data: ChartRow[], x: string, series: ChartSeries[], ...attrs: Attrs) {
+  view {
+    <figure data-slot="chart" class={cn("text-muted-foreground w-full text-xs", attrs.class)} {...attrs}>
+      <svg viewBox={chartViewBox} role="img" aria-label={label} class="h-auto w-full overflow-visible">
+        {#each tickLines(data, series) as t}
+          <line x1={String(chartLeft)} x2={String(chartRight)} y1={String(t.y)} y2={String(t.y)} stroke="var(--color-border)" stroke-dasharray="3 3" />
+          <text x={String(chartLeft - 6)} y={String(t.y + 4)} text-anchor="end" fill="currentColor">{t.label}</text>
+        {/each}
+        {#each linePaths(data, x, series) as line}
+          <path d={line.d} fill="none" stroke={line.color} stroke-width="2" />
+          {#each line.points as p}
+            <circle cx={String(p.x)} cy={String(p.y)} r="3" fill={line.color}><title>{p.title}</title></circle>
+          {/each}
+        {/each}
+        {#each xLabels(data, x, true) as l}
+          <text x={String(l.x)} y="234" text-anchor="middle" fill="currentColor">{l.label}</text>
+        {/each}
+      </svg>
+      <ChartLegend series={series} />
+      <ChartTable label={label} data={data} x={x} series={series} />
+    </figure>
+  }
+}

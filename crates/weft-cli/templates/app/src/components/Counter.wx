@@ -1,0 +1,18 @@
+component Counter(start: number) {
+  signal count = start
+
+  function increment() {
+    count = count + 1
+  }
+
+  function reset() {
+    count = start
+  }
+
+  view {
+    <div class="counter">
+      <button @click={increment}>Clicked {count} times</button>
+      <button class="secondary" @click={reset}>Reset</button>
+    </div>
+  }
+}

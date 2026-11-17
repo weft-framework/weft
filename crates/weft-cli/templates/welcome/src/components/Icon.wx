@@ -1,0 +1,12 @@
+import { cn } from "../lib/utils.ts";
+import { ICONS, type IconName } from "../lib/icons.ts";
+
+component Icon(name: IconName, label?: string, ...attrs: Attrs) {
+  view {
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" role={label ? "img" : null} aria-label={label ?? null} aria-hidden={label ? null : "true"} class={cn("size-4 shrink-0", attrs.class)} {...attrs}>
+      {#each ICONS[name] as d}
+        <path d={d} />
+      {/each}
+    </svg>
+  }
+}

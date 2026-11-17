@@ -1,0 +1,19 @@
+import { cn } from "../../lib/utils.ts";
+
+component Collapsible(open?: boolean, children: Html, ...attrs: Attrs) {
+  view {
+    <details open={open} data-slot="collapsible" class={cn("group/collapsible", attrs.class)} {...attrs}>{children}</details>
+  }
+}
+
+component CollapsibleTrigger(children: Html, ...attrs: Attrs) {
+  view {
+    <summary data-slot="collapsible-trigger" class={cn("cursor-pointer list-none [&::-webkit-details-marker]:hidden", attrs.class)} {...attrs}>{children}</summary>
+  }
+}
+
+component CollapsibleContent(children: Html, ...attrs: Attrs) {
+  view {
+    <div data-slot="collapsible-content" class={cn(attrs.class)} {...attrs}>{children}</div>
+  }
+}

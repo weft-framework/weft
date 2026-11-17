@@ -1,0 +1,31 @@
+import { cn } from "../../lib/utils.ts";
+
+component FormItem(children: Html, ...attrs: Attrs) {
+  view {
+    <div data-slot="form-item" class={cn("grid gap-2", attrs.class)} {...attrs}>{children}</div>
+  }
+}
+
+component FormLabel(target: string, invalid?: boolean, children: Html, ...attrs: Attrs) {
+  view {
+    <label for={target} data-error={invalid ? "true" : undefined} data-slot="form-label" class={cn("flex items-center gap-2 text-sm leading-none font-medium select-none data-[error=true]:text-destructive", attrs.class)} {...attrs}>{children}</label>
+  }
+}
+
+component FormDescription(children: Html, ...attrs: Attrs) {
+  view {
+    <p data-slot="form-description" class={cn("text-muted-foreground text-sm", attrs.class)} {...attrs}>{children}</p>
+  }
+}
+
+component FormMessage(message?: string | null, ...attrs: Attrs) {
+  view {
+    <p data-slot="form-message" class={cn("text-destructive text-sm empty:hidden", attrs.class)} {...attrs}>{message ?? ""}</p>
+  }
+}
+
+component FormRefusal(...attrs: Attrs) {
+  view {
+    <p role="alert" data-weft-message="" data-slot="form-refusal" class={cn("text-destructive text-sm empty:hidden", attrs.class)} {...attrs}></p>
+  }
+}

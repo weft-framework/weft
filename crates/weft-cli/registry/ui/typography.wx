@@ -1,0 +1,88 @@
+import { cn } from "../../lib/utils.ts";
+
+export const typography = {
+  h1: "scroll-m-20 text-4xl font-extrabold tracking-tight text-balance",
+  h2: "scroll-m-20 border-b pb-2 text-3xl font-semibold tracking-tight first:mt-0",
+  h3: "scroll-m-20 text-2xl font-semibold tracking-tight",
+  h4: "scroll-m-20 text-xl font-semibold tracking-tight",
+  p: "leading-7 [&:not(:first-child)]:mt-6",
+  blockquote: "mt-6 border-l-2 pl-6 italic",
+  list: "my-6 ml-6 list-disc [&>li]:mt-2",
+  code: "bg-muted relative rounded px-[0.3rem] py-[0.2rem] font-mono text-sm font-semibold",
+  lead: "text-muted-foreground text-xl",
+  large: "text-lg font-semibold",
+  small: "text-sm leading-none font-medium",
+  muted: "text-muted-foreground text-sm",
+};
+
+component H1(children: Html, ...attrs: Attrs) {
+  view {
+    <h1 class={cn(typography.h1, attrs.class)} {...attrs}>{children}</h1>
+  }
+}
+
+component H2(children: Html, ...attrs: Attrs) {
+  view {
+    <h2 class={cn(typography.h2, attrs.class)} {...attrs}>{children}</h2>
+  }
+}
+
+component H3(children: Html, ...attrs: Attrs) {
+  view {
+    <h3 class={cn(typography.h3, attrs.class)} {...attrs}>{children}</h3>
+  }
+}
+
+component H4(children: Html, ...attrs: Attrs) {
+  view {
+    <h4 class={cn(typography.h4, attrs.class)} {...attrs}>{children}</h4>
+  }
+}
+
+component P(children: Html, ...attrs: Attrs) {
+  view {
+    <p class={cn(typography.p, attrs.class)} {...attrs}>{children}</p>
+  }
+}
+
+component Blockquote(children: Html, ...attrs: Attrs) {
+  view {
+    <blockquote class={cn(typography.blockquote, attrs.class)} {...attrs}>{children}</blockquote>
+  }
+}
+
+component List(children: Html, ...attrs: Attrs) {
+  view {
+    <ul class={cn(typography.list, attrs.class)} {...attrs}>{children}</ul>
+  }
+}
+
+component InlineCode(children: Html, ...attrs: Attrs) {
+  view {
+    <code class={cn(typography.code, attrs.class)} {...attrs}>{children}</code>
+  }
+}
+
+component Lead(children: Html, ...attrs: Attrs) {
+  view {
+    <p class={cn(typography.lead, attrs.class)} {...attrs}>{children}</p>
+  }
+}
+
+component Large(children: Html, ...attrs: Attrs) {
+  view {
+    <div class={cn(typography.large, attrs.class)} {...attrs}>{children}</div>
+  }
+}
+
+component Small(children: Html, ...attrs: Attrs) {
+  view {
+    <small class={cn(typography.small, attrs.class)} {...attrs}>{children}</small>
+  }
+}
+
+component Muted(children: Html, ...attrs: Attrs) {
+  view {
+    <p class={cn(typography.muted, attrs.class)} {...attrs}>{children}</p>
+  }
+}

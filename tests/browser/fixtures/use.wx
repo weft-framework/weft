@@ -1,0 +1,45 @@
+// `use:` element attachments: client functions given the real element.
+// One focuses on mount, one follows client state (with a cleanup), one
+// takes a server value through markup passed into a child component.
+
+component Card(children: Html) {
+  view {
+    <section id="card">{children}</section>
+  }
+}
+
+component Page() {
+  signal label = "first"
+  client signal open = false
+
+  client function focus(el: HTMLElement) {
+    el.focus()
+  }
+
+  client function size(el: HTMLElement, on: boolean) {
+    el.dataset.size = on ? String(el.getBoundingClientRect().width > 0) : "off"
+    return () => {
+      el.dataset.cleaned = String(Number(el.dataset.cleaned ?? "0") + 1)
+    }
+  }
+
+  client function title(el: HTMLElement, text: string) {
+    el.dataset.title = text
+  }
+
+  client function toggle() {
+    open = !open
+  }
+
+  function rename() {
+    label = "second"
+  }
+
+  view {
+    <h1>use</h1>
+    <input id="use-focus" aria-label="focused" use:focus />
+    <button id="use-toggle" @click={toggle} use:size={open}>toggle</button>
+    <button id="use-rename" @click={rename}>rename</button>
+    <Card><p id="use-title" use:title={label}>slot</p></Card>
+  }
+}

@@ -1,0 +1,32 @@
+import { cn } from "../../lib/utils.ts";
+client import { inputOtp } from "@weft/ui"
+
+export function otpSlots(length: number, split?: number): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < length; i += 1) {
+    if (split && i > 0 && i % split === 0) out.push(-1);
+    out.push(i);
+  }
+  return out;
+}
+
+component InputOTP(name: string, length?: number, split?: number, label?: string, pattern?: string, ...attrs: Attrs) {
+  view {
+    <div data-slot="input-otp" class={cn("relative flex w-fit items-center gap-2 has-[:disabled]:opacity-50", attrs.class)} use:inputOtp>
+      <input name={name} inputmode={pattern ? "text" : "numeric"} autocomplete="one-time-code" maxlength={String(length ?? 6)} aria-label={label ?? "One-time code"} data-pattern={pattern ?? "[0-9]"} class="absolute inset-0 z-10 h-full w-full cursor-text bg-transparent text-transparent caret-transparent opacity-0 outline-none disabled:cursor-not-allowed" spellcheck="false" {...attrs} />
+      <div aria-hidden="true" class="flex items-center">
+        {#each otpSlots(length ?? 6, split) as i}
+          {#if i < 0}
+            <div role="separator" class="px-2">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="size-4"><path d="M5 12h14" /></svg>
+            </div>
+          {:else}
+            <div data-slot="input-otp-slot" class="data-[active]:border-ring data-[active]:ring-ring/50 border-input dark:bg-input/30 relative flex h-9 w-9 items-center justify-center border-y border-r text-sm shadow-xs transition-all outline-none first:rounded-l-md first:border-l last:rounded-r-md data-[active]:z-10 data-[active]:ring-[3px] [[role=separator]+&]:rounded-l-md [[role=separator]+&]:border-l [&:has(+[role=separator])]:rounded-r-md">
+              <span data-slot="input-otp-char"></span>
+            </div>
+          {/if}
+        {/each}
+      </div>
+    </div>
+  }
+}

@@ -1,0 +1,77 @@
+import { audit, defaultActorId, type AuditEvent } from "@weft/data";
+import { cn } from "../../lib/utils.ts";
+import { badgeVariants } from "./badge.wx";
+
+export interface TrailEntry {
+  at: number;
+  model: string;
+  keys: string[];
+  action: string;
+  outcome: "allowed" | "denied";
+  actor: string;
+  reason?: string;
+}
+
+export interface TrailSource {
+  model: { name: string };
+  get(key: never): unknown;
+}
+
+export const TRAIL_MAX = 500;
+
+store app auditTrail: TrailEntry[] = []
+
+function remember(e: AuditEvent): void {
+  if (e.action === "read") return;
+  const entry: TrailEntry = {
+    at: e.at.getTime(),
+    model: e.model,
+    keys: e.keys.map((k) => String(k)),
+    action: e.action,
+    outcome: e.outcome,
+    actor: defaultActorId(e.actor) ?? "anonymous",
+  };
+  if (e.reason !== undefined) entry.reason = e.reason;
+  auditTrail.value = [entry, ...auditTrail.value].slice(0, TRAIL_MAX);
+}
+
+const slot = globalThis as { __weftAuditTrail?: () => void };
+slot.__weftAuditTrail?.();
+slot.__weftAuditTrail = audit(remember);
+
+export function trailFor(all: TrailEntry[], model: string, row: string | number, limit: number): TrailEntry[] {
+  const key = String(row);
+  return all.filter((e) => e.model === model && e.keys.includes(key)).slice(0, limit);
+}
+
+export function trailTime(at: number): string {
+  return new Date(at).toISOString().slice(11, 19) + " UTC";
+}
+
+component AuditTimeline(rows: TrailSource, row: string | number, limit?: number, actorName?: (id: string) => string, ...attrs: Attrs) {
+  view {
+    <div data-slot="audit-timeline" class={cn("flex flex-col gap-3", attrs.class)} {...attrs}>
+      {#if rows.get(row as never) === undefined}
+        <p class="text-muted-foreground text-sm">No history to show.</p>
+      {:else}
+        {#if trailFor(auditTrail.value, rows.model.name, row, limit ?? 20).length == 0}
+          <p class="text-muted-foreground text-sm">No changes since the server started.</p>
+        {/if}
+        <ol class="border-border flex flex-col gap-3 border-l pl-4">
+          {#each trailFor(auditTrail.value, rows.model.name, row, limit ?? 20) as e}
+            <li data-outcome={e.outcome} class="relative text-sm">
+              <span class={cn("absolute -left-[21px] top-1.5 size-2.5 rounded-full", e.outcome == "denied" ? "bg-destructive" : "bg-primary")} aria-hidden="true"></span>
+              <span class="font-medium">{e.action}</span>
+              <span class={cn(badgeVariants({ variant: e.outcome == "denied" ? "destructive" : "secondary" }), "ml-2")}>{e.outcome}</span>
+              <span class="text-muted-foreground ml-2">by {actorName && e.actor !== "anonymous" ? actorName(e.actor) : e.actor}</span>
+              <time class="text-muted-foreground ml-2 tabular-nums" datetime={new Date(e.at).toISOString()}>{trailTime(e.at)}</time>
+              {#if e.reason}
+                <p class="text-muted-foreground mt-0.5">{e.reason}</p>
+              {/if}
+            </li>
+          {/each}
+        </ol>
+      {/if}
+    </div>
+  }
+}

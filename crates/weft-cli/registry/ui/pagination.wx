@@ -1,0 +1,65 @@
+import { cn } from "../../lib/utils.ts";
+import { buttonVariants } from "./button.wx";
+
+export function pageWindow(current: number, total: number, around = 1): number[] {
+  const pages = new Set<number>([1, total]);
+  for (let p = current - around; p <= current + around; p += 1) if (p >= 1 && p <= total) pages.add(p);
+  const sorted = [...pages].sort((a, b) => a - b);
+  const out: number[] = [];
+  for (const [i, p] of sorted.entries()) {
+    if (i > 0 && p - sorted[i - 1] > 1) out.push(0);
+    out.push(p);
+  }
+  return out;
+}
+
+component Pagination(label?: string, children: Html, ...attrs: Attrs) {
+  view {
+    <nav aria-label={label ?? "pagination"} data-slot="pagination" class={cn("mx-auto flex w-full justify-center", attrs.class)} {...attrs}>{children}</nav>
+  }
+}
+
+component PaginationContent(children: Html, ...attrs: Attrs) {
+  view {
+    <ul data-slot="pagination-content" class={cn("flex flex-row items-center gap-1", attrs.class)} {...attrs}>{children}</ul>
+  }
+}
+
+component PaginationItem(children: Html, ...attrs: Attrs) {
+  view {
+    <li data-slot="pagination-item" {...attrs}>{children}</li>
+  }
+}
+
+component PaginationLink(href: string, active?: boolean, size?: "default" | "icon", children: Html, ...attrs: Attrs) {
+  view {
+    <a href={href} aria-current={active ? "page" : undefined} data-active={active ? "true" : undefined} data-slot="pagination-link" class={cn(buttonVariants({ variant: active ? "outline" : "ghost", size: size ?? "icon" }), attrs.class)} {...attrs}>{children}</a>
+  }
+}
+
+component PaginationPrevious(href: string, label?: string, ...attrs: Attrs) {
+  view {
+    <a href={href} aria-label="Go to previous page" data-slot="pagination-link" class={cn(buttonVariants({ variant: "ghost", size: "default" }), "gap-1 px-2.5 sm:pl-2.5", attrs.class)} {...attrs}>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+      <span class="hidden sm:block">{label ?? "Previous"}</span>
+    </a>
+  }
+}
+
+component PaginationNext(href: string, label?: string, ...attrs: Attrs) {
+  view {
+    <a href={href} aria-label="Go to next page" data-slot="pagination-link" class={cn(buttonVariants({ variant: "ghost", size: "default" }), "gap-1 px-2.5 sm:pr-2.5", attrs.class)} {...attrs}>
+      <span class="hidden sm:block">{label ?? "Next"}</span>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+    </a>
+  }
+}
+
+component PaginationEllipsis(...attrs: Attrs) {
+  view {
+    <span aria-hidden="true" data-slot="pagination-ellipsis" class={cn("flex size-9 items-center justify-center", attrs.class)} {...attrs}>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="size-4"><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle cx="5" cy="12" r="1" /></svg>
+      <span class="sr-only">More pages</span>
+    </span>
+  }
+}
