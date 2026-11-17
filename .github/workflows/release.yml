@@ -356,7 +356,7 @@ jobs:
                  cli-win32-x64 cli-win32-arm64 cli-linux-x64 cli-linux-arm64 cli-darwin-x64 cli-darwin-arm64
                  cli create"
           for short in $order; do
-            file="tarballs/weft-framework-$short-$VERSION.tgz"
+            file="./tarballs/weft-framework-$short-$VERSION.tgz"
             name="@weft-framework/$short"
             if [ ! -f "$file" ]; then
               echo "::error::$file is missing"
