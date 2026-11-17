@@ -1,6 +1,6 @@
 import { cn } from "../../lib/utils.ts";
 import { menuContentClass } from "./dropdown-menu.wx";
-client import { contextMenu, menu } from "@weft/ui"
+client import { contextMenu, menu } from "@weft-framework/ui"
 
 component ContextMenu(menu: string, children: Html, ...attrs: Attrs) {
   view {

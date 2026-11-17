@@ -1,4 +1,4 @@
-import { defineTheme, shadcnTokens } from "@weft/theme";
+import { defineTheme, shadcnTokens } from "@weft-framework/theme";
 
 export default defineTheme({
   shared: { ...shadcnTokens.shared, radius: "0.625rem" },

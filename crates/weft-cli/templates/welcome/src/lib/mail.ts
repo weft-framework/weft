@@ -1,5 +1,5 @@
-import { defineMail, Outbox, renderTemplate, smtp, type MailTransport } from "@weft/server/mail";
-import type { AccountMessage } from "@weft/server";
+import { defineMail, Outbox, renderTemplate, smtp, type MailTransport } from "@weft-framework/server/mail";
+import type { AccountMessage } from "@weft-framework/server";
 import { appName, production } from "./env.ts";
 import * as confirmAccount from "../emails/confirm-account.wx";
 

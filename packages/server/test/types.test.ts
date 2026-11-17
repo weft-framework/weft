@@ -229,7 +229,7 @@ test("a registered actor type checks every access rule", { skip: !hasCargo }, ()
   assert.equal(run(open).status, 0, run(open).stderr);
   const typed = project("actor-typed", {
     "Doc.wx": doc,
-    "actor.ts": 'declare module "@weft/data" {\n  interface Register { actor: { id: number } }\n}\nexport {};\n',
+    "actor.ts": 'declare module "@weft-framework/data" {\n  interface Register { actor: { id: number } }\n}\nexport {};\n',
   });
   const r = run(typed);
   assert.notEqual(r.status, 0);

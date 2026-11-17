@@ -1,5 +1,5 @@
-import { redirect, type PageContext } from "@weft/server";
-import { fail } from "@weft/server/action";
+import { redirect, type PageContext } from "@weft-framework/server";
+import { fail } from "@weft-framework/server/action";
 import { twoFactor } from "../../lib/accounts.ts";
 import { nextPath } from "../../lib/signin.ts";
 import { AuthShell } from "../../components/AuthShell.wx";

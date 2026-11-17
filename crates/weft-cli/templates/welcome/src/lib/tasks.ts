@@ -1,4 +1,4 @@
-import { defineComments, defineHistory, defineModel, defineTags, defineWorkflow, type Actor } from "@weft/data";
+import { defineComments, defineHistory, defineModel, defineTags, defineWorkflow, type Actor } from "@weft-framework/data";
 import { access } from "../access.ts";
 import { notify } from "./notify.ts";
 import { nameOf } from "./users.ts";

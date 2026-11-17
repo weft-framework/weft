@@ -1,8 +1,3 @@
-// SPDX-License-Identifier: MIT
-//
-// The pure parts of @weft/ui. Behaviour on real elements (keyboard, focus,
-// popovers, dialogs) is covered by the browser suite: tests/browser.
-
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ui from "../index.js";

@@ -1,4 +1,4 @@
-import { defineChat } from "@weft/core/chat";
+import { defineChat } from "@weft-framework/core/chat";
 import { access } from "../access.ts";
 
 export const chat = defineChat({

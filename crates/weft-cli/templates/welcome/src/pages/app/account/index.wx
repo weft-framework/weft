@@ -1,9 +1,9 @@
-import { listSessions, redirect, revokeSession, signOutEverywhere, type PageContext } from "@weft/server";
-import { fail } from "@weft/server/action";
-import { hashPassword, verifyPassword } from "@weft/server/password";
-import type { WeftEvent } from "@weft/runtime";
-import type { SessionInfo } from "@weft/server";
-client import { createPasskey, passkeysSupported } from "@weft/runtime"
+import { listSessions, redirect, revokeSession, signOutEverywhere, type PageContext } from "@weft-framework/server";
+import { fail } from "@weft-framework/server/action";
+import { hashPassword, verifyPassword } from "@weft-framework/server/password";
+import type { WeftEvent } from "@weft-framework/runtime";
+import type { SessionInfo } from "@weft-framework/server";
+client import { createPasskey, passkeysSupported } from "@weft-framework/runtime"
 import { account, passkeys, twoFactor } from "../../../lib/accounts.ts";
 import { notify } from "../../../lib/notify.ts";
 import { meOf, workspaceOf, type Me } from "../../../lib/workspaces.ts";

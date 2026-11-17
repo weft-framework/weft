@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ChangeFeed, defineModel } from "@weft/data";
-import { awaitBlock, defineComponent, escapeHtml } from "@weft/runtime";
+import { ChangeFeed, defineModel } from "@weft-framework/data";
+import { awaitBlock, defineComponent, escapeHtml } from "@weft-framework/runtime";
 import { createApp, notFound, type AppOptions } from "../src/app.ts";
 import { DepsIndex, track } from "../src/sync.ts";
 

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { defineComponent, escapeHtml, signal, type Html } from "@weft/runtime";
-import { ChangeFeed, defineModel } from "@weft/data";
+import { defineComponent, escapeHtml, signal, type Html } from "@weft-framework/runtime";
+import { ChangeFeed, defineModel } from "@weft-framework/data";
 import { createApp } from "../src/app.ts";
 import { runtimeAssets } from "../src/node.ts";
 

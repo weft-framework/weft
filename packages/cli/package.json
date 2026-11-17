@@ -1,0 +1,45 @@
+{
+  "name": "@weft-framework/cli",
+  "version": "0.0.1",
+  "description": "The weft command: compiler, dev server, formatter and language server for Weft, as a prebuilt binary for your platform.",
+  "keywords": [
+    "weft",
+    "cli",
+    "compiler",
+    "language-server",
+    "dev-server",
+    "formatter"
+  ],
+  "homepage": "https://github.com/weft-framework/weft/tree/main/packages/cli#readme",
+  "bugs": {
+    "url": "https://github.com/weft-framework/weft/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/weft-framework/weft.git",
+    "directory": "packages/cli"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Vakea",
+    "email": "alex.leroy8303@seznam.cz",
+    "url": "https://github.com/aleroycz"
+  },
+  "type": "commonjs",
+  "main": "./index.cjs",
+  "types": "./index.d.cts",
+  "bin": {
+    "weft": "./bin/weft.cjs"
+  },
+  "files": [
+    "bin",
+    "index.cjs",
+    "index.d.cts"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.cjs"
+  },
+  "engines": {
+    "node": ">=22.6"
+  }
+}

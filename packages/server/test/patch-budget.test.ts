@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { defineComponent, signal } from "@weft/runtime";
-import { defineModel } from "@weft/data";
+import { defineComponent, signal } from "@weft-framework/runtime";
+import { defineModel } from "@weft-framework/data";
 import { createApp, type PatchOver } from "../src/app.ts";
 
 const ORIGIN = "http://app.test";

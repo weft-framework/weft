@@ -1,4 +1,4 @@
-import type { WeftEvent } from "@weft/runtime"
+import type { WeftEvent } from "@weft-framework/runtime"
 
 interface Todo {
   id: number

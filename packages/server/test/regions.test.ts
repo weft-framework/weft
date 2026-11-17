@@ -8,7 +8,7 @@ import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 import { setup } from "./fixtures/region-app.ts";
 import { defineRegions, RegionWriteError } from "../src/regions.ts";
-import { defineModel } from "@weft/data";
+import { defineModel } from "@weft-framework/data";
 
 const here = dirname(fileURLToPath(import.meta.url));
 

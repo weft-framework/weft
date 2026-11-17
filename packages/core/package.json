@@ -1,9 +1,31 @@
 {
-  "name": "@weft/core",
+  "name": "@weft-framework/core",
   "version": "0.0.1",
   "description": "Weft core: permissions and tenancy for any app. Scoped roles over a tenant's tree of scopes, typed permissions, per-tenant custom roles and permissions, invites, with privilege escalation and owner lockout refused.",
+  "keywords": [
+    "weft",
+    "permissions",
+    "authorization",
+    "rbac",
+    "multi-tenancy",
+    "roles",
+    "invites"
+  ],
+  "homepage": "https://github.com/weft-framework/weft/tree/main/packages/core#readme",
+  "bugs": {
+    "url": "https://github.com/weft-framework/weft/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/weft-framework/weft.git",
+    "directory": "packages/core"
+  },
   "license": "MIT",
-  "author": "Vakea",
+  "author": {
+    "name": "Vakea",
+    "email": "alex.leroy8303@seznam.cz",
+    "url": "https://github.com/aleroycz"
+  },
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
@@ -20,6 +42,6 @@
     "test": "node --test --experimental-strip-types test/*.test.ts"
   },
   "dependencies": {
-    "@weft/data": "0.0.1"
+    "@weft-framework/data": "0.0.1"
   }
 }

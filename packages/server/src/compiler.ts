@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 
 export interface Compiler {
@@ -11,6 +12,11 @@ export interface Compiler {
 export function findCompiler(from: string): Compiler {
   if (process.env.WEFT_BIN) {
     return { cmd: process.env.WEFT_BIN, args: [] };
+  }
+  try {
+    const cli = createRequire(join(resolve(from), "package.json"))("@weft-framework/cli") as { binaryPath(): string };
+    return { cmd: cli.binaryPath(), args: [] };
+  } catch {
   }
   try {
     execFileSync("weft", ["version"], { stdio: "ignore" });

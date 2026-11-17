@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { defineComponent, escapeHtml } from "@weft/runtime";
-import { defineNotifications } from "@weft/core";
+import { defineComponent, escapeHtml } from "@weft-framework/runtime";
+import { defineNotifications } from "@weft-framework/core";
 import { createApp, type App } from "../src/app.ts";
 import { defineAction } from "../src/action.ts";
 import { login } from "../src/auth.ts";

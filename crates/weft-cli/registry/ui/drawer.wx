@@ -1,6 +1,6 @@
 import { cn } from "../../lib/utils.ts";
 import { buttonVariants } from "./button.wx";
-client import { dialog } from "@weft/ui"
+client import { dialog } from "@weft-framework/ui"
 
 component DrawerTrigger(target: string, children: Html, ...attrs: Attrs) {
   view {

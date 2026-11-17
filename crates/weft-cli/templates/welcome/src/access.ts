@@ -1,4 +1,4 @@
-import { defineAccess } from "@weft/core";
+import { defineAccess } from "@weft-framework/core";
 
 export const access = defineAccess({
   scopes: { workspace: { label: "Workspace" } },

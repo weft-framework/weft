@@ -4,7 +4,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inspect } from "node:util";
-import { defineComponent, escapeHtml } from "@weft/runtime";
+import { defineComponent, escapeHtml } from "@weft-framework/runtime";
 import { createApp } from "../src/app.ts";
 import { loadEnvFile } from "../src/env.ts";
 import { isSecret, parseEnv, Secret, secretEnv } from "../src/secret.ts";

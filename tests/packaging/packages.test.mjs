@@ -37,12 +37,12 @@ test("the built packages run from node_modules without type stripping", () => {
   writeFileSync(join(APP, "package.json"), '{ "name": "npm-check", "private": true, "type": "module" }\n');
   writeFileSync(
     join(APP, "check.mjs"),
-    `import { defineComponent, escapeHtml } from "@weft/runtime";
-import { createApp } from "@weft/server";
-import { edgeHandler } from "@weft/server/edge";
-import "@weft/server/node";
-import { defineModel } from "@weft/data";
-import { runtimeAssets } from "./node_modules/@weft/server/dist/assets.js";
+    `import { defineComponent, escapeHtml } from "@weft-framework/runtime";
+import { createApp } from "@weft-framework/server";
+import { edgeHandler } from "@weft-framework/server/edge";
+import "@weft-framework/server/node";
+import { defineModel } from "@weft-framework/data";
+import { runtimeAssets } from "./node_modules/@weft-framework/server/dist/assets.js";
 
 const Hello = defineComponent("Hello", () => ({ handlers: {}, render: () => "<p>" + escapeHtml("hi <you>") + "</p>" }));
 const app = createApp({ secret: "x".repeat(40), sync: false, routes: { "/": { component: Hello } } });

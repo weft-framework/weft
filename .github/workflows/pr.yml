@@ -1,0 +1,57 @@
+# Checks every pull request against main: tests on three operating systems,
+# lint and a full build. "All checks passed" is the one status a branch rule
+# needs to require, so a PR can't be merged until everything is green.
+#
+# This workflow can't comment on the PR itself: for pull requests from forks
+# GitHub hands it a read-only token. pr-report.yml does the commenting once
+# this run has finished.
+
+name: Pull request checks
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Checks
+    uses: ./.github/workflows/checks.yml
+
+  all-green:
+    name: All checks passed
+    needs: [checks]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remember which pull request this was
+        env:
+          NUMBER: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          mkdir -p pr
+          echo "$NUMBER" > pr/number
+          echo "$SHA" > pr/sha
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pr-context
+          path: pr/
+          retention-days: 3
+
+      - name: Verdict
+        env:
+          RESULT: ${{ needs.checks.result }}
+        run: |
+          if [ "$RESULT" != "success" ]; then
+            echo "Some checks didn't pass ($RESULT). The comment on the pull request lists them."
+            exit 1
+          fi
+          echo "Everything passed."

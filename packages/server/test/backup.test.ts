@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { openSqlite } from "@weft/data/sqlite";
+import { openSqlite } from "@weft-framework/data/sqlite";
 import { defineBackups, dirBackups, s3Backups, type BackupTarget } from "../src/backup.ts";
 import { backupProject } from "../src/db-backup.ts";
 import { findCompiler } from "../src/compiler.ts";
@@ -162,7 +162,7 @@ test("the project command backs up, lists and restores", { skip: !hasCargo() }, 
   db.prepare("INSERT INTO note VALUES ('1', 'kept')").run();
   db.close();
   await assert.rejects(backupProject(root, compiler, { command: "backup" }), /no src\/backup\.ts/);
-  writeFileSync(join(root, "src", "backup.ts"), `import { dirBackups } from "@weft/server/backup"\nexport const target = dirBackups("${join(root, "backups").replace(/\\/g, "/")}")\nexport const keep = 2\n`);
+  writeFileSync(join(root, "src", "backup.ts"), `import { dirBackups } from "@weft-framework/server/backup"\nexport const target = dirBackups("${join(root, "backups").replace(/\\/g, "/")}")\nexport const keep = 2\n`);
   const made = await backupProject(root, compiler, { command: "backup" });
   assert.equal(made.command, "backup");
   const listed = await backupProject(root, compiler, { command: "list" });

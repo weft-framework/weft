@@ -1,6 +1,6 @@
 # {{name}}
 
-A [Weft](https://github.com/aleroycz/weft) application.
+A [Weft](https://github.com/weft-framework/weft) application.
 
 ## Develop
 
@@ -35,4 +35,4 @@ component Page(post: Post) { view { <h1>{post.title}</h1> } }
 ```
 
 `load` may return `notFound()` or `redirect("/elsewhere")` from
-`@weft/server`.
+`@weft-framework/server`.

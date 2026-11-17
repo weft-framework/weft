@@ -1,5 +1,5 @@
-import type { PageContext } from "@weft/server";
-import type { NotificationView } from "@weft/core/notifications";
+import type { PageContext } from "@weft-framework/server";
+import type { NotificationView } from "@weft-framework/core/notifications";
 import { gate, type Me } from "../../lib/workspaces.ts";
 import { notify } from "../../lib/notify.ts";
 import { AppShell } from "../../components/AppShell.wx";

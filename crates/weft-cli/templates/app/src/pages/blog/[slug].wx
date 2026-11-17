@@ -1,4 +1,4 @@
-import { notFound, type PageContext, type PageMeta } from "@weft/server";
+import { notFound, type PageContext, type PageMeta } from "@weft-framework/server";
 import { findPost, type Post } from "../../lib/posts.ts";
 
 export function load(ctx: PageContext) {

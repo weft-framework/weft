@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { defineModel } from "@weft/data";
-import { defineComponent, escapeHtml } from "@weft/runtime";
+import { defineModel } from "@weft-framework/data";
+import { defineComponent, escapeHtml } from "@weft-framework/runtime";
 import { createApp } from "../src/app.ts";
 import { acceptGrant, grantToken, openWith, seal, sealWith, unseal } from "../src/seal.ts";
 import { importSecret } from "../src/security.ts";

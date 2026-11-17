@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { defineComponent, escapeHtml } from "@weft/runtime";
+import { defineComponent, escapeHtml } from "@weft-framework/runtime";
 import { createApp, type App } from "../src/app.ts";
 import { github, google, microsoft, oidc, verifyIdToken, type Identity, type Provider } from "../src/oauth.ts";
 import { Secret } from "../src/secret.ts";

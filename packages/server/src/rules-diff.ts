@@ -4,7 +4,7 @@ import { mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { diffRules, type Model, type RulesDiff } from "@weft/data";
+import { diffRules, type Model, type RulesDiff } from "@weft-framework/data";
 import { CompileError, findCompiler, type Compiler } from "./compiler.ts";
 import { ConfigError } from "./config.ts";
 import { ProjectError, loadProject } from "./project.ts";

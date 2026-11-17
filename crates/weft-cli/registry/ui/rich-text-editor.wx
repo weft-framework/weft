@@ -1,7 +1,7 @@
-import { renderRichText, type RichDoc } from "@weft/runtime";
+import { renderRichText, type RichDoc } from "@weft-framework/runtime";
 import { cn } from "../../lib/utils.ts";
-client import { fromDom } from "@weft/runtime"
-client import { richText } from "@weft/ui"
+client import { fromDom } from "@weft-framework/runtime"
+client import { richText } from "@weft-framework/ui"
 
 export const RICH_TOOLS = [
   { command: "bold", label: "Bold", keys: "Ctrl+B", d: ["M7 5h6a3.5 3.5 0 0 1 0 7H7z", "M7 12h7a3.5 3.5 0 0 1 0 7H7z"] },

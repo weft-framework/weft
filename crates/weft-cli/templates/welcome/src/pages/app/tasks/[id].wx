@@ -1,6 +1,6 @@
-import { notFound, pointerArea, type PageContext } from "@weft/server";
-import type { WeftEvent } from "@weft/runtime";
-client import { pointerAreaOf, pointerPlace, pointerRange } from "@weft/runtime"
+import { notFound, pointerArea, type PageContext } from "@weft-framework/server";
+import type { WeftEvent } from "@weft-framework/runtime";
+client import { pointerAreaOf, pointerPlace, pointerRange } from "@weft-framework/runtime"
 import { gate, type Me } from "../../../lib/workspaces.ts";
 import {
   Tasks,

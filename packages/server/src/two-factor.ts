@@ -1,4 +1,4 @@
-import type { SqlDatabase } from "@weft/data";
+import type { SqlDatabase } from "@weft-framework/data";
 import { authState, completeTwoFactor, type SecondFactor } from "./auth.ts";
 import type { PageContext } from "./context.ts";
 import { seal, unseal } from "./seal.ts";
@@ -82,7 +82,7 @@ export class SqlTwoFactorStore implements TwoFactorStore {
   readonly #r: string;
 
   constructor(db: SqlDatabase, table = "weft_two_factor") {
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(table)) throw new Error(`@weft/server: not a valid table name: ${table}`);
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(table)) throw new Error(`@weft-framework/server: not a valid table name: ${table}`);
     this.#db = db;
     this.#t = `"${table}"`;
     this.#r = `"${table}_recovery"`;
@@ -488,13 +488,13 @@ export class TwoFactor implements SecondFactor {
     const [v, iv, ct] = stored.split(".");
     const ivb = fromBase64url(iv ?? "");
     const ctb = fromBase64url(ct ?? "");
-    if (v !== "v1" || !ivb || !ctb) throw new Error("@weft/server: a stored two-factor secret is malformed");
+    if (v !== "v1" || !ivb || !ctb) throw new Error("@weft-framework/server: a stored two-factor secret is malformed");
     const { aes } = await this.#keys;
     try {
       const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: new Uint8Array(ivb), additionalData: enc.encode(user) }, aes, new Uint8Array(ctb));
       return new Uint8Array(pt);
     } catch (err) {
-      throw new Error("@weft/server: a stored two-factor secret does not open with this key (or belongs to another user)", { cause: err });
+      throw new Error("@weft-framework/server: a stored two-factor secret does not open with this key (or belongs to another user)", { cause: err });
     }
   }
 }

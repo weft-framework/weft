@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import type { IslandRegistry } from "@weft/runtime";
+import type { IslandRegistry } from "@weft-framework/runtime";
 import { createApp, type App } from "../src/app.ts";
 import { findCompiler } from "../src/compiler.ts";
 import { ProjectError, loadProject } from "../src/project.ts";
@@ -174,7 +174,7 @@ test("islands: marked instances, served browser modules, live client state", { s
   assert.ok(merged.includes("pages/toggle.js") && merged.includes("pages/more/toggle.js"), merged);
 });
 
-const GUESTBOOK = `import { fail } from "@weft/server/action"
+const GUESTBOOK = `import { fail } from "@weft-framework/server/action"
 
 const entries: string[] = []
 
@@ -255,7 +255,7 @@ test("models, api routes, middleware, config, and the error page are wired", { s
   mkdirSync(join(root, "src", "models"), { recursive: true });
   writeFileSync(
     join(root, "src", "models", "Note.ts"),
-    `import { defineModel } from "@weft/data"\n` +
+    `import { defineModel } from "@weft-framework/data"\n` +
       `interface Note { id: string }\n` +
       `export const Note = defineModel<Note>("Note", { fields: { id: "string" }, read: () => true, write: () => false })\n`,
   );
@@ -270,7 +270,7 @@ test("models, api routes, middleware, config, and the error page are wired", { s
   );
   writeFileSync(
     join(root, "src", "pages", "boom.ts"),
-    `import { defineComponent } from "@weft/runtime"\n` +
+    `import { defineComponent } from "@weft-framework/runtime"\n` +
       `export function load(): never { throw new Error("password=hunter2") }\n` +
       `export const Page = defineComponent("Boom", () => ({ handlers: {}, render: () => "<p>hidden</p>" }))\n`,
   );
@@ -315,7 +315,7 @@ test("src/auth.ts can export sign-in providers", { skip: !hasCargo() }, async ()
   writeFileSync(
     join(root, "src", "auth.ts"),
     [
-      `import { google } from "@weft/server"`,
+      `import { google } from "@weft-framework/server"`,
       `export const providers = [google({ clientId: "c", clientSecret: "s" })]`,
       `export function signIn(identity: { subject: string }) { return "g:" + identity.subject }`,
       `export const signInError = "/signin"`,
@@ -341,7 +341,7 @@ test("src/auth.ts can export a second factor", { skip: !hasCargo() }, async () =
   writeFileSync(
     join(root, "src", "auth.ts"),
     [
-      `import { defineTwoFactor } from "@weft/server"`,
+      `import { defineTwoFactor } from "@weft-framework/server"`,
       `export function user(id: string) { return { id } }`,
       `export const twoFactor = defineTwoFactor({ key: "k".repeat(32), issuer: "Acme", page: "/two-factor" })`,
       ``,

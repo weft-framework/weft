@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import { Model } from "@weft/data";
+import { Model } from "@weft-framework/data";
 import { patternForFile } from "./router.ts";
 
 export interface DataAccess {

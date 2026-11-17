@@ -1,0 +1,122 @@
+:root {
+  --ink: #1b1f27;
+  --paper: #fbfaf7;
+  --muted: #5b6270;
+  --line: #e3e0d8;
+  --code: #f1efe9;
+  --link: #24578f;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e6e4df;
+    --paper: #15171b;
+    --muted: #9aa0ab;
+    --line: #2c2f36;
+    --code: #1e2126;
+    --link: #8db8e8;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 17px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.top,
+main,
+footer {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1.5rem;
+  padding-top: 1.5rem;
+  padding-bottom: 1.5rem;
+}
+
+.name {
+  font-weight: 700;
+  font-size: 1.15rem;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+}
+
+nav a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+nav a:hover,
+nav a.here {
+  color: var(--ink);
+}
+
+main {
+  padding-bottom: 3rem;
+}
+
+h1 {
+  font-size: 2.2rem;
+  line-height: 1.2;
+  margin: 1.5rem 0 0.75rem;
+}
+
+h2 {
+  font-size: 1.25rem;
+  margin: 2.5rem 0 0.5rem;
+}
+
+.lede {
+  font-size: 1.2rem;
+  color: var(--muted);
+}
+
+a {
+  color: var(--link);
+}
+
+code {
+  font: 0.88em/1.5 ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
+}
+
+:not(pre) > code {
+  background: var(--code);
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+}
+
+pre {
+  background: var(--code);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+}
+
+footer {
+  border-top: 1px solid var(--line);
+  padding-top: 1rem;
+  padding-bottom: 2rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}

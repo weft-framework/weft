@@ -1,5 +1,5 @@
-import type { PageContext } from "@weft/server";
-import { activity, type ActivityItem } from "@weft/data";
+import type { PageContext } from "@weft-framework/server";
+import { activity, type ActivityItem } from "@weft-framework/data";
 import { gate, type Me } from "../../lib/workspaces.ts";
 import { Tasks, taskHistory, STATUS_LABEL, type Task } from "../../lib/tasks.ts";
 import { Notes, noteHistory } from "../../lib/notes.ts";

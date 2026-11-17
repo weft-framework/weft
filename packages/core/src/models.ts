@@ -1,4 +1,4 @@
-import { defineModel, type Model, type PolicyExpr } from "@weft/data";
+import { defineModel, type Model, type PolicyExpr } from "@weft-framework/data";
 
 export class Reader {
   readonly id: string;

@@ -6,7 +6,7 @@ import { createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TLSSocket } from "node:tls";
-import { defineComponent, escapeHtml } from "@weft/runtime";
+import { defineComponent, escapeHtml } from "@weft-framework/runtime";
 import { createJobs, MemoryJobStore } from "../src/jobs.ts";
 import {
   buildMime,

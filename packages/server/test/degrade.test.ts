@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { defineModel } from "@weft/data";
-import { defineComponent, escapeHtml } from "@weft/runtime";
+import { defineModel } from "@weft-framework/data";
+import { defineComponent, escapeHtml } from "@weft-framework/runtime";
 import { createApp, type AppOptions } from "../src/app.ts";
 
 const SECRET = "test-secret-test-secret-test-secret!";

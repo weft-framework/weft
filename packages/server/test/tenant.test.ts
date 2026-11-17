@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { defineComponent, escapeHtml } from "@weft/runtime";
-import { defineModel } from "@weft/data";
-import { openSqlite } from "@weft/data/sqlite";
-import { defineAccess } from "@weft/core";
+import { defineComponent, escapeHtml } from "@weft-framework/runtime";
+import { defineModel } from "@weft-framework/data";
+import { openSqlite } from "@weft-framework/data/sqlite";
+import { defineAccess } from "@weft-framework/core";
 import { createApp, type App } from "../src/app.ts";
 import { defineAction } from "../src/action.ts";
 import { login, MemorySessionStore, SqlSessionStore, switchTenant } from "../src/auth.ts";

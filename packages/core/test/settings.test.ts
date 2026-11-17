@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { audit, defineModel, useDatabase, type AuditEvent, type Model } from "@weft/data";
-import { openSqlite } from "@weft/data/sqlite";
+import { audit, defineModel, useDatabase, type AuditEvent, type Model } from "@weft-framework/data";
+import { openSqlite } from "@weft-framework/data/sqlite";
 import { defineAccess, explainText, isAccessError, type AccessErrorCode } from "../src/index.ts";
 
 function make(driver: "memory" | "sqlite") {

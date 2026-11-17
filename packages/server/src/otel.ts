@@ -123,7 +123,7 @@ export function otlpExporter(o: OtlpOptions): OtlpExporter {
   const now = o.now ?? Date.now;
   const root = base.href.endsWith("/") ? base.href : `${base.href}/`;
   const resource = { attributes: attributes({ "service.name": o.service, "telemetry.sdk.name": "weft", ...o.resource }) };
-  const scope = { name: "@weft/server" };
+  const scope = { name: "@weft-framework/server" };
 
   const spans: object[] = [];
   const logs: object[] = [];

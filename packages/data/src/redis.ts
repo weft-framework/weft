@@ -172,7 +172,7 @@ export function redisBroadcast(opts: RedisBroadcastOptions = {}): RedisBroadcast
   const channel = opts.channel ?? "weft-changes";
   const maxQueue = opts.maxQueue ?? 10_000;
   const retry = opts.retryMs ?? { min: 100, max: 5000 };
-  const report = opts.onError ?? ((err: unknown) => console.error("@weft/data: redis:", err));
+  const report = opts.onError ?? ((err: unknown) => console.error("@weft-framework/data: redis:", err));
   const listeners = new Set<(m: string) => void>();
   const gaps = new Set<() => void>();
   const queue: Buffer[] = [];

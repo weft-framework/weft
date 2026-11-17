@@ -1,4 +1,4 @@
-import { defineComponent, escapeHtml, signal } from "@weft/runtime";
+import { defineComponent, escapeHtml, signal } from "@weft-framework/runtime";
 import { createApp } from "../src/app.ts";
 import { serveBun } from "../src/bun.ts";
 

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { canSee, changes, onRead, useDatabase, type Change, type Model } from "@weft/data";
-import { openSqlite } from "@weft/data/sqlite";
+import { canSee, changes, onRead, useDatabase, type Change, type Model } from "@weft-framework/data";
+import { openSqlite } from "@weft-framework/data/sqlite";
 import { AccessError } from "../src/errors.ts";
 import { defineChat } from "../src/chat.ts";
 

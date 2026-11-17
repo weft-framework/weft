@@ -1,9 +1,31 @@
 {
-  "name": "@weft/data",
+  "name": "@weft-framework/data",
   "version": "0.0.1",
   "description": "Weft data layer: typed models whose @read/@write rules are enforced at the source of every query (and pushed into SQL), so authorization bypass (IDOR) is not expressible.",
+  "keywords": [
+    "weft",
+    "data",
+    "models",
+    "authorization",
+    "permissions",
+    "sql",
+    "orm"
+  ],
+  "homepage": "https://github.com/weft-framework/weft/tree/main/packages/data#readme",
+  "bugs": {
+    "url": "https://github.com/weft-framework/weft/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/weft-framework/weft.git",
+    "directory": "packages/data"
+  },
   "license": "MIT",
-  "author": "Vakea",
+  "author": {
+    "name": "Vakea",
+    "email": "alex.leroy8303@seznam.cz",
+    "url": "https://github.com/aleroycz"
+  },
   "type": "module",
   "exports": {
     ".": "./src/index.ts",

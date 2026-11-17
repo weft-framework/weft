@@ -160,23 +160,23 @@ fn lower_marked(src: &str, file: &SourceFile) -> String {
             names.push("type Html");
         }
         out.push_str(&format!(
-            "import {{ {} }} from \"@weft/runtime\";\n",
+            "import {{ {} }} from \"@weft-framework/runtime\";\n",
             names.join(", ")
         ));
     }
     if has_store {
-        out.push_str("import { defineStore } from \"@weft/runtime\";\n");
+        out.push_str("import { defineStore } from \"@weft-framework/runtime\";\n");
     }
     if has_model && has_file_field {
-        out.push_str("import { defineModel, type FileRef } from \"@weft/data\";\n");
+        out.push_str("import { defineModel, type FileRef } from \"@weft-framework/data\";\n");
     } else if has_model {
-        out.push_str("import { defineModel } from \"@weft/data\";\n");
+        out.push_str("import { defineModel } from \"@weft-framework/data\";\n");
     }
     if has_action {
-        out.push_str("import { defineAction, type ActionContext } from \"@weft/server/action\";\n");
+        out.push_str("import { defineAction, type ActionContext } from \"@weft-framework/server/action\";\n");
     }
     if has_job {
-        out.push_str("import { defineJob, type JobContext } from \"@weft/server/jobs\";\n");
+        out.push_str("import { defineJob, type JobContext } from \"@weft-framework/server/jobs\";\n");
     }
     let mut chunks: Vec<(String, bool)> = Vec::new();
     let mut cursor = 0;
@@ -335,9 +335,9 @@ fn lower_effects(src: &str, file: &SourceFile) -> String {
     let mut out = String::from("// Capabilities (erased; checked by TypeScript across files).\n");
     if body.contains("EffectOf<") {
         out.push_str(if body.contains("WeftWithin<") {
-            "import type { EffectOf, WeftWithin } from \"@weft/runtime\";\n"
+            "import type { EffectOf, WeftWithin } from \"@weft-framework/runtime\";\n"
         } else {
-            "import type { EffectOf } from \"@weft/runtime\";\n"
+            "import type { EffectOf } from \"@weft-framework/runtime\";\n"
         });
     }
     for (i, spec) in specs.iter().enumerate() {
@@ -353,7 +353,7 @@ fn item_span(item: &Item) -> crate::token::Span {
 
 fn lower_actor(a: &crate::ast::ActorDecl, out: &mut String) {
     mark(out, a.span.start);
-    out.push_str("declare module \"@weft/data\" {\n  interface Register {\n    actor: ");
+    out.push_str("declare module \"@weft-framework/data\" {\n  interface Register {\n    actor: ");
     mark(out, a.ty_offset);
     out.push_str(&a.ty);
     out.push_str(";\n  }\n}\nexport {};\n");
@@ -2262,7 +2262,7 @@ mod tests {
             "  {#await user}<p>{n}</p>{:then n}<p>{n.name}</p>{:catch}<p>err</p>{/await}\n",
             "} }\n",
         ));
-        assert!(out.contains("awaitBlock } from \"@weft/runtime\""), "{out}");
+        assert!(out.contains("awaitBlock } from \"@weft-framework/runtime\""), "{out}");
         assert!(
             out.contains(concat!(
                 "${awaitBlock(props.user, () => `<p>${escapeHtml(props.n)}</p>`, ",
@@ -2288,7 +2288,7 @@ mod tests {
             "  <ul>{#each items as item, i (item.id)}<li>{item.t}</li><Row t={item.t} />{/each}</ul>\n",
             "} }\n",
         ));
-        assert!(out.contains("keyed } from \"@weft/runtime\""), "{out}");
+        assert!(out.contains("keyed } from \"@weft-framework/runtime\""), "{out}");
         assert!(
             out.contains(concat!(
                 "${(props.items).map((item, i) => { const __weftKey = String(item.id); return ",
@@ -2337,7 +2337,7 @@ mod tests {
         let src = "component Greeting(name: string) { view { <h1>Hello, {name}</h1> } }";
         let out = lower_src(src);
         assert!(out.contains(
-            "import { defineComponent, escapeHtml, escapeAttr } from \"@weft/runtime\";"
+            "import { defineComponent, escapeHtml, escapeAttr } from \"@weft-framework/runtime\";"
         ));
         assert!(out.contains(
             "export const Greeting = defineComponent(\"Greeting\", (props: { name: string }) => {"
@@ -2386,7 +2386,7 @@ mod tests {
             "component D() { signal n = 0; view { <p>{n}</p> } }",
             "component E() { view { <button @click={go}>x</button> } }",
             "component F(v: string) { view { <p :title={v}>x</p> } }",
-            "import { tabs } from \"@weft/ui\";\ncomponent G() { view { <div use:tabs>x</div> } }",
+            "import { tabs } from \"@weft-framework/ui\";\ncomponent G() { view { <div use:tabs>x</div> } }",
         ] {
             let out = lower_src(src);
             assert!(!out.contains("inert: true"), "{src} got:\n{out}");
@@ -2405,7 +2405,7 @@ mod tests {
             "got:\n{out}"
         );
         assert!(
-            out.contains("escapeAttr, escapeUrl } from \"@weft/runtime\""),
+            out.contains("escapeAttr, escapeUrl } from \"@weft-framework/runtime\""),
             "got:\n{out}"
         );
         let plain = lower_src("component B(t: string) { view { <p title={t}>x</p> } }");
@@ -2464,7 +2464,7 @@ mod tests {
         let out = lower_src(src);
         assert!(
             out.contains(
-                "import { defineComponent, escapeHtml, escapeAttr, signal, derived } from \"@weft/runtime\";"
+                "import { defineComponent, escapeHtml, escapeAttr, signal, derived } from \"@weft-framework/runtime\";"
             ),
             "got:\n{out}"
         );
@@ -2482,7 +2482,7 @@ mod tests {
         let src = "model Profile {\n  id: string\n  avatar: File | null\n  @read(true)\n  @write(true)\n}";
         let out = lower_src(src);
         assert!(
-            out.contains("import { defineModel, type FileRef } from \"@weft/data\";"),
+            out.contains("import { defineModel, type FileRef } from \"@weft-framework/data\";"),
             "got:\n{out}"
         );
         assert!(out.contains("  avatar: FileRef | null;"), "got:\n{out}");
@@ -2493,7 +2493,7 @@ mod tests {
         assert_eq!(file_field_type("File[]").as_deref(), Some("FileRef[]"));
         assert_eq!(file_field_type("FileRef | null").as_deref(), Some("FileRef | null"));
         let plain = lower_src("model Note {\n  id: string\n  @read(true)\n}");
-        assert!(plain.contains("import { defineModel } from \"@weft/data\";"), "got:\n{plain}");
+        assert!(plain.contains("import { defineModel } from \"@weft-framework/data\";"), "got:\n{plain}");
     }
 
     #[test]
@@ -2501,7 +2501,7 @@ mod tests {
         let src = "model Invoice {\n  owner: User\n  amount: Money\n  @read(actor == owner)\n  @write(actor == owner)\n}";
         let out = lower_src(src);
         assert!(
-            out.contains("import { defineModel } from \"@weft/data\";"),
+            out.contains("import { defineModel } from \"@weft-framework/data\";"),
             "got:\n{out}"
         );
         assert!(out.contains("export interface Invoice {"), "got:\n{out}");
@@ -2726,7 +2726,7 @@ mod tests {
         let out = lower_src(src);
         assert!(
             out.starts_with(
-                "import { defineComponent, escapeHtml, escapeAttr, trustHtml, type Html } from \"@weft/runtime\";"
+                "import { defineComponent, escapeHtml, escapeAttr, trustHtml, type Html } from \"@weft-framework/runtime\";"
             ),
             "got:\n{out}"
         );
@@ -2874,7 +2874,7 @@ mod tests {
         let out = lower_src("interface User { id: string }\nactor User\n");
         assert!(
             out.contains(
-                "declare module \"@weft/data\" {\n  interface Register {\n    actor: User;\n  }\n}\nexport {};"
+                "declare module \"@weft-framework/data\" {\n  interface Register {\n    actor: User;\n  }\n}\nexport {};"
             ),
             "{out}"
         );
@@ -2889,7 +2889,7 @@ mod tests {
             "component Page() {\n  view {\n    <button onclick={() => sendWelcome}>x</button>\n  }\n}\n",
         ));
         assert!(
-            out.contains("import { defineJob, type JobContext } from \"@weft/server/jobs\";"),
+            out.contains("import { defineJob, type JobContext } from \"@weft-framework/server/jobs\";"),
             "{out}"
         );
         assert!(!out.contains("defineAction"), "{out}");
@@ -2923,7 +2923,7 @@ mod tests {
         ));
         assert!(
             out.contains(
-                "import { defineAction, type ActionContext } from \"@weft/server/action\";"
+                "import { defineAction, type ActionContext } from \"@weft-framework/server/action\";"
             ),
             "{out}"
         );
@@ -2936,7 +2936,7 @@ mod tests {
             "], async (ctx: ActionContext, title: string, n: number | undefined, tags: Array<string>, ok: boolean) => {\n",
             "  return ctx.session + title\n});"
         )), "{out}");
-        assert!(out.contains("actionAttr } from \"@weft/runtime\""), "{out}");
+        assert!(out.contains("actionAttr } from \"@weft-framework/runtime\""), "{out}");
         assert!(
             out.contains(
                 "<form${actionAttr(\"action\", add)}><button${actionAttr(\"formaction\", add)}>"
@@ -2953,7 +2953,7 @@ mod tests {
     fn stores_lower_to_define_store() {
         let out = lower_src("store app visits = 0\nstore session cart: string[] = []\n");
         assert!(
-            out.contains("import { defineStore } from \"@weft/runtime\";"),
+            out.contains("import { defineStore } from \"@weft-framework/runtime\";"),
             "{out}"
         );
         assert!(
@@ -2979,7 +2979,7 @@ mod tests {
             "component Pure() {\n  view { <p /> }\n}\n",
         ));
         assert!(
-            out.contains("import type { EffectOf, WeftWithin } from \"@weft/runtime\";"),
+            out.contains("import type { EffectOf, WeftWithin } from \"@weft-framework/runtime\";"),
             "{out}"
         );
         assert!(

@@ -1,4 +1,4 @@
-import type { PageMeta } from "@weft/server";
+import type { PageMeta } from "@weft-framework/server";
 
 export const meta: PageMeta = {
   title: "About",

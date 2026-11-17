@@ -1,0 +1,77 @@
+import type { PageMeta } from "@weft-framework/server";
+import { create, model, counter } from "../lib/site.ts";
+
+export const meta: PageMeta = {
+  title: "Server-rendered pages that stay live",
+};
+
+component Page() {
+  view {
+    <section class="intro">
+      <h1>Weft</h1>
+      <p class="lede">
+        A web framework for people who know TSX and don't want to ship a megabyte of JavaScript to show a page
+        that is mostly text.
+      </p>
+      <p>
+        The server renders the page once and keeps a connection open. When something changes, it sends a small
+        piece of HTML and the browser patches it in. Your components never run twice.
+      </p>
+    </section>
+
+    <section>
+      <h2>Try it</h2>
+      <pre><code>{create}</code></pre>
+      <p>
+        You need Node 22.6 or newer. That's it. The compiler comes as a prebuilt binary for Windows, macOS and
+        Linux, so there's no Rust toolchain to install.
+      </p>
+    </section>
+
+    <section>
+      <h2>Why I built it</h2>
+      <p>
+        <strong>Hydration does the work twice.</strong> Rendering on the server and then booting the same
+        components in the browser, only to attach click handlers, is slow and wasteful. Weft ships a few
+        kilobytes of runtime, not your app.
+      </p>
+      <p>
+        <strong>Authorization is where apps get breached.</strong> Most frameworks hand it back to you. In Weft
+        the rule sits on the model and ends up in the SQL, so forgetting a <code>where</code> clause can't leak
+        someone else's row.
+      </p>
+      <p>
+        <strong>Types shouldn't stop at the network.</strong> Weft is one language from the database to the
+        button, and where it has to talk to another backend it does it through a generated, typed contract.
+      </p>
+    </section>
+
+    <section>
+      <h2>The language</h2>
+      <p>
+        <code>.wx</code> is TypeScript plus a few things that matter for web apps. Markup is part of the
+        language and gets type-checked. The read rule lives right next to the data it protects:
+      </p>
+      <pre><code>{model}</code></pre>
+      <p>
+        State is a <code>signal</code>, not a hook, and there are no dependency arrays. This counter keeps its
+        count on the server. A click sends an event, and only the button's HTML comes back:
+      </p>
+      <pre><code>{counter}</code></pre>
+      <p>
+        Mark something <code>client</code> and that piece, and only that piece, runs in the browser. Forms post
+        to server actions and work before any JavaScript has loaded.
+      </p>
+    </section>
+
+    <section>
+      <h2>Where things stand</h2>
+      <p>
+        Weft is before 1.0. The compiler, the language server, live pages, sessions and the SQLite data layer
+        with its rules all work today, and I use them. Postgres is next. The API can still change between
+        releases, so pin your versions.
+      </p>
+      <p><a href="/start">Read the getting started guide</a> or browse the source on GitHub.</p>
+    </section>
+  }
+}

@@ -7,7 +7,7 @@ export type Key = CryptoKey;
 export async function importSecret(secret: string): Promise<Key> {
   if (typeof secret !== "string" || secret.length < MIN_SECRET_LENGTH) {
     throw new Error(
-      `@weft/server: the secret must be at least ${MIN_SECRET_LENGTH} characters of random data`,
+      `@weft-framework/server: the secret must be at least ${MIN_SECRET_LENGTH} characters of random data`,
     );
   }
   return crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, [

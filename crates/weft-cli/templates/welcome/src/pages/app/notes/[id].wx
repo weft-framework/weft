@@ -1,5 +1,5 @@
-import { grantToken, notFound, type PageContext } from "@weft/server";
-import { mentionsIn, parseRichText, type WeftEvent } from "@weft/runtime";
+import { grantToken, notFound, type PageContext } from "@weft-framework/server";
+import { mentionsIn, parseRichText, type WeftEvent } from "@weft-framework/runtime";
 import { gate, type Me } from "../../../lib/workspaces.ts";
 import { Notes, noteHistory, LIMITS, docOf } from "../../../lib/notes.ts";
 import { assignable } from "../../../lib/tasks.ts";

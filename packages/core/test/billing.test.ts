@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
-import { canSee, onRead, useDatabase, type Model } from "@weft/data";
-import { openSqlite } from "@weft/data/sqlite";
+import { canSee, onRead, useDatabase, type Model } from "@weft-framework/data";
+import { openSqlite } from "@weft-framework/data/sqlite";
 import { defineAccess, isAccessError, type AccessErrorCode } from "../src/index.ts";
 import { defineBilling, StripeError, stripeForm, verifyStripeSignature, type PaymentFailure } from "../src/billing.ts";
 

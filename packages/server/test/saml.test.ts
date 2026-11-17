@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deflateRawSync, inflateRawSync } from "node:zlib";
 import { SignedXml } from "xml-crypto";
-import { defineComponent, escapeHtml } from "@weft/runtime";
+import { defineComponent, escapeHtml } from "@weft-framework/runtime";
 import { createApp, type App } from "../src/app.ts";
 import type { Identity } from "../src/oauth.ts";
 import { checkSamlConnection, defineSaml, parseIdpMetadata, type CheckedSamlConnection, type SamlConnection } from "../src/saml.ts";

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { defineModel } from "@weft/data";
+import { defineModel } from "@weft-framework/data";
 import { ModelStorage } from "../src/storage.ts";
 import { parseConfig } from "../src/config.ts";
 

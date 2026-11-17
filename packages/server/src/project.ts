@@ -1,8 +1,8 @@
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import { componentStyles, styleMark, type Component } from "@weft/runtime";
-import { Model } from "@weft/data";
+import { componentStyles, styleMark, type Component } from "@weft-framework/runtime";
+import { Model } from "@weft-framework/data";
 import type { ApiHandlers, ApiMethod } from "./api.ts";
 import type { AuthOptions } from "./auth.ts";
 import { isAction, type Action } from "./action.ts";
@@ -507,7 +507,7 @@ export async function loadProject(root: string, opts: ProjectOptions): Promise<P
       typeof exported.tailwind !== "function" ||
       typeof exported.htmlAttributes !== "function"
     ) {
-      throw new ProjectError("src/theme: export default defineTheme({...}) from @weft/theme");
+      throw new ProjectError("src/theme: export default defineTheme({...}) from @weft-framework/theme");
     }
     theme = exported;
   }

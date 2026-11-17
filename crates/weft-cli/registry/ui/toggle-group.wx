@@ -1,6 +1,6 @@
 import { cn } from "../../lib/utils.ts";
 import { toggleVariants } from "./toggle.wx";
-client import { toggleGroup } from "@weft/ui"
+client import { toggleGroup } from "@weft-framework/ui"
 
 component ToggleGroup(mode?: "single" | "multiple", name?: string, value?: string, label?: string, variant?: "default" | "outline", children: Html, ...attrs: Attrs) {
   view {

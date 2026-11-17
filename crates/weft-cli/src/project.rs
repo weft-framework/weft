@@ -587,7 +587,7 @@ const TAILWIND_CSS: &str = concat!(
 );
 
 const TAILWIND_DEPS: &str =
-    "  \"devDependencies\": {\n    \"@tailwindcss/node\": \"^4.3.5\",\n    \"tailwindcss\": \"^4.3.5\"\n  },\n  \"engines\"";
+    "  \"devDependencies\": {\n    \"@tailwindcss/node\": \"^4.3.5\",\n    \"tailwindcss\": \"^4.3.5\",\n";
 
 pub fn scaffold(root: &Path, name: &str, starter: Starter) -> io::Result<()> {
     if !starter.minimal {
@@ -613,7 +613,7 @@ pub fn scaffold(root: &Path, name: &str, starter: Starter) -> io::Result<()> {
                 "src/index.html" => {
                     text = text.replace("    <link rel=\"stylesheet\" href=\"/styles.css\">\n", "")
                 }
-                "package.json" => text = text.replace("  \"engines\"", TAILWIND_DEPS),
+                "package.json" => text = text.replace("  \"devDependencies\": {\n", TAILWIND_DEPS),
                 _ => {}
             }
         }
@@ -779,7 +779,7 @@ fn run_server_script(name: &str, script_file: &str, args: &[String]) -> ExitCode
         }
     };
     let Some(script) = find_server_script(&root, script_file) else {
-        eprintln!("weft {name}: @weft/server not found; run `npm install` in the project");
+        eprintln!("weft {name}: @weft-framework/server not found; run `npm install` in the project");
         return ExitCode::FAILURE;
     };
     let mut cmd = Command::new("node");
@@ -813,7 +813,7 @@ fn find_server_script(root: &Path, script_file: &str) -> Option<PathBuf> {
     let compiled = Path::new(script_file).with_extension("js");
     root.ancestors()
         .flat_map(|d| {
-            let pkg = d.join("node_modules/@weft/server");
+            let pkg = d.join("node_modules/@weft-framework/server");
             [
                 pkg.join("dist").join(&compiled),
                 pkg.join("src").join(script_file),
@@ -927,6 +927,8 @@ mod tests {
         let pkg = fs::read_to_string(dir.join("package.json")).unwrap();
         assert!(pkg.contains("\"tailwindcss\": \"^4.3.5\""), "{pkg}");
         assert!(pkg.contains("},\n  \"engines\""), "{pkg}");
+        assert_eq!(pkg.matches("\"devDependencies\"").count(), 1, "{pkg}");
+        assert!(pkg.contains("\"@weft-framework/cli\": \"^0.0.1\""), "{pkg}");
         fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -957,11 +959,11 @@ mod tests {
         let app = dir.join("app");
         fs::create_dir_all(&app).unwrap();
         assert_eq!(find_server_script(&app, "dev.ts"), None);
-        let src = dir.join("node_modules/@weft/server/src");
+        let src = dir.join("node_modules/@weft-framework/server/src");
         fs::create_dir_all(&src).unwrap();
         fs::write(src.join("dev.ts"), "").unwrap();
         assert_eq!(find_server_script(&app, "dev.ts"), Some(src.join("dev.ts")));
-        let dist = dir.join("node_modules/@weft/server/dist");
+        let dist = dir.join("node_modules/@weft-framework/server/dist");
         fs::create_dir_all(&dist).unwrap();
         fs::write(dist.join("dev.js"), "").unwrap();
         assert_eq!(

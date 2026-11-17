@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { defineComponent, escapeHtml, signal } from "@weft/runtime";
+import { defineComponent, escapeHtml, signal } from "@weft-framework/runtime";
 import { createApp, type App } from "../src/app.ts";
 import { LivePage } from "../src/live.ts";
 

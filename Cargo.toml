@@ -14,8 +14,9 @@ members = [
 version = "0.0.1"
 edition = "2021"
 license = "MIT"
-authors = ["Vakea"]
-repository = "https://github.com/aleroycz/weft"
+authors = ["Vakea <alex.leroy8303@seznam.cz>"]
+repository = "https://github.com/weft-framework/weft"
+homepage = "https://weft-framework.github.io/weft/"
 rust-version = "1.80"
 
 [workspace.dependencies]

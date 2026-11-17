@@ -11,7 +11,7 @@ import {
   SqlMediaStore,
   type MediaProvider,
 } from "../src/media.ts";
-import { openSqlite } from "@weft/data/sqlite";
+import { openSqlite } from "@weft-framework/data/sqlite";
 
 const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const PEM = privateKey.export({ type: "pkcs8", format: "pem" }).toString();

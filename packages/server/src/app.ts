@@ -18,9 +18,9 @@ import {
   type ClientMessage,
   type Component,
   type ServerMessage,
-} from "@weft/runtime";
+} from "@weft-framework/runtime";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { audit, changes, onReadDone, readOnlyActor, tenantOf, type ChangeFeed } from "@weft/data";
+import { audit, changes, onReadDone, readOnlyActor, tenantOf, type ChangeFeed } from "@weft-framework/data";
 import { actorLabel, decision, describe, devLog, frame, frameList, note, readsOf, type DevDecision, type DevLog, type DevSnapshot } from "./devtools.ts";
 import { RECORDING_MAX, outcomeOf, redactPath, redactPayload, type Recording } from "./replay.ts";
 import { addInspectHub, sessionKey } from "./inspect-hub.ts";
@@ -423,11 +423,11 @@ export interface PatchOver {
 export function createApp(opts: AppOptions): App {
   if (typeof opts.secret !== "string" || opts.secret.length < MIN_SECRET_LENGTH) {
     throw new Error(
-      `@weft/server: the secret must be at least ${MIN_SECRET_LENGTH} characters of random data`,
+      `@weft-framework/server: the secret must be at least ${MIN_SECRET_LENGTH} characters of random data`,
     );
   }
   if (opts.siteUrl !== undefined && !isSiteUrl(opts.siteUrl)) {
-    throw new Error("@weft/server: siteUrl must be an http(s) origin");
+    throw new Error("@weft-framework/server: siteUrl must be an http(s) origin");
   }
   const keyP: Promise<Key> = importSecret(opts.secret);
   const handoffKeyP: Promise<CryptoKey> = crypto.subtle
@@ -440,8 +440,8 @@ export function createApp(opts: AppOptions): App {
   const degrade = opts.degrade;
   if (degrade !== undefined) {
     const { pages: p, heapBytes: h } = degrade;
-    if (p !== undefined && (!Number.isInteger(p) || p < 1)) throw new Error("@weft/server: degrade.pages is a positive integer");
-    if (h !== undefined && (!Number.isFinite(h) || h < 16 * 1024 * 1024)) throw new Error("@weft/server: degrade.heapBytes is at least 16 MiB");
+    if (p !== undefined && (!Number.isInteger(p) || p < 1)) throw new Error("@weft-framework/server: degrade.pages is a positive integer");
+    if (h !== undefined && (!Number.isFinite(h) || h < 16 * 1024 * 1024)) throw new Error("@weft-framework/server: degrade.heapBytes is at least 16 MiB");
   }
   let heap = { at: -Infinity, bytes: null as number | null };
   const heapUsed = (): number | null => {
@@ -636,7 +636,7 @@ export function createApp(opts: AppOptions): App {
   function sealHeld(sid: string, action: string, args: readonly unknown[]): string {
     const body = Buffer.from(JSON.stringify([action, now() + HELD_TTL, args])).toString("base64url");
     const token = `${body}.${heldMac(sid, body)}`;
-    if (token.length > HELD_MAX) throw new Error(`@weft/server: ${action}.with(..): the held values are too large`);
+    if (token.length > HELD_MAX) throw new Error(`@weft-framework/server: ${action}.with(..): the held values are too large`);
     return token;
   }
   function openHeld(sid: string, action: string, token: string | null): unknown[] | null {
@@ -939,10 +939,10 @@ export function createApp(opts: AppOptions): App {
     }
   }
   if (!/^[A-Za-z0-9._-]{1,64}$/.test(instance)) {
-    throw new Error("@weft/server: instance names are 1-64 of A-Z a-z 0-9 . _ -");
+    throw new Error("@weft-framework/server: instance names are 1-64 of A-Z a-z 0-9 . _ -");
   }
   if (opts.stickyCookie !== undefined && (!/^[A-Za-z0-9_-]{1,64}$/.test(opts.stickyCookie) || opts.stickyCookie === cookieName)) {
-    throw new Error("@weft/server: stickyCookie must be a plain cookie name other than the session cookie");
+    throw new Error("@weft-framework/server: stickyCookie must be a plain cookie name other than the session cookie");
   }
   function stamped(req: Request, res: Response, secure: boolean): Response {
     res.headers.set("x-weft-instance", instance);
@@ -975,7 +975,7 @@ export function createApp(opts: AppOptions): App {
   const assets = new Map<string, string>();
   for (const [path, source] of Object.entries(opts.assets ?? {})) {
     if (!path.startsWith("/_weft/") || path.startsWith(LIVE)) {
-      throw new Error(`@weft/server: asset paths must be under /_weft/: ${path}`);
+      throw new Error(`@weft-framework/server: asset paths must be under /_weft/: ${path}`);
     }
     assets.set(path, source);
   }
@@ -984,7 +984,7 @@ export function createApp(opts: AppOptions): App {
   }
   const clientEntry = opts.clientEntry ?? "/_weft/client.js";
   if (opts.clientEntry !== undefined && !assets.has(clientEntry)) {
-    throw new Error(`@weft/server: clientEntry ${clientEntry} is not among the assets`);
+    throw new Error(`@weft-framework/server: clientEntry ${clientEntry} is not among the assets`);
   }
   const assetCache = opts.immutableAssets ? "public, max-age=31536000, immutable" : "no-cache";
   if (opts.componentStyles) {
@@ -1004,7 +1004,7 @@ export function createApp(opts: AppOptions): App {
   const maxAgeMs = opts.auth?.maxAgeMs ?? 30 * 24 * 3600_000;
   const twoFactor = opts.auth?.twoFactor ?? null;
   if (twoFactor && (typeof twoFactor.needed !== "function" || !isSafePath(twoFactor.page))) {
-    throw new Error("@weft/server: auth.twoFactor is a `defineTwoFactor({...})` with a same-origin `page`");
+    throw new Error("@weft-framework/server: auth.twoFactor is a `defineTwoFactor({...})` with a same-origin `page`");
   }
   const PENDING_MS = 10 * 60_000;
 
@@ -1051,7 +1051,7 @@ export function createApp(opts: AppOptions): App {
 
   function sessionsOf(user: string) {
     if (typeof authStore.forUser !== "function") {
-      throw new Error("@weft/server: this session store cannot list a user's sessions (it needs forUser)");
+      throw new Error("@weft-framework/server: this session store cannot list a user's sessions (it needs forUser)");
     }
     return authStore.forUser(user);
   }
@@ -1301,14 +1301,14 @@ export function createApp(opts: AppOptions): App {
       signInWith: async (identity) => {
         const fn = opts.auth?.signIn;
         if (typeof fn !== "function") {
-          throw new Error("@weft/server: signing in by email or a provider needs auth.signIn(identity) to say which user it is");
+          throw new Error("@weft-framework/server: signing in by email or a provider needs auth.signIn(identity) to say which user it is");
         }
         const user = await fn(identity);
         if (user === null || user === undefined) {
           return "refused";
         }
         if (typeof user !== "string" || user === "") {
-          throw new Error("@weft/server: auth.signIn must return a user id string, or null to refuse");
+          throw new Error("@weft-framework/server: auth.signIn must return a user id string, or null to refuse");
         }
         return rotate(user);
       },
@@ -1323,32 +1323,32 @@ export function createApp(opts: AppOptions): App {
   const providers = new Map<string, Provider>();
   for (const p of opts.auth?.providers ?? []) {
     if (providers.has(p.id)) {
-      throw new Error(`@weft/server: two sign-in providers are called ${p.id}`);
+      throw new Error(`@weft-framework/server: two sign-in providers are called ${p.id}`);
     }
     providers.set(p.id, p);
   }
   if (providers.size > 0 && typeof opts.auth?.signIn !== "function") {
-    throw new Error("@weft/server: sign-in providers need auth.signIn(identity) to say which user signs in");
+    throw new Error("@weft-framework/server: sign-in providers need auth.signIn(identity) to say which user signs in");
   }
   const signInError = opts.auth?.signInError ?? "/";
   if (!isSafePath(signInError)) {
-    throw new Error("@weft/server: auth.signInError must be a same-origin path");
+    throw new Error("@weft-framework/server: auth.signInError must be a same-origin path");
   }
   const SIGN_IN_COOKIE = "weft_signin";
   const SIGN_IN_TTL_MS = 10 * 60_000;
   const emailAuth = opts.auth?.email ?? null;
   if (providers.has("email")) {
-    throw new Error("@weft/server: the sign-in provider id `email` is taken by email sign-in");
+    throw new Error("@weft-framework/server: the sign-in provider id `email` is taken by email sign-in");
   }
   if (emailAuth && typeof opts.auth?.signIn !== "function") {
-    throw new Error("@weft/server: email sign-in needs auth.signIn(identity) to say which user signs in");
+    throw new Error("@weft-framework/server: email sign-in needs auth.signIn(identity) to say which user signs in");
   }
   const samlAuth = opts.auth?.saml ?? null;
   if (providers.has("saml")) {
-    throw new Error("@weft/server: the sign-in provider id `saml` is taken by SAML sign-in");
+    throw new Error("@weft-framework/server: the sign-in provider id `saml` is taken by SAML sign-in");
   }
   if (samlAuth && typeof opts.auth?.signIn !== "function") {
-    throw new Error("@weft/server: SAML sign-in needs auth.signIn(identity) to say which user signs in");
+    throw new Error("@weft-framework/server: SAML sign-in needs auth.signIn(identity) to say which user signs in");
   }
   const samlKeyP: Promise<CryptoKey> = crypto.subtle
     .digest("SHA-256", new TextEncoder().encode(`weft-saml\0${opts.secret}`))
@@ -2192,7 +2192,7 @@ export function createApp(opts: AppOptions): App {
       let cachedTag: string | null = null;
       if (etagRoute && !still) {
         uncachable.add(route);
-        onError(new Error(`@weft/server: ${url.pathname}: \`cache: "etag"\` is for pages without server event handlers, presence or streaming; serving it uncached`));
+        onError(new Error(`@weft-framework/server: ${url.pathname}: \`cache: "etag"\` is for pages without server event handlers, presence or streaming; serving it uncached`));
       } else if (etagRoute) {
         const old = etags.get(cacheKey);
         if (old) purge(old);
@@ -2227,7 +2227,7 @@ export function createApp(opts: AppOptions): App {
           deadHandlers.add(route);
           onError(
             new Error(
-              `@weft/server: ${new URL(req.url).pathname} binds server event handlers, ` +
+              `@weft-framework/server: ${new URL(req.url).pathname} binds server event handlers, ` +
                 "which a stateless host (transports: []) cannot run; use actions or client functions",
             ),
           );
@@ -2439,7 +2439,7 @@ export function createApp(opts: AppOptions): App {
       loaded = err;
     }
     if (loaded instanceof Redirect && !isSafePath(loaded.to)) {
-      throw new Error(`@weft/server: redirect target must be a same-origin path: ${loaded.to}`);
+      throw new Error(`@weft-framework/server: redirect target must be a same-origin path: ${loaded.to}`);
     }
     return loaded;
   }
@@ -3017,7 +3017,7 @@ export function createApp(opts: AppOptions): App {
   const actions = new Map<string, Action<never[]>>();
   for (const [name, a] of Object.entries(opts.actions ?? {})) {
     if (a.name !== name) {
-      throw new Error(`@weft/server: action registered as ${name} is named ${a.name}`);
+      throw new Error(`@weft-framework/server: action registered as ${name} is named ${a.name}`);
     }
     actions.set(name, a);
   }
@@ -3112,7 +3112,7 @@ export function createApp(opts: AppOptions): App {
       }
       if (value instanceof Redirect) {
         if (!isSafePath(value.to)) {
-          onError(new Error(`@weft/server: redirect target must be a same-origin path: ${value.to}`));
+          onError(new Error(`@weft-framework/server: redirect target must be a same-origin path: ${value.to}`));
           return answer(500, { ok: false, error: "Server error" });
         }
         return json ? jsonResponse(200, { ok: true, redirect: value.to }) : seeOther(value.to);
@@ -3240,11 +3240,11 @@ export function createApp(opts: AppOptions): App {
     try {
       const value = await withSession(sid, () => fn(ctx));
       if (!(value instanceof Response)) {
-        onError(new Error("@weft/server: an api handler did not return a Response"));
+        onError(new Error("@weft-framework/server: an api handler did not return a Response"));
         return stamp(jsonResponse(500, { error: "Server error" }), false);
       }
       if (!guardApiResponse(value, url.origin)) {
-        onError(new Error("@weft/server: an api response redirected off-site"));
+        onError(new Error("@weft-framework/server: an api response redirected off-site"));
         await value.body?.cancel().catch(() => undefined);
         return stamp(jsonResponse(500, { error: "Server error" }), false);
       }
@@ -3252,7 +3252,7 @@ export function createApp(opts: AppOptions): App {
     } catch (err) {
       if (err instanceof Redirect) {
         if (!isSafePath(err.to)) {
-          onError(new Error("@weft/server: redirect target must be a same-origin path"));
+          onError(new Error("@weft-framework/server: redirect target must be a same-origin path"));
           return stamp(jsonResponse(500, { error: "Server error" }), false);
         }
         return stamp(new Response(null, { status: 303, headers: { location: err.to } }), false);
@@ -3292,11 +3292,11 @@ export function createApp(opts: AppOptions): App {
     try {
       const value = await fn(ctx);
       if (!(value instanceof Response)) {
-        onError(new Error("@weft/server: an api handler did not return a Response"));
+        onError(new Error("@weft-framework/server: an api handler did not return a Response"));
         return plain(jsonResponse(500, { error: "Server error" }), false);
       }
       if (!guardApiResponse(value, url.origin)) {
-        onError(new Error("@weft/server: an api response redirected off-site"));
+        onError(new Error("@weft-framework/server: an api response redirected off-site"));
         await value.body?.cancel().catch(() => undefined);
         return plain(jsonResponse(500, { error: "Server error" }), false);
       }

@@ -1,4 +1,4 @@
-import { inTransaction, noteRead, transaction, type ChangeFeed, type Model } from "@weft/data";
+import { inTransaction, noteRead, transaction, type ChangeFeed, type Model } from "@weft-framework/data";
 import {
   BUILTIN_PERMISSIONS,
   isPermissionName,

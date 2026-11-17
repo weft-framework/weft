@@ -10,7 +10,7 @@ const root = join(here, ".weft", "datamap");
 
 const FILES: Record<string, string> = {
   "models/Note.ts": [
-    `import { defineModel } from "@weft/data";`,
+    `import { defineModel } from "@weft-framework/data";`,
     `export interface Note { id: string; owner: string; secret: string }`,
     `export const DmNote = defineModel<Note>("DmNote", { fields: { id: "string", owner: "string", secret: "string" }, read: () => true, write: () => true });`,
     `// DmOld: a model nothing reads.`,
@@ -18,7 +18,7 @@ const FILES: Record<string, string> = {
     `export const DmTag = defineModel<{ id: string }>("DmTag", { fields: { id: "string" }, read: () => true, write: () => true });`,
   ].join("\n"),
   "models/switches.ts": [
-    `import { defineModel } from "@weft/data";`,
+    `import { defineModel } from "@weft-framework/data";`,
     `const Switch = defineModel<{ id: string }>("DmSwitch", { fields: { id: "string" }, read: () => true, write: () => true });`,
     `export const switches = { models: { Switch }, on: (n: string) => Switch.as(null).get(n) !== undefined };`,
     `export const { Switch: DmSwitch } = switches.models;`,
@@ -29,7 +29,7 @@ const FILES: Record<string, string> = {
     `export function add(a: unknown) { return DmNote.as(a).create({ id: "1", owner: "x", secret: "s" }); }`,
   ].join("\n"),
   "pages/_layout.ts": [`import { switches } from "../models/switches.ts";`, `export const beta = () => switches.on("beta");`].join("\n"),
-  "pages/index.ts": [`import { mine } from "../lib/notes.ts";`, `import { escapeHtml } from "@weft/runtime";`, `export const load = () => mine(null);`].join("\n"),
+  "pages/index.ts": [`import { mine } from "../lib/notes.ts";`, `import { escapeHtml } from "@weft-framework/runtime";`, `export const load = () => mine(null);`].join("\n"),
   "pages/about.ts": [`import type { DmNote } from "../models/Note.ts";`, `type N = typeof DmNote;`, `export const load = () => ({});`].join("\n"),
   "pages/notes/[id].ts": [
     `import { DmNote, DmTag } from "../../models/Note.ts";`,
@@ -58,7 +58,7 @@ test("each route's models: reads, writes, unscoped, grants and unseen handles", 
   assert.deepEqual(home.reads, ["DmNote"], "lib/notes.ts reads");
   assert.deepEqual(home.writes, ["DmNote"], "the whole helper module counts: it also writes");
   assert.deepEqual(home.uses, ["DmSwitch"], "the layout uses an object with .models");
-  assert.ok(home.packages.includes("@weft/runtime") && home.packages.includes("@weft/data"));
+  assert.ok(home.packages.includes("@weft-framework/runtime") && home.packages.includes("@weft-framework/data"));
 
   const about = m.routes["/about"]!;
   assert.deepEqual([about.reads, about.writes, about.uses, about.unscoped], [[], [], ["DmSwitch"], []], "types are not uses");

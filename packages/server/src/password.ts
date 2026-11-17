@@ -23,11 +23,11 @@ function b64(bytes: Uint8Array): string {
 
 function passwordBytes(password: string): Uint8Array {
   if (typeof password !== "string" || password.length === 0) {
-    throw new TypeError("@weft/server: a password must be a non-empty string");
+    throw new TypeError("@weft-framework/server: a password must be a non-empty string");
   }
   const bytes = enc.encode(password.normalize("NFC"));
   if (bytes.length > MAX_PASSWORD_BYTES) {
-    throw new RangeError(`@weft/server: passwords are limited to ${MAX_PASSWORD_BYTES} bytes`);
+    throw new RangeError(`@weft-framework/server: passwords are limited to ${MAX_PASSWORD_BYTES} bytes`);
   }
   return bytes;
 }
@@ -39,7 +39,7 @@ function scryptOptions(ln: number, r: number, p: number): ScryptOptions {
 export async function hashPassword(password: string, opts: PasswordOptions = {}): Promise<string> {
   const { ln, r, p } = { ...DEFAULT, ...opts };
   if (!Number.isInteger(ln) || ln < 10 || ln > MAX_LN || !Number.isInteger(r) || r < 1 || !Number.isInteger(p) || p < 1) {
-    throw new RangeError("@weft/server: bad scrypt parameters");
+    throw new RangeError("@weft-framework/server: bad scrypt parameters");
   }
   const salt = randomBytes(16);
   const key = await scrypt(passwordBytes(password), salt, 32, scryptOptions(ln, r, p));

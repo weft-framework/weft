@@ -74,9 +74,9 @@ pub fn lower_client(file: &SourceFile) -> Option<String> {
          import { defineIsland, signal, derived",
     );
     out.push_str(if actions.is_empty() {
-        " } from \"@weft/runtime\";\n"
+        " } from \"@weft-framework/runtime\";\n"
     } else {
-        ", clientAction } from \"@weft/runtime\";\n"
+        ", clientAction } from \"@weft-framework/runtime\";\n"
     });
     for a in &actions {
         out.push_str(&client_action_stub(a));

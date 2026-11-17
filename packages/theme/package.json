@@ -1,9 +1,30 @@
 {
-  "name": "@weft/theme",
+  "name": "@weft-framework/theme",
   "version": "0.0.1",
   "description": "Weft themes: design tokens as CSS variables, light/dark/system and custom themes from a typed config, no-flash swapping from a cookie, Tailwind v4 integration.",
+  "keywords": [
+    "weft",
+    "theme",
+    "design-tokens",
+    "css-variables",
+    "dark-mode",
+    "tailwindcss"
+  ],
+  "homepage": "https://github.com/weft-framework/weft/tree/main/packages/theme#readme",
+  "bugs": {
+    "url": "https://github.com/weft-framework/weft/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/weft-framework/weft.git",
+    "directory": "packages/theme"
+  },
   "license": "MIT",
-  "author": "Vakea",
+  "author": {
+    "name": "Vakea",
+    "email": "alex.leroy8303@seznam.cz",
+    "url": "https://github.com/aleroycz"
+  },
   "type": "module",
   "exports": {
     ".": "./src/index.ts",

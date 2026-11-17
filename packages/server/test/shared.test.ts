@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { defineModel } from "@weft/data";
-import { sharedAttrs, type ServerMessage } from "@weft/runtime";
+import { defineModel } from "@weft-framework/data";
+import { sharedAttrs, type ServerMessage } from "@weft-framework/runtime";
 import { resetShared, sharedChange, sharedLeave, sharedMessage } from "../src/shared.ts";
 
 type Text = Extract<ServerMessage, { t: "text" }>;
@@ -32,7 +32,7 @@ function page(actor: unknown) {
   return {
     entry,
     inbox,
-    say: (msg: Omit<Extract<import("@weft/runtime").ClientMessage, { t: "text" }>, "t">) =>
+    say: (msg: Omit<Extract<import("@weft-framework/runtime").ClientMessage, { t: "text" }>, "t">) =>
       sharedMessage(entry, actor, { t: "text", ...msg } as never, (m) => inbox.push(m as Text), opts),
     last: () => inbox[inbox.length - 1]!,
   };

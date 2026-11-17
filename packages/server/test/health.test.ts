@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { defineComponent } from "@weft/runtime";
+import { defineComponent } from "@weft-framework/runtime";
 import { createApp, type AppOptions } from "../src/app.ts";
 
 const SECRET = "test-secret-test-secret-test-secret!";

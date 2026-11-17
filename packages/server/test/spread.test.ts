@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { restProps, spreadAttrs, type Component } from "@weft/runtime";
+import { restProps, spreadAttrs, type Component } from "@weft-framework/runtime";
 import { createApp } from "../src/app.ts";
 import { compileFile, findCompiler } from "../src/compiler.ts";
 

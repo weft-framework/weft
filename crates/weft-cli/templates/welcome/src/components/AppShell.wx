@@ -1,5 +1,5 @@
-import { logout, redirect, switchTenant } from "@weft/server";
-import { fail } from "@weft/server/action";
+import { logout, redirect, switchTenant } from "@weft-framework/server";
+import { fail } from "@weft-framework/server/action";
 import type { Me } from "../lib/workspaces.ts";
 import { notify } from "../lib/notify.ts";
 import { colorOf, nameOf, initials, userById } from "../lib/users.ts";

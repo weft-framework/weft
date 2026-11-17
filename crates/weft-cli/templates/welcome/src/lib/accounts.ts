@@ -7,7 +7,7 @@ import {
   SqlEmailTokenStore,
   SqlPasskeyStore,
   SqlTwoFactorStore,
-} from "@weft/server";
+} from "@weft-framework/server";
 import { db } from "./db.ts";
 import { appKey, appName, appUrl } from "./env.ts";
 import { accountMail, send } from "./mail.ts";

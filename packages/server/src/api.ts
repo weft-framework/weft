@@ -1,4 +1,4 @@
-import { isSafePath } from "@weft/runtime";
+import { isSafePath } from "@weft-framework/runtime";
 import type { PageContext } from "./context.ts";
 
 export type ApiMethod = "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE" | "OPTIONS";

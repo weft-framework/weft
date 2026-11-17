@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { defineComponent, escapeHtml } from "@weft/runtime";
-import { openSqlite } from "@weft/data/sqlite";
+import { defineComponent, escapeHtml } from "@weft-framework/runtime";
+import { openSqlite } from "@weft-framework/data/sqlite";
 import { defineAction } from "../src/action.ts";
 import { createApp, type App } from "../src/app.ts";
 import {

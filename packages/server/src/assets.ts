@@ -11,7 +11,7 @@ export function rewriteImports(js: string): string {
 }
 
 export function runtimeAssets(): Record<string, string> {
-  const src = dirname(fileURLToPath(import.meta.resolve("@weft/runtime")));
+  const src = dirname(fileURLToPath(import.meta.resolve("@weft-framework/runtime")));
   const out: Record<string, string> = {};
   for (const name of readdirSync(src)) {
     if (name.endsWith(".ts") && !name.endsWith(".d.ts")) {
@@ -55,7 +55,7 @@ export function islandAssets(
       owner.set(key, rel);
     }
     const js = stripTypeScriptTypes(ts, { mode: "strip" }).replace(
-      /(\bfrom\s*)(["'])@weft\/runtime\2/g,
+      /(\bfrom\s*)(["'])@weft-framework\/runtime\2/g,
       `$1$2${RT}index.js$2`,
     );
     const url = encodeURI(ISLANDS_DIR + rel.replace(/\.client\.ts$/, ".js"));

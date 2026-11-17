@@ -1,4 +1,4 @@
-import { fail } from "@weft/server/action"
+import { fail } from "@weft-framework/server/action"
 
 interface Entry {
   name: string

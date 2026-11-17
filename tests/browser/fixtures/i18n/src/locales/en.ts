@@ -1,4 +1,4 @@
-import { messages } from "@weft/i18n";
+import { messages } from "@weft-framework/i18n";
 
 export default messages({
   title: "Shopping",

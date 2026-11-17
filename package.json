@@ -1,8 +1,21 @@
 {
   "name": "weft-workspace",
   "private": true,
+  "description": "The Weft framework: compiler, packages, examples and tests.",
+  "homepage": "https://weft-framework.github.io/weft/",
+  "bugs": {
+    "url": "https://github.com/weft-framework/weft/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/weft-framework/weft.git"
+  },
   "license": "MIT",
-  "author": "Vakea",
+  "author": {
+    "name": "Vakea",
+    "email": "alex.leroy8303@seznam.cz",
+    "url": "https://github.com/aleroycz"
+  },
   "type": "module",
   "workspaces": [
     "packages/*"

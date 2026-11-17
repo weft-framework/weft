@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { audit, canSee, changes, onRead, useDatabase, type AuditEvent, type Model } from "@weft/data";
-import { openSqlite } from "@weft/data/sqlite";
+import { audit, canSee, changes, onRead, useDatabase, type AuditEvent, type Model } from "@weft-framework/data";
+import { openSqlite } from "@weft-framework/data/sqlite";
 import { bucket, defineFlags } from "../src/flags.ts";
 import { isAccessError } from "../src/errors.ts";
 

@@ -31,7 +31,7 @@ function scaffold(name: string): string {
   return dir;
 }
 
-const ACCESS = `import { defineAccess } from "@weft/core"
+const ACCESS = `import { defineAccess } from "@weft-framework/core"
 
 export const access = defineAccess({
   scopes: { org: {}, project: { parent: "org" } },
@@ -81,7 +81,7 @@ test("weft explain reports the models' rules and the roles", { skip: !hasCargo()
   const storage = new ModelStorage();
   await storage.attach(Object.values(project.models), { database: project.database });
   const { access } = (await import(pathToFileURL(join(outDir, "access.ts")).href)) as {
-    access: import("@weft/core").AccessControl<string, string, string>;
+    access: import("@weft-framework/core").AccessControl<string, string, string>;
   };
   const org = access.createTenant("alice", { name: "Acme" });
   storage.close();
@@ -91,7 +91,7 @@ test("weft explain reports the models' rules and the roles", { skip: !hasCargo()
   await assert.rejects(explainProject(root, { compiler: findCompiler(repo), tenant: "nope" }), ExplainError);
 });
 
-test("a project wires @weft/core: models, src/auth.ts and tenant rules", { skip: !hasCargo() }, async () => {
+test("a project wires @weft-framework/core: models, src/auth.ts and tenant rules", { skip: !hasCargo() }, async () => {
   const root = scaffold("core-app");
   writeFileSync(join(root, "src", "access.ts"), ACCESS);
   writeFileSync(join(root, "src", "auth.ts"), `import { access } from "./access.ts"\nexport function user(id: string) { return access.user(id) }\n`);
@@ -117,7 +117,7 @@ test("a project wires @weft/core: models, src/auth.ts and tenant rules", { skip:
   await storage.attach(Object.values(project.models), { database: ":memory:" });
   try {
     const { access } = (await import(pathToFileURL(join(outDir, "access.ts")).href)) as {
-      access: import("@weft/core").AccessControl<string, string, string>;
+      access: import("@weft-framework/core").AccessControl<string, string, string>;
     };
     const org = access.createTenant("alice", { name: "Acme" });
     const p1 = access.createScope("alice", { type: "project", parent: org.id, name: "One" });

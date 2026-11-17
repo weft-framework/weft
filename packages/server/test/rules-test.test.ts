@@ -31,7 +31,7 @@ const NOTE = `model Note {
 }
 `;
 
-const NARROW = `import { defineModel } from "@weft/data";
+const NARROW = `import { defineModel } from "@weft-framework/data";
 export const Narrow = defineModel<{ id: string; owner: string; shared: boolean }>("Narrow", {
   fields: { id: "string", owner: "string", shared: "boolean" },
   read: (a, r) => r.owner === a?.id || r.shared,

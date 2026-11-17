@@ -1,6 +1,6 @@
 import { cn } from "../../lib/utils.ts";
 import { menuContentClass } from "./dropdown-menu.wx";
-client import { menu, menubar, position } from "@weft/ui"
+client import { menu, menubar, position } from "@weft-framework/ui"
 
 component Menubar(label?: string, children: Html, ...attrs: Attrs) {
   view {

@@ -1,4 +1,4 @@
-import { defineModel, type Model } from "@weft/data";
+import { defineModel, type Model } from "@weft-framework/data";
 import { defineAction, type Action } from "./action.ts";
 import { allowWhileViewing, stopViewingAs, viewAs, viewingAs, type Viewing } from "./auth.ts";
 import type { PageContext } from "./context.ts";

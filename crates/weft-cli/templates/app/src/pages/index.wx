@@ -1,4 +1,4 @@
-import type { PageMeta } from "@weft/server";
+import type { PageMeta } from "@weft-framework/server";
 import { Counter } from "../components/Counter.wx";
 
 export const meta: PageMeta = {

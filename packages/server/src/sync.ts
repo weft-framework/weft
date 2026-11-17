@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { canSee, onRead, UNSCOPED, type Actor, type Change, type Model } from "@weft/data";
-import { configureStores, type Store } from "@weft/runtime";
+import { canSee, onRead, UNSCOPED, type Actor, type Change, type Model } from "@weft-framework/data";
+import { configureStores, type Store } from "@weft-framework/runtime";
 
 const MAX_ACTORS = 32;
 const MAX_KEYS = 256;

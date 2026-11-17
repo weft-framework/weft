@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { defineComponent, escapeHtml, signal, type EventPayload } from "@weft/runtime";
+import { defineComponent, escapeHtml, signal, type EventPayload } from "@weft-framework/runtime";
 import { createApp, type AppOptions } from "../src/app.ts";
 import { outcomeOf, parseRecording, recordingTest, redactPath, redactPayload, replay, ReplayError, type Recording } from "../src/replay.ts";
 
@@ -131,7 +131,7 @@ test("redaction: values, single keys and secret-looking query values", () => {
 test("--test writes a node:test file that embeds the recording", () => {
   const rec: Recording = { weft: "recording", v: 1, path: "/", actor: "id 7", at: 0, steps: [] };
   const src = recordingTest(rec, "replays / (0 steps)", "http://127.0.0.1:3000");
-  assert.match(src, /import \{ parseRecording, replay \} from "@weft\/server\/replay";/);
+  assert.match(src, /import \{ parseRecording, replay \} from "@weft-framework\/server\/replay";/);
   assert.match(src, /test\("replays \/ \(0 steps\)"/);
   assert.match(src, /process\.env\.WEFT_URL \?\? "http:\/\/127\.0\.0\.1:3000"/);
   assert.ok(src.includes('"actor": "id 7"'));

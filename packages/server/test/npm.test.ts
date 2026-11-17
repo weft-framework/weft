@@ -143,7 +143,7 @@ test("island code gets clear errors; package internals only warnings", () => {
 test("islandAssets resolves client imports from each module's directory", () => {
   const root = tree(PROJECT);
   try {
-    const client = `import { defineIsland } from "@weft/runtime";\nimport { twice } from "./util.ts";\nexport const islands = {};\n`;
+    const client = `import { defineIsland } from "@weft-framework/runtime";\nimport { twice } from "./util.ts";\nexport const islands = {};\n`;
     const out = islandAssets({ "pages/X.client.ts": client }, { root: join(root, "src") });
     assert.match(out["/_weft/islands/pages/X.js"], /from "\/_weft\/rt\/index\.js"/);
     assert.match(out["/_weft/islands/pages/X.js"], /from "\/_weft\/local\/pages\/util\.js"/);

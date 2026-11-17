@@ -1,3 +1,6 @@
+// Clippy flags thread_local! statics that already use `const { }`.
+#![allow(clippy::missing_const_for_thread_local)]
+
 pub mod a11y;
 pub mod ast;
 pub mod check;

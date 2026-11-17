@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { defineComponent, escapeHtml } from "@weft/runtime";
-import { LocalBroadcast } from "@weft/data";
-import { openSqlite } from "@weft/data/sqlite";
+import { defineComponent, escapeHtml } from "@weft-framework/runtime";
+import { LocalBroadcast } from "@weft-framework/data";
+import { openSqlite } from "@weft-framework/data/sqlite";
 import { defineAction } from "../src/action.ts";
 import { createApp, type App, type LiveSocket, type SocketData } from "../src/app.ts";
 import {

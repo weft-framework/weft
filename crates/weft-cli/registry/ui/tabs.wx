@@ -1,5 +1,5 @@
 import { cn } from "../../lib/utils.ts";
-client import { tabs } from "@weft/ui"
+client import { tabs } from "@weft-framework/ui"
 
 component Tabs(id: string, orientation?: "horizontal" | "vertical", children: Html, ...attrs: Attrs) {
   view {

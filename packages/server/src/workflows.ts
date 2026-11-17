@@ -2,7 +2,7 @@ import { type ParamSpec, decodeJson } from "./action.ts";
 import { authState } from "./auth.ts";
 import type { PageContext } from "./context.ts";
 import { defineJob, JobError, type Job, type JobActor, type Jobs } from "./jobs.ts";
-import type { SqlDatabase } from "@weft/data";
+import type { SqlDatabase } from "@weft-framework/data";
 
 type Maybe<T> = T | Promise<T>;
 
@@ -132,7 +132,7 @@ export class SqlWorkflowStore implements WorkflowStore {
   readonly #s: string;
 
   constructor(db: SqlDatabase, table = "weft_workflows") {
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(table)) throw new Error(`@weft/server: not a valid table name: ${table}`);
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(table)) throw new Error(`@weft-framework/server: not a valid table name: ${table}`);
     this.#db = db;
     this.#t = `"${table}"`;
     this.#s = `"${table}_signals"`;

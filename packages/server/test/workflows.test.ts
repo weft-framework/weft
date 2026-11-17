@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { openSqlite } from "@weft/data/sqlite";
+import { openSqlite } from "@weft-framework/data/sqlite";
 import { createJobs, MemoryJobStore, SqlJobStore } from "../src/jobs.ts";
 import {
   createWorkflows,

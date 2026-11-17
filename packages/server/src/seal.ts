@@ -1,4 +1,4 @@
-import type { Grant } from "@weft/data";
+import type { Grant } from "@weft-framework/data";
 import type { PageContext } from "./context.ts";
 import { base64url, fromBase64url, macBytes, type Key } from "./security.ts";
 
@@ -91,7 +91,7 @@ export function attachSeal(ctx: PageContext, control: SealControl): void {
 
 function control(ctx: PageContext): SealControl {
   const c = controls.get(ctx);
-  if (!c) throw new Error("@weft/server: seal/unseal need the context of a request being handled");
+  if (!c) throw new Error("@weft-framework/server: seal/unseal need the context of a request being handled");
   return c;
 }
 

@@ -1,4 +1,4 @@
-import { defineNotifications } from "@weft/core/notifications";
+import { defineNotifications } from "@weft-framework/core/notifications";
 import { appUrl } from "./env.ts";
 import { send } from "./mail.ts";
 import { userById } from "./users.ts";

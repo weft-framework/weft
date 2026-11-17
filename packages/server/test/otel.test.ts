@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { createApp } from "../src/app.ts";
 import { otlpExporter } from "../src/otel.ts";
 import { Secret } from "../src/secret.ts";
-import { defineComponent } from "@weft/runtime";
-import { defineModel } from "@weft/data";
+import { defineComponent } from "@weft-framework/runtime";
+import { defineModel } from "@weft-framework/data";
 import { createJobs, defineJob, JobError } from "../src/jobs.ts";
 
 const ORIGIN = "http://app.test";

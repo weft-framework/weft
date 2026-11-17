@@ -1,21 +1,3 @@
-// SPDX-License-Identifier: MIT
-//
-// `npm create weft <name>`: write the starter project into `<name>/`.
-//
-// The templates are the ones `weft new` embeds: the component tour
-// (crates/weft-cli/templates/welcome, with every registry component copied
-// into src/components/ui) by default, the small blog (templates/app) with
-// `--minimal`. A published package carries copies in `template/` (made by
-// prepack, see sync-template.js); inside the repository the originals are
-// used directly.
-//
-// The name must be a valid lowercase npm package name, so it is also a
-// single safe directory name: no separators, no `..`, no leading dot. The
-// target must be absent or empty. Template symlinks are refused and every
-// destination is checked to stay inside the project. `{{name}}` in text
-// files is replaced by the name; `gitignore` is written as `.gitignore`
-// (npm strips files named `.gitignore` from packages).
-
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,9 +9,6 @@ const SOURCES = existsSync(BUNDLED)
   ? { welcome: join(BUNDLED, "welcome"), minimal: join(BUNDLED, "minimal"), registry: join(BUNDLED, "registry") }
   : { welcome: join(CLI, "templates", "welcome"), minimal: join(CLI, "templates", "app"), registry: join(CLI, "registry") };
 
-// `--tailwind` (with `--minimal`): the blog starter's styles move from public/styles.css into a
-// Tailwind src/app.css, under the utilities. Kept identical to `weft new
-// --tailwind` (crates/weft-cli/src/project.rs; a test compares them).
 const TOKENS = ["ink", "paper", "muted", "line", "accent"];
 
 function tailwindCss(starterCss) {
@@ -63,8 +42,8 @@ function useTailwind(root) {
   const shell = join(root, "src", "index.html");
   writeFileSync(shell, readFileSync(shell, "utf8").replace('    <link rel="stylesheet" href="/styles.css">\n', ""));
   const pkg = join(root, "package.json");
-  const deps = '  "devDependencies": {\n    "@tailwindcss/node": "^4.3.5",\n    "tailwindcss": "^4.3.5"\n  },\n  "engines"';
-  writeFileSync(pkg, readFileSync(pkg, "utf8").replace('  "engines"', deps));
+  const deps = '  "devDependencies": {\n    "@tailwindcss/node": "^4.3.5",\n    "tailwindcss": "^4.3.5",\n';
+  writeFileSync(pkg, readFileSync(pkg, "utf8").replace('  "devDependencies": {\n', deps));
 }
 
 export function createProject(name, cwd = process.cwd(), { minimal = false, tailwind = false } = {}) {
@@ -98,8 +77,6 @@ export function createProject(name, cwd = process.cwd(), { minimal = false, tail
       useTailwind(root);
     }
   } else {
-    // Every registry component, as `weft add --all` would; the tour's own
-    // theme.ts stays.
     copyTree(join(SOURCES.registry, "ui"), root, name, join(root, "src", "components", "ui"));
     copyTree(join(SOURCES.registry, "lib"), root, name, join(root, "src", "lib"));
   }

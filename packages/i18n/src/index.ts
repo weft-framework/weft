@@ -305,16 +305,16 @@ const DEV = typeof process !== "undefined" && process.env?.NODE_ENV !== "product
 
 export function defineI18n<const L extends string, C extends Catalog>(config: I18nConfig<L, C>): I18n<L, C> {
   const locales = [...config.locales];
-  if (locales.length === 0) throw new Error("@weft/i18n: locales is empty");
+  if (locales.length === 0) throw new Error("@weft-framework/i18n: locales is empty");
   for (const l of locales) {
     try {
       new Intl.Locale(l);
     } catch {
-      throw new Error(`@weft/i18n: "${l}" is not a locale tag`);
+      throw new Error(`@weft-framework/i18n: "${l}" is not a locale tag`);
     }
   }
   const def = config.defaultLocale;
-  if (!locales.includes(def)) throw new Error(`@weft/i18n: defaultLocale "${def}" is not in locales`);
+  if (!locales.includes(def)) throw new Error(`@weft-framework/i18n: defaultLocale "${def}" is not in locales`);
   const prefix = config.prefix ?? "as-needed";
   const cookie = config.cookie === undefined ? "weft-locale" : config.cookie;
   const misses = new Map<string, Set<string>>();
@@ -324,12 +324,12 @@ export function defineI18n<const L extends string, C extends Catalog>(config: I1
     if (set.has(key)) return;
     set.add(key);
     if (config.onMissing) config.onMissing(key, locale);
-    else if (DEV && locale !== def) console.warn(`@weft/i18n: "${key}" has no ${locale} translation; using ${def}`);
+    else if (DEV && locale !== def) console.warn(`@weft-framework/i18n: "${key}" has no ${locale} translation; using ${def}`);
   };
   const onError =
     config.onError ??
     ((err: unknown, key: string, locale: string) => {
-      console.error(`@weft/i18n: ${locale} "${key}": ${err instanceof MessageSyntaxError ? err.message : String(err)}`);
+      console.error(`@weft-framework/i18n: ${locale} "${key}": ${err instanceof MessageSyntaxError ? err.message : String(err)}`);
     });
 
   const patterns: Pattern[] = Object.entries(config.routes ?? {}).map(([canonical, byLocale]) => ({
@@ -461,7 +461,7 @@ export function defineI18n<const L extends string, C extends Catalog>(config: I1
       return makeTranslator(l, layers, fallback, def, onMissing, onError);
     },
     catalog: (name, sources) => {
-      if (!/^[\w-]+$/.test(name)) throw new Error(`@weft/i18n: bad catalog name "${name}"`);
+      if (!/^[\w-]+$/.test(name)) throw new Error(`@weft-framework/i18n: bad catalog name "${name}"`);
       return { name, sources: sources as Record<string, CatalogSource> };
     },
     href,

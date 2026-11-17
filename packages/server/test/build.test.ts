@@ -44,7 +44,7 @@ test("a built project is served from dist alone", { skip: !hasCargo() }, async (
   mkdirSync(join(root, "src", "models"), { recursive: true });
   writeFileSync(
     join(root, "src", "models", "Item.ts"),
-    `import { defineModel } from "@weft/data"\n` +
+    `import { defineModel } from "@weft-framework/data"\n` +
       `interface Item { id: string }\n` +
       `export const Item = defineModel<Item>("Item", { fields: { id: "string" }, read: () => true, write: () => true })\n`,
   );

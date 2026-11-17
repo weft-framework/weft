@@ -2,7 +2,7 @@ import { mkdirSync, rmSync, statSync, watch, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import type { Component } from "@weft/runtime";
+import type { Component } from "@weft-framework/runtime";
 import { createApp, type App, type AppOptions } from "./app.ts";
 import { islandAssets } from "./assets.ts";
 import { loadEnvFile } from "./env.ts";
@@ -14,7 +14,7 @@ import { mailPreview, type EmailTemplate } from "./mail.ts";
 import { ProjectError, loadProject } from "./project.ts";
 import { randomId, securityHeaders } from "./security.ts";
 import { ModelStorage } from "./storage.ts";
-import type { Model } from "@weft/data";
+import type { Model } from "@weft-framework/data";
 import { DEV_CLIENT_JS, DevEvents } from "./dev-events.ts";
 
 function pick(mod: Record<string, unknown>, name: string | undefined, file: string): Component<object> | null {

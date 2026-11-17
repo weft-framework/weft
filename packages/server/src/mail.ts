@@ -1,4 +1,4 @@
-import { withRenderContext, type Component, type ComponentDef, type RenderContext } from "@weft/runtime";
+import { withRenderContext, type Component, type ComponentDef, type RenderContext } from "@weft-framework/runtime";
 import { defineJob, JobError, type Job, type Jobs } from "./jobs.ts";
 import type { PageContext } from "./context.ts";
 import { isSecret, type Secret } from "./secret.ts";

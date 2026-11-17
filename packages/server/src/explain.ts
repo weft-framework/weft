@@ -3,7 +3,7 @@ import { realpathSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { useDatabase, type FieldAttrs, type Model, type Operand, type PolicyExpr } from "@weft/data";
+import { useDatabase, type FieldAttrs, type Model, type Operand, type PolicyExpr } from "@weft-framework/data";
 import { CompileError, findCompiler, type Compiler } from "./compiler.ts";
 import { ConfigError } from "./config.ts";
 import { ProjectError, loadProject } from "./project.ts";
@@ -146,11 +146,11 @@ export async function explainProject(root: string, opts: ExplainOptions): Promis
     if (access.size > 1) throw new ExplainError("src/models exports the models of more than one access configuration");
     let close = () => {};
     if (opts.tenant !== undefined) {
-      if (access.size === 0) throw new ExplainError("--tenant needs @weft/core's models in src/models");
+      if (access.size === 0) throw new ExplainError("--tenant needs @weft-framework/core's models in src/models");
       if (project.database === undefined || project.database === ":memory:") {
         throw new ExplainError("--tenant needs a `database` file in weft.config.ts");
       }
-      const { openSqlite } = await import("@weft/data/sqlite");
+      const { openSqlite } = await import("@weft-framework/data/sqlite");
       const db = openSqlite(project.database, { readOnly: true });
       close = () => db.close();
       useDatabase(db, models as unknown as Model<never>[], { migrate: false, onWarning: () => {} });

@@ -44,25 +44,25 @@ export function defineAction<A extends unknown[], R>(
   run: (ctx: ActionContext, ...args: A) => R | Promise<R>,
 ): Action<A, R> {
   if (!/^[A-Za-z_$][\w$]*$/.test(name)) {
-    throw new Error(`@weft/server: invalid action name: ${name}`);
+    throw new Error(`@weft-framework/server: invalid action name: ${name}`);
   }
   const seen = new Set<string>();
   for (const p of params) {
     if (seen.has(p.name) || p.name.startsWith("_weft")) {
-      throw new Error(`@weft/server: action ${name}: bad parameter ${p.name}`);
+      throw new Error(`@weft-framework/server: action ${name}: bad parameter ${p.name}`);
     }
     seen.add(p.name);
   }
   const held = heldCount(params);
   if (params.slice(held).some((p) => p.held) || params.slice(0, held).some((p) => p.optional)) {
-    throw new Error(`@weft/server: action ${name}: held parameters come first and are never optional`);
+    throw new Error(`@weft-framework/server: action ${name}: held parameters come first and are never optional`);
   }
   const specs = Object.freeze(params.map((p) => Object.freeze({ ...p })));
   const bind = (...args: unknown[]): BoundAction => {
-    if (held === 0) throw new Error(`@weft/server: ${name}.with(..): the action has no Held<T> parameters`);
-    if (args.length !== held) throw new Error(`@weft/server: ${name}.with(..): expected ${held} held value(s), got ${args.length}`);
+    if (held === 0) throw new Error(`@weft-framework/server: ${name}.with(..): the action has no Held<T> parameters`);
+    if (args.length !== held) throw new Error(`@weft-framework/server: ${name}.with(..): expected ${held} held value(s), got ${args.length}`);
     const checked = decodeJson(specs.slice(0, held), Object.fromEntries(specs.slice(0, held).map((p, i) => [p.name, args[i]])));
-    if (!checked.ok) throw new Error(`@weft/server: ${name}.with(..): ${checked.error}`);
+    if (!checked.ok) throw new Error(`@weft-framework/server: ${name}.with(..): ${checked.error}`);
     return Object.freeze({ [BOUND]: true as const, name, args: Object.freeze(checked.args) });
   };
   return Object.freeze({ [ACTION]: true as const, name, params: specs, run, with: bind });

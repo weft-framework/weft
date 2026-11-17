@@ -3,7 +3,7 @@ import { existsSync, realpathSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import type { Model } from "@weft/data";
+import type { Model } from "@weft-framework/data";
 import { CompileError, findCompiler, type Compiler } from "./compiler.ts";
 import { ConfigError } from "./config.ts";
 import { ProjectError, loadProject } from "./project.ts";

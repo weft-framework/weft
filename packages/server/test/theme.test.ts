@@ -39,7 +39,7 @@ async function get(app: App, path: string, cookie?: string) {
   return { res, text: await res.text() };
 }
 
-const THEME = `import { defineTheme } from "@weft/theme";
+const THEME = `import { defineTheme } from "@weft-framework/theme";
 
 export default defineTheme({
   shared: { radius: "0.75rem" },

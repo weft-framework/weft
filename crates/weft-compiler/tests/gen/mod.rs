@@ -73,7 +73,7 @@ component Toggle{i}(title: string) {{
 
 pub fn source(n: usize) -> String {
     let mut s = String::from(
-        "import type { WeftEvent } from \"@weft/runtime\";\n\ninterface Item {\n  id: number;\n  name: string;\n  done: boolean;\n}\n",
+        "import type { WeftEvent } from \"@weft-framework/runtime\";\n\ninterface Item {\n  id: number;\n  name: string;\n  done: boolean;\n}\n",
     );
     for i in 0..n {
         s.push_str(&component(i));

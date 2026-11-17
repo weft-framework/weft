@@ -1,9 +1,31 @@
 {
-  "name": "@weft/runtime",
+  "name": "@weft-framework/runtime",
   "version": "0.0.1",
   "description": "Weft runtime: output encoding, signals, the live-fragment protocol, in-place DOM morphing, the live connection (WebSocket with SSE fallback) and the browser client.",
+  "keywords": [
+    "weft",
+    "runtime",
+    "signals",
+    "hypermedia",
+    "dom-morphing",
+    "websocket",
+    "sse"
+  ],
+  "homepage": "https://github.com/weft-framework/weft/tree/main/packages/runtime#readme",
+  "bugs": {
+    "url": "https://github.com/weft-framework/weft/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/weft-framework/weft.git",
+    "directory": "packages/runtime"
+  },
   "license": "MIT",
-  "author": "Vakea",
+  "author": {
+    "name": "Vakea",
+    "email": "alex.leroy8303@seznam.cz",
+    "url": "https://github.com/aleroycz"
+  },
   "type": "module",
   "exports": {
     ".": "./src/index.ts"

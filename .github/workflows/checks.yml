@@ -1,0 +1,142 @@
+# Tests, lint and build. Shared by the release and pull request workflows,
+# so a PR is held to exactly the bar a release has to clear.
+
+name: Checks
+
+on:
+  workflow_call:
+    inputs:
+      upload:
+        description: Keep the built npm tarballs as an artifact
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: [24]
+        include:
+          # The oldest Node we promise to support in package.json "engines".
+          - os: ubuntu-latest
+            node: 22
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: test
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Rust tests
+        run: cargo test --workspace --locked
+
+      # Builds the compiler once so the server tests don't each wait on cargo.
+      - name: Build the compiler
+        run: cargo build -p weft-cli --locked
+
+      - name: Package tests
+        shell: bash
+        run: |
+          exe=target/debug/weft
+          [ "$RUNNER_OS" = "Windows" ] && exe=target/debug/weft.exe
+          export WEFT_BIN="$PWD/$exe"
+          npm test
+
+      - name: Published packages load from node_modules
+        run: npm run test:packages
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: lint
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Versions agree
+        run: node scripts/check-version.mjs
+
+      - name: No conflict markers or trailing whitespace
+        run: git diff --check $(git hash-object -t tree /dev/null) HEAD -- . ':!*.svg' ':!*.md'
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: build
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Compiler (release)
+        run: cargo build --release --locked -p weft-cli
+
+      - name: npm packages
+        run: node scripts/build-packages.mjs --pack
+
+      - name: Website
+        run: |
+          export WEFT_BIN="$PWD/target/release/weft"
+          "$WEFT_BIN" build site
+          node scripts/pages.mjs site/dist/edge target/pages
+
+      - name: Keep the tarballs
+        if: inputs.upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-libraries
+          path: target/npm/*.tgz
+          if-no-files-found: error
+          retention-days: 7

@@ -1,9 +1,34 @@
 {
-  "name": "@weft/server",
+  "name": "@weft-framework/server",
   "version": "0.0.1",
   "description": "Weft server: live pages over WebSocket/SSE with signed sessions, CSRF, rate limiting and a strict CSP, on the Fetch API (Bun, Node, edge).",
+  "keywords": [
+    "weft",
+    "server",
+    "ssr",
+    "hypermedia",
+    "websocket",
+    "sse",
+    "csrf",
+    "csp",
+    "edge",
+    "fetch-api"
+  ],
+  "homepage": "https://github.com/weft-framework/weft/tree/main/packages/server#readme",
+  "bugs": {
+    "url": "https://github.com/weft-framework/weft/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/weft-framework/weft.git",
+    "directory": "packages/server"
+  },
   "license": "MIT",
-  "author": "Vakea",
+  "author": {
+    "name": "Vakea",
+    "email": "alex.leroy8303@seznam.cz",
+    "url": "https://github.com/aleroycz"
+  },
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
@@ -43,8 +68,8 @@
     "./production": "./src/production.ts"
   },
   "dependencies": {
-    "@weft/data": "0.0.1",
-    "@weft/runtime": "0.0.1",
+    "@weft-framework/data": "0.0.1",
+    "@weft-framework/runtime": "0.0.1",
     "@xmldom/xmldom": "0.8.15",
     "xml-crypto": "6.4.0"
   },

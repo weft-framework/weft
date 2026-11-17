@@ -181,11 +181,11 @@ fn dependencies(pkg: &Value) -> Vec<String> {
 fn check_packages(root: &Path, pkg: &Value, toolchain: &str) -> Vec<Finding> {
     let mut out = Vec::new();
     let deps = dependencies(pkg);
-    let weft: Vec<&String> = deps.iter().filter(|d| d.starts_with("@weft/")).collect();
-    if !weft.iter().any(|d| *d == "@weft/server") {
+    let weft: Vec<&String> = deps.iter().filter(|d| d.starts_with("@weft-framework/")).collect();
+    if !weft.iter().any(|d| *d == "@weft-framework/server") {
         out.push(error(
-            "@weft/server is not a dependency",
-            "npm install @weft/server @weft/runtime",
+            "@weft-framework/server is not a dependency",
+            "npm install @weft-framework/server @weft-framework/runtime",
         ));
     }
     let mut versions: Vec<(String, String)> = Vec::new();
@@ -208,15 +208,15 @@ fn check_packages(root: &Path, pkg: &Value, toolchain: &str) -> Vec<Finding> {
             .collect::<Vec<_>>()
             .join(", ");
         out.push(warn(
-            format!("@weft packages of different versions: {list}"),
-            "install the same version of every @weft package",
+            format!("@weft-framework packages of different versions: {list}"),
+            "install the same version of every @weft-framework package",
         ));
     } else if let Some(v) = distinct.first() {
         if *v == toolchain {
-            out.push(ok(format!("{} @weft package(s) at {v}", versions.len())));
+            out.push(ok(format!("{} @weft-framework package(s) at {v}", versions.len())));
         } else {
             out.push(warn(
-                format!("@weft packages are {v}, the weft toolchain is {toolchain}"),
+                format!("@weft-framework packages are {v}, the weft toolchain is {toolchain}"),
                 "use the same version of the CLI and the packages",
             ));
         }
@@ -287,17 +287,17 @@ fn check_i18n(root: &Path) -> Vec<Finding> {
     if !config {
         out.push(warn(
             "src/locales exists but there is no src/i18n.ts",
-            "define the locales there with defineI18n from @weft/i18n",
+            "define the locales there with defineI18n from @weft-framework/i18n",
         ));
     }
-    if resolve(root, "@weft/i18n").is_none() {
+    if resolve(root, "@weft-framework/i18n").is_none() {
         out.push(warn(
-            "src/locales exists but @weft/i18n is not installed",
-            "npm install @weft/i18n",
+            "src/locales exists but @weft-framework/i18n is not installed",
+            "npm install @weft-framework/i18n",
         ));
     }
     if out.is_empty() {
-        out.push(ok("translations: src/i18n.ts and @weft/i18n found"));
+        out.push(ok("translations: src/i18n.ts and @weft-framework/i18n found"));
     }
     out
 }
@@ -401,17 +401,17 @@ mod tests {
         put(
             &root,
             "package.json",
-            r#"{"dependencies":{"@weft/server":"^0.0.1","@weft/runtime":"^0.0.1"}}"#,
+            r#"{"dependencies":{"@weft-framework/server":"^0.0.1","@weft-framework/runtime":"^0.0.1"}}"#,
         );
         put(&root, "src/pages/index.wx", "");
         put(
             &root,
-            "node_modules/@weft/server/package.json",
+            "node_modules/@weft-framework/server/package.json",
             r#"{"version":"0.0.1"}"#,
         );
         put(
             &root,
-            "node_modules/@weft/runtime/package.json",
+            "node_modules/@weft-framework/runtime/package.json",
             r#"{"version":"0.0.1"}"#,
         );
         put(
@@ -431,16 +431,16 @@ mod tests {
         put(
             &root,
             "package.json",
-            r#"{"dependencies":{"@weft/server":"^0.0.1","@weft/runtime":"^0.0.1","@weft/ui":"^0.0.1"}}"#,
+            r#"{"dependencies":{"@weft-framework/server":"^0.0.1","@weft-framework/runtime":"^0.0.1","@weft-framework/ui":"^0.0.1"}}"#,
         );
         put(
             &root,
-            "node_modules/@weft/server/package.json",
+            "node_modules/@weft-framework/server/package.json",
             r#"{"version":"0.0.2"}"#,
         );
         put(
             &root,
-            "node_modules/@weft/runtime/package.json",
+            "node_modules/@weft-framework/runtime/package.json",
             r#"{"version":"0.0.1"}"#,
         );
         put(&root, "src/app.css", "@import \"tailwindcss\";\n");
@@ -467,7 +467,7 @@ mod tests {
         assert!(
             errors
                 .iter()
-                .any(|e| e.contains("@weft/ui is in package.json but not installed")),
+                .any(|e| e.contains("@weft-framework/ui is in package.json but not installed")),
             "{errors:?}"
         );
         assert!(errors.iter().any(|e| e.contains("Tailwind")), "{errors:?}");

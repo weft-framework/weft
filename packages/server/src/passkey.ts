@@ -1,4 +1,4 @@
-import type { SqlDatabase } from "@weft/data";
+import type { SqlDatabase } from "@weft-framework/data";
 import { login } from "./auth.ts";
 import type { PageContext } from "./context.ts";
 import { seal, unseal } from "./seal.ts";

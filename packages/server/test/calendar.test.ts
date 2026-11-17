@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { openSqlite } from "@weft/data/sqlite";
+import { openSqlite } from "@weft-framework/data/sqlite";
 import type { PageContext } from "../src/context.ts";
 import { createJobs } from "../src/jobs.ts";
 import {

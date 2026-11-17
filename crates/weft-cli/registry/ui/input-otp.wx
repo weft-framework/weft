@@ -1,5 +1,5 @@
 import { cn } from "../../lib/utils.ts";
-client import { inputOtp } from "@weft/ui"
+client import { inputOtp } from "@weft-framework/ui"
 
 export function otpSlots(length: number, split?: number): number[] {
   const out: number[] = [];

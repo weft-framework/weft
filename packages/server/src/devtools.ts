@@ -1,5 +1,5 @@
-import { UNSCOPED, type AuditEvent } from "@weft/data";
-import type { ServerMessage } from "@weft/runtime";
+import { UNSCOPED, type AuditEvent } from "@weft-framework/data";
+import type { ServerMessage } from "@weft-framework/runtime";
 import type { InspectNode } from "./live.ts";
 import type { Deps } from "./sync.ts";
 import type { RecordedStep } from "./replay.ts";

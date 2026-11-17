@@ -1,7 +1,7 @@
 // A translated live page: /intl (English), /cs/mezinarodni, /ar/intl.
 
-import type { PageContext } from "@weft/server";
-import type { Translator } from "@weft/i18n";
+import type { PageContext } from "@weft-framework/server";
+import type { Translator } from "@weft-framework/i18n";
 import { i18n } from "../i18n.ts";
 import type en from "../locales/en.ts";
 

@@ -1,4 +1,4 @@
-import type { PageMeta } from "@weft/server";
+import type { PageMeta } from "@weft-framework/server";
 import { posts } from "../../lib/posts.ts";
 
 export const meta: PageMeta = {

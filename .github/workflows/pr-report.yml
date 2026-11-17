@@ -1,0 +1,103 @@
+# After "Pull request checks" finishes, leave one comment on the pull request
+# saying what failed and how to reproduce it, and update that same comment
+# when a later push fixes things. It never checks out or runs code from the
+# pull request, which is what makes the write token here safe to use.
+#
+# GitHub only runs workflow_run workflows from the default branch, so this
+# starts working once it is on main.
+
+name: Pull request report
+
+on:
+  workflow_run:
+    workflows: ["Pull request checks"]
+    types: [completed]
+
+permissions:
+  actions: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  comment:
+    name: Comment on the pull request
+    if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion != 'cancelled'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pr-context
+          path: pr
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Write or update the comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+        run: |
+          set -euo pipefail
+          number=$(tr -cd '0-9' < pr/number)
+          if [ -z "$number" ]; then
+            echo "No pull request number in the artifact, nothing to do."
+            exit 0
+          fi
+
+          # The artifact came from a run on someone else's code, so check it
+          # names a pull request whose head really is the commit that ran.
+          head=$(gh api "repos/$REPO/pulls/$number" --jq .head.sha)
+          if [ "$head" != "$RUN_SHA" ]; then
+            echo "PR #$number has moved on to $head since this run ($RUN_SHA). A newer run will report."
+            exit 0
+          fi
+
+          marker="<!-- weft-ci-report -->"
+          existing=$(gh api "repos/$REPO/issues/$number/comments" --paginate \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | contains(\"$marker\"))) | .id" | head -n1)
+
+          short=${RUN_SHA:0:7}
+          if [ "$CONCLUSION" = "success" ]; then
+            if [ -z "$existing" ]; then
+              echo "All green and nothing to update."
+              exit 0
+            fi
+            body=$(printf '%s\n### All checks pass now\n\nThanks for sticking with it. Everything is green as of %s, so this is ready for review.\n\n[See the run](%s)\n' \
+              "$marker" "$short" "$RUN_URL")
+          else
+            failed=$(gh api "repos/$REPO/actions/runs/$RUN_ID/jobs" --paginate \
+              --jq '.jobs[] | select(.conclusion == "failure" and .name != "All checks passed")
+                    | "- **\(.name)**, at the step \"\([.steps[] | select(.conclusion == "failure") | .name] | first // "setup")\". [Open the log](\(.html_url))"')
+            [ -z "$failed" ] && failed="- Something went wrong before any job started. [Open the run]($RUN_URL)"
+            body=$(cat <<EOF
+          $marker
+          ### Some checks didn't pass
+
+          Thanks for the pull request! A few things need fixing before it can be merged (checked on $short):
+
+          $failed
+
+          To run the same checks on your machine:
+
+          \`\`\`sh
+          cargo test --workspace
+          cargo clippy --workspace --all-targets -- -D warnings
+          npm ci && npm test
+          npm run typecheck
+          \`\`\`
+
+          Push a fix to this branch and the checks run again. This comment updates itself when they pass. If a failure looks unrelated to your change, say so here and a maintainer will take a look.
+          EOF
+            )
+          fi
+
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$existing" -f body="$body" > /dev/null
+            echo "Updated comment $existing on #$number"
+          else
+            gh api -X POST "repos/$REPO/issues/$number/comments" -f body="$body" > /dev/null
+            echo "Commented on #$number"
+          fi

@@ -16,7 +16,7 @@ fn module_cap(spec: &str) -> Option<&'static str> {
         "fs" | "fs/promises" => Some("fs"),
         "http" | "https" | "http2" | "net" | "tls" | "dgram" | "dns" | "dns/promises"
         | "undici" | "ws" => Some("net"),
-        "@weft/server/auth" => Some("auth"),
+        "@weft-framework/server/auth" => Some("auth"),
         _ => None,
     }
 }

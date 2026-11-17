@@ -1,5 +1,5 @@
-import { redirect, switchTenant, type PageContext } from "@weft/server";
-import { fail } from "@weft/server/action";
+import { redirect, switchTenant, type PageContext } from "@weft-framework/server";
+import { fail } from "@weft-framework/server/action";
 import { access } from "../access.ts";
 import { meOf } from "../lib/workspaces.ts";
 import { userById } from "../lib/users.ts";

@@ -1,5 +1,5 @@
-import type { FieldSpec, Model, ScopedModel, TableColumn, TableView } from "@weft/data";
-import { defineTable, type Table } from "@weft/data";
+import type { FieldSpec, Model, ScopedModel, TableColumn, TableView } from "@weft-framework/data";
+import { defineTable, type Table } from "@weft-framework/data";
 import { defineAction, type Action, type ParamSpec } from "./action.ts";
 import type { PageContext } from "./context.ts";
 

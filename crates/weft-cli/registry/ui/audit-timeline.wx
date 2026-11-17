@@ -1,4 +1,4 @@
-import { audit, defaultActorId, type AuditEvent } from "@weft/data";
+import { audit, defaultActorId, type AuditEvent } from "@weft-framework/data";
 import { cn } from "../../lib/utils.ts";
 import { badgeVariants } from "./badge.wx";
 

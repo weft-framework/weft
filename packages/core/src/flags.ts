@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { defineModel, transaction, type Model, type PolicyExpr } from "@weft/data";
+import { defineModel, transaction, type Model, type PolicyExpr } from "@weft-framework/data";
 import { AccessError } from "./errors.ts";
 
 export interface FlagConfig {

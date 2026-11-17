@@ -1,4 +1,4 @@
-import { defineModel, type Actor } from "@weft/data";
+import { defineModel, type Actor } from "@weft-framework/data";
 import { access } from "../access.ts";
 
 export interface User {

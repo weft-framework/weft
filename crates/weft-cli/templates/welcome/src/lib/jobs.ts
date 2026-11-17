@@ -1,4 +1,4 @@
-import { createJobs, defineJob, SqlJobStore, type Jobs } from "@weft/server/jobs";
+import { createJobs, defineJob, SqlJobStore, type Jobs } from "@weft-framework/server/jobs";
 import { access } from "../access.ts";
 import { db } from "./db.ts";
 import { notify } from "./notify.ts";

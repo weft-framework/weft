@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { defineModel, type PolicyExpr } from "@weft/data";
+import { defineModel, type PolicyExpr } from "@weft-framework/data";
 import { constant, explainModel, words } from "../src/explain.ts";
 
 let n = 0;

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { defineModel } from "@weft/data";
-import { defineComponent } from "@weft/runtime";
+import { defineModel } from "@weft-framework/data";
+import { defineComponent } from "@weft-framework/runtime";
 import { createApp } from "../src/app.ts";
 import { defineAction } from "../src/action.ts";
 import { login } from "../src/auth.ts";

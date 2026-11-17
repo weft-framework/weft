@@ -1,4 +1,4 @@
-import type { Model } from "@weft/data";
+import type { Model } from "@weft-framework/data";
 import type { Action, ParamSpec } from "./action.ts";
 import type { ApiHandlers, ApiMethod } from "./api.ts";
 import { parsePattern } from "./router.ts";

@@ -1,12 +1,30 @@
 {
-  "name": "create-weft",
+  "name": "@weft-framework/create",
   "version": "0.0.1",
-  "description": "Scaffold a Weft project. `npm create weft <name>`",
+  "description": "Start a new Weft project: `npm create @weft-framework my-app`",
+  "keywords": [
+    "weft",
+    "create",
+    "scaffold",
+    "starter",
+    "template",
+    "web-framework"
+  ],
+  "homepage": "https://github.com/weft-framework/weft/tree/main/packages/create-weft#readme",
+  "bugs": {
+    "url": "https://github.com/weft-framework/weft/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/weft-framework/weft.git",
+    "directory": "packages/create-weft"
+  },
   "license": "MIT",
-  "author": "Vakea",
-  "repository": { "type": "git", "url": "git+https://github.com/aleroycz/weft.git", "directory": "packages/create-weft" },
-  "homepage": "https://github.com/aleroycz/weft#readme",
-  "bugs": { "url": "https://github.com/aleroycz/weft/issues" },
+  "author": {
+    "name": "Vakea",
+    "email": "alex.leroy8303@seznam.cz",
+    "url": "https://github.com/aleroycz"
+  },
   "type": "module",
   "bin": {
     "create-weft": "./bin.js"
@@ -18,6 +36,7 @@
   ],
   "scripts": {
     "prepack": "node sync-template.js",
+    "postpack": "node -e \"require('node:fs').rmSync('template', { recursive: true, force: true })\"",
     "test": "node --test test/*.test.js"
   },
   "engines": {

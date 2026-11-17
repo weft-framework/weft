@@ -21,7 +21,7 @@ const TSCONFIG: &str = r#"{
 "#;
 
 const ACTOR_PROBE_FILE: &str = "__weft_actor_probe.ts";
-const ACTOR_PROBE: &str = "import type { Actor } from \"@weft/data\";\n\
+const ACTOR_PROBE: &str = "import type { Actor } from \"@weft-framework/data\";\n\
 type IsAny<T> = 0 extends 1 & T ? true : false;\n\
 export const typed: IsAny<Actor> = false;\n";
 

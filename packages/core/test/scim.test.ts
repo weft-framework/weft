@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { useDatabase, type Model } from "@weft/data";
-import { openSqlite } from "@weft/data/sqlite";
+import { useDatabase, type Model } from "@weft-framework/data";
+import { openSqlite } from "@weft-framework/data/sqlite";
 import { defineAccess } from "../src/index.ts";
 import { defineScim, type ScimPerson } from "../src/scim.ts";
 

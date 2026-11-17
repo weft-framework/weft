@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ChangeFeed, defineModel } from "@weft/data";
-import { defineComponent, escapeHtml } from "@weft/runtime";
+import { ChangeFeed, defineModel } from "@weft-framework/data";
+import { defineComponent, escapeHtml } from "@weft-framework/runtime";
 import { createApp } from "../src/app.ts";
 import { defineGrants, GrantError } from "../src/grants.ts";
 

@@ -1,6 +1,6 @@
-import { redirect, type PageContext } from "@weft/server";
-import { fail } from "@weft/server/action";
-import { emptyRichText } from "@weft/runtime";
+import { redirect, type PageContext } from "@weft-framework/server";
+import { fail } from "@weft-framework/server/action";
+import { emptyRichText } from "@weft-framework/runtime";
 import { gate, meOf, type Me } from "../../../lib/workspaces.ts";
 import { Notes, excerpt, newNoteId, type Note } from "../../../lib/notes.ts";
 import { nameOf } from "../../../lib/users.ts";

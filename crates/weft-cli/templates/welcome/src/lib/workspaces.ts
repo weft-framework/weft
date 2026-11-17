@@ -1,6 +1,6 @@
-import { defineWizard, SqlDraftStore } from "@weft/server/wizard";
-import { redirect, switchTenant, type PageContext } from "@weft/server";
-import type { Principal } from "@weft/core";
+import { defineWizard, SqlDraftStore } from "@weft-framework/server/wizard";
+import { redirect, switchTenant, type PageContext } from "@weft-framework/server";
+import type { Principal } from "@weft-framework/core";
 import { access } from "../access.ts";
 import { db } from "./db.ts";
 import { appUrl } from "./env.ts";

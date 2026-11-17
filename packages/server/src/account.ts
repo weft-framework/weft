@@ -1,4 +1,4 @@
-import type { SqlDatabase } from "@weft/data";
+import type { SqlDatabase } from "@weft-framework/data";
 import { authState, login, signOutUser, type LoginResult } from "./auth.ts";
 import type { PageContext } from "./context.ts";
 import { normalizeEmail } from "./email-signin.ts";
@@ -54,7 +54,7 @@ export class SqlAccountTokenStore implements AccountTokenStore {
   readonly #t: string;
 
   constructor(db: SqlDatabase, table = "weft_account_tokens") {
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(table)) throw new Error(`@weft/server: not a valid table name: ${table}`);
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(table)) throw new Error(`@weft-framework/server: not a valid table name: ${table}`);
     this.#db = db;
     this.#t = `"${table}"`;
     db.exec(

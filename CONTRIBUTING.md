@@ -46,6 +46,33 @@ Pull requests that stay inside one layer, the compiler, the runtime, the server
 or the data package, are easy to review and easy to revert. Cross-cutting
 changes are neither; split them when you can.
 
+## What happens when you open a pull request
+
+The tests run on Windows, macOS and Linux, along with clippy, the TypeScript
+type check and a full build of the npm packages and the website. If anything
+fails, a comment appears on the pull request saying which check it was, with a
+link to the log and the commands to run it yourself. Push a fix and the same
+comment updates when everything passes. A pull request can only be merged once
+the "All checks passed" status is green.
+
+## Releasing
+
+Releases come from tags. Bump `version` in `Cargo.toml` and in every
+`packages/*/package.json` (the `@weft-framework/*` dependencies between them and the
+`^` ranges in the starter templates too), then check they agree:
+
+```sh
+node scripts/check-version.mjs
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The release workflow then runs the security checks, the tests, lint and the
+build, compiles `weft` for six platforms, deploys the website and publishes
+every package to npm, in that order. Nothing is published unless all of it
+passes. To try the whole pipeline without publishing, run the Release workflow
+by hand from the Actions tab and leave "publish" unticked.
+
 ## Commits
 
 Imperative mood ("Fix pool scoping on nested queries"), small and focused, with

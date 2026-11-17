@@ -1,6 +1,6 @@
-import { redirect, type PageContext } from "@weft/server";
-import { fail } from "@weft/server/action";
-import type { WizardFieldView, WizardView } from "@weft/server/wizard";
+import { redirect, type PageContext } from "@weft-framework/server";
+import { fail } from "@weft-framework/server/action";
+import type { WizardFieldView, WizardView } from "@weft-framework/server/wizard";
 import { meOf, onboarding, type Me } from "../../lib/workspaces.ts";
 import { AppShell } from "../../components/AppShell.wx";
 import { Stepper } from "../../components/ui/stepper.wx";

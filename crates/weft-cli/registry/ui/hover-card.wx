@@ -1,6 +1,6 @@
 import { cn } from "../../lib/utils.ts";
-import type { Placement } from "@weft/ui";
-client import { hoverCard } from "@weft/ui"
+import type { Placement } from "@weft-framework/ui";
+client import { hoverCard } from "@weft-framework/ui"
 
 component HoverCardTrigger(card: string, href?: string, children: Html, ...attrs: Attrs) {
   view {

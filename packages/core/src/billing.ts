@@ -1,4 +1,4 @@
-import { defineModel, transaction, type Model, type PolicyExpr } from "@weft/data";
+import { defineModel, transaction, type Model, type PolicyExpr } from "@weft-framework/data";
 import type { AccessControl, ActingUser } from "./access.ts";
 import { AccessError } from "./errors.ts";
 

@@ -1,6 +1,6 @@
-import { redirect, type PageContext } from "@weft/server";
-import { fail } from "@weft/server/action";
-import type { Booking, Slot } from "@weft/server/calendar";
+import { redirect, type PageContext } from "@weft-framework/server";
+import { fail } from "@weft-framework/server/action";
+import type { Booking, Slot } from "@weft-framework/server/calendar";
 import { gate, type Me } from "../../lib/workspaces.ts";
 import { bookings, resourceId, roomOf, ROOMS } from "../../lib/rooms.ts";
 import { nameOf } from "../../lib/users.ts";

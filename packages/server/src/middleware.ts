@@ -82,7 +82,7 @@ export async function runMiddleware(
   let rewrite: string | undefined;
   for (const fn of list) {
     if (typeof fn !== "function") {
-      throw new Error("@weft/server: middleware must be a function");
+      throw new Error("@weft-framework/server: middleware must be a function");
     }
     const result = await fn(ctx);
     if (result instanceof Response) {

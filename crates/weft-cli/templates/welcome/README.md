@@ -1,6 +1,6 @@
 # {{name}}
 
-A [Weft](https://github.com/aleroycz/weft) application: a team workspace with
+A [Weft](https://github.com/weft-framework/weft) application: a team workspace with
 tasks, notes, chat, room booking, people and roles, and accounts with
 passkeys and two-factor. It is a real app, not a demo, so read it, change it
 and delete what you do not need.
@@ -29,11 +29,11 @@ as a second person in a private window and invite them from People.
 | Signing in | `src/pages/sign-in`, `sign-up`, `forgot-password` | `login`, magic links and codes, passkeys, rate limits |
 | Tasks | `src/pages/app/tasks` | `defineModel` rules, `defineWorkflow`, row history, presence, the audit hook, CSV |
 | Notes | `src/pages/app/notes`, `src/pages/shared` | rich text, signed share links |
-| Chat | `src/pages/app/chat.wx` | `@weft/server/chat` |
-| Rooms | `src/pages/app/rooms.wx` | `@weft/server/calendar`, jobs, mail |
-| People and roles | `src/pages/app/team.wx`, `src/pages/invite.wx` | `@weft/core` memberships, roles, invites, seats |
+| Chat | `src/pages/app/chat.wx` | `@weft-framework/server/chat` |
+| Rooms | `src/pages/app/rooms.wx` | `@weft-framework/server/calendar`, jobs, mail |
+| People and roles | `src/pages/app/team.wx`, `src/pages/invite.wx` | `@weft-framework/core` memberships, roles, invites, seats |
 | Your account | `src/pages/app/account` | two-factor, passkeys, sessions, notification preferences |
-| Workspace settings | `src/pages/app/settings.wx` | `@weft/core` tenant settings |
+| Workspace settings | `src/pages/app/settings.wx` | `@weft-framework/core` tenant settings |
 
 Access is decided in one place: `src/access.ts` (roles and permissions) and
 the rules on each model (`src/lib`, `src/models`). The pages ask; they never decide.

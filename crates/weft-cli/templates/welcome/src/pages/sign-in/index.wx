@@ -1,6 +1,6 @@
-import { login, redirect, type PageContext } from "@weft/server";
-import type { WeftEvent } from "@weft/runtime";
-import { fail } from "@weft/server/action";
+import { login, redirect, type PageContext } from "@weft-framework/server";
+import type { WeftEvent } from "@weft-framework/runtime";
+import { fail } from "@weft-framework/server/action";
 import { email, passkeys } from "../../lib/accounts.ts";
 import { checkPassword, nextPath } from "../../lib/signin.ts";
 import { meOf } from "../../lib/workspaces.ts";
@@ -10,7 +10,7 @@ import { inputClass } from "../../components/ui/input.wx";
 import { Field } from "../../components/ui/field.wx";
 import { labelClass } from "../../components/ui/label.wx";
 import { Separator } from "../../components/ui/separator.wx";
-client import { getPasskey, passkeysSupported } from "@weft/runtime"
+client import { getPasskey, passkeysSupported } from "@weft-framework/runtime"
 
 export const meta = { title: "Sign in" };
 

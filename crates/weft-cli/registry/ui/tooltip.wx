@@ -1,5 +1,5 @@
 import { cn } from "../../lib/utils.ts";
-client import { tooltip } from "@weft/ui"
+client import { tooltip } from "@weft-framework/ui"
 
 client const tooltipClass = "bg-foreground text-background z-50 m-0 w-fit rounded-md border-0 px-3 py-1.5 text-xs text-balance";
 

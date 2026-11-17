@@ -1,4 +1,4 @@
-import type { PageContext } from "@weft/server";
+import type { PageContext } from "@weft-framework/server";
 import { visit, site } from "../lib/presence.ts";
 import { THREADS } from "../lib/guest.ts";
 import { meOf } from "../lib/workspaces.ts";
@@ -35,19 +35,19 @@ export const AREAS: Area[] = [
   {
     name: "Chat",
     does: "Direct and group conversations between people in the same workspace, with typing, seen-by, and edits for fifteen minutes.",
-    uses: "@weft/server/chat, live handlers",
+    uses: "@weft-framework/server/chat, live handlers",
     file: "src/pages/app/chat.wx",
   },
   {
     name: "Rooms",
     does: "Book a meeting room in the workspace's time zone, move it, cancel it, and get a reminder by email.",
-    uses: "@weft/server/calendar, jobs, mail",
+    uses: "@weft-framework/server/calendar, jobs, mail",
     file: "src/pages/app/rooms.wx",
   },
   {
     name: "People and roles",
     does: "Invite by email, change roles, make custom ones. Nobody can hand out more than they hold, and a workspace always keeps an owner.",
-    uses: "@weft/core memberships, roles, invites and seats",
+    uses: "@weft-framework/core memberships, roles, invites and seats",
     file: "src/pages/app/team.wx",
   },
   {

@@ -1,8 +1,8 @@
-import { redirect, type PageContext } from "@weft/server";
-import { fail } from "@weft/server/action";
-import { transaction } from "@weft/data";
-import type { WeftEvent } from "@weft/runtime";
-import type { MemberInfo, RoleInfo } from "@weft/core";
+import { redirect, type PageContext } from "@weft-framework/server";
+import { fail } from "@weft-framework/server/action";
+import { transaction } from "@weft-framework/data";
+import type { WeftEvent } from "@weft-framework/runtime";
+import type { MemberInfo, RoleInfo } from "@weft-framework/core";
 import { access } from "../../access.ts";
 import { gate, invite, meOf, type Me, type RoleId } from "../../lib/workspaces.ts";
 import { colorOf, initials, nameOf, userById } from "../../lib/users.ts";

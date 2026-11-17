@@ -234,8 +234,8 @@ test("configuration mistakes fail at startup", () => {
 });
 
 test("on SQLite: the same inbox, flags and pending lists survive the round trip", async () => {
-  const { useDatabase } = await import("@weft/data");
-  const { openSqlite } = await import("@weft/data/sqlite");
+  const { useDatabase } = await import("@weft-framework/data");
+  const { openSqlite } = await import("@weft-framework/data/sqlite");
   const { notify, sent, tick } = setup();
   useDatabase(openSqlite(":memory:"), Object.values(notify.models) as never);
   const a = (await notify.send("ada", "comment", { title: "c", data: { n: 1 } }))!;
@@ -256,8 +256,8 @@ test("on SQLite: the same inbox, flags and pending lists survive the round trip"
 });
 
 test("a channel locked later wins over a stored choice; prune keeps recently read ones", async () => {
-  const { useDatabase } = await import("@weft/data");
-  const { openSqlite } = await import("@weft/data/sqlite");
+  const { useDatabase } = await import("@weft-framework/data");
+  const { openSqlite } = await import("@weft-framework/data/sqlite");
   const db = openSqlite(":memory:");
   const sent: string[] = [];
   const email = { label: "Email", send: (d: Delivery) => void sent.push(d.notification.title) };

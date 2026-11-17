@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { defineComponent } from "@weft/runtime";
+import { defineComponent } from "@weft-framework/runtime";
 import { createApp } from "../src/app.ts";
 import { createLogger, redact, requestIdOf, type LogLevel } from "../src/log.ts";
 import { Secret } from "../src/secret.ts";

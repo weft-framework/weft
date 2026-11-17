@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { defineComponent, escapeHtml } from "@weft/runtime";
+import { defineComponent, escapeHtml } from "@weft-framework/runtime";
 import { createApp } from "../src/app.ts";
 import { decodeForm, decodeJson, defineAction, fail, isAction, type ParamSpec } from "../src/action.ts";
 import { redirect } from "../src/live.ts";

@@ -1,0 +1,40 @@
+name: An idea
+description: Something Weft could do, or do better.
+labels: ["idea"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ideas are welcome. The most useful part is the problem you ran into, so start there, even if you're not
+        sure what the fix should look like.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The situation you were in and what got in the way.
+      placeholder: I wanted to show a list that updates for everyone when one person edits it, but...
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help?
+      description: How you picture it working. Some code showing how you'd like to write it is great.
+      render: wx
+
+  - type: textarea
+    id: today
+    attributes:
+      label: How do you handle it today?
+      description: A workaround, another framework, or nothing at all yet.
+
+  - type: dropdown
+    id: help
+    attributes:
+      label: Would you like to work on it?
+      options:
+        - Not right now
+        - Yes, with some pointers
+        - Yes, I have a pretty good idea how

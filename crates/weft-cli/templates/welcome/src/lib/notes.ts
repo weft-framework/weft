@@ -1,5 +1,5 @@
-import { defineHistory, defineModel, type Actor } from "@weft/data";
-import { emptyRichText, parseRichText, richTextToPlain, type RichDoc } from "@weft/runtime";
+import { defineHistory, defineModel, type Actor } from "@weft-framework/data";
+import { emptyRichText, parseRichText, richTextToPlain, type RichDoc } from "@weft-framework/runtime";
 
 export interface Note {
   id: string;

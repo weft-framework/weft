@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { actionAttr, defineComponent, escapeHtml } from "@weft/runtime";
+import { actionAttr, defineComponent, escapeHtml } from "@weft-framework/runtime";
 import { createApp, type App } from "../src/app.ts";
 import { defineAction } from "../src/action.ts";
 import { openApi } from "../src/contract.ts";

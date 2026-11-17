@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bindArgs, defineComponent, escapeAttr, escapeHtml, keyed, signal, type EventMessage } from "@weft/runtime";
+import { bindArgs, defineComponent, escapeAttr, escapeHtml, keyed, signal, type EventMessage } from "@weft-framework/runtime";
 import { LivePage, redirect } from "../src/live.ts";
 
 const Counter = defineComponent("Counter", (props: { label: string }) => {

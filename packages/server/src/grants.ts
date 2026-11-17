@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { defineModel, type Grant, type Model, type PolicyExpr } from "@weft/data";
+import { defineModel, type Grant, type Model, type PolicyExpr } from "@weft-framework/data";
 import type { PageContext } from "./context.ts";
 import { seal, unseal } from "./seal.ts";
 

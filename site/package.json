@@ -1,0 +1,33 @@
+{
+  "name": "weft-site",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The Weft website, built with Weft and published to GitHub Pages.",
+  "homepage": "https://weft-framework.github.io/weft/",
+  "bugs": {
+    "url": "https://github.com/weft-framework/weft/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/weft-framework/weft.git",
+    "directory": "site"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Vakea",
+    "email": "alex.leroy8303@seznam.cz",
+    "url": "https://github.com/aleroycz"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "cargo run -q -p weft-cli -- dev .",
+    "build": "cargo run -q -p weft-cli -- build . && node ../scripts/pages.mjs dist/edge ../target/pages"
+  },
+  "dependencies": {
+    "@weft-framework/runtime": "0.0.1",
+    "@weft-framework/server": "0.0.1"
+  },
+  "engines": {
+    "node": ">=22.6"
+  }
+}

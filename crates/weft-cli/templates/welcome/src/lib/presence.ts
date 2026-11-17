@@ -1,4 +1,4 @@
-import { definePresence, type PageContext } from "@weft/server";
+import { definePresence, type PageContext } from "@weft-framework/server";
 import { guestOf, type Guest } from "./guest.ts";
 
 export interface Visitor {

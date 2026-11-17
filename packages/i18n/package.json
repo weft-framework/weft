@@ -1,9 +1,31 @@
 {
-  "name": "@weft/i18n",
+  "name": "@weft-framework/i18n",
   "version": "0.0.1",
   "description": "Weft translations: ICU message catalogs with type-checked keys and parameters, locale negotiation (URL prefix, cookie, Accept-Language), localised routes, Intl formatting, lang/dir on <html>.",
+  "keywords": [
+    "weft",
+    "i18n",
+    "l10n",
+    "icu",
+    "translations",
+    "intl",
+    "locale"
+  ],
+  "homepage": "https://github.com/weft-framework/weft/tree/main/packages/i18n#readme",
+  "bugs": {
+    "url": "https://github.com/weft-framework/weft/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/weft-framework/weft.git",
+    "directory": "packages/i18n"
+  },
   "license": "MIT",
-  "author": "Vakea",
+  "author": {
+    "name": "Vakea",
+    "email": "alex.leroy8303@seznam.cz",
+    "url": "https://github.com/aleroycz"
+  },
   "type": "module",
   "exports": {
     ".": "./src/index.ts",

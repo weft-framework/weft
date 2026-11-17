@@ -10,14 +10,15 @@
     "start": "node --experimental-strip-types --disable-warning=ExperimentalWarning dist/server.mjs"
   },
   "dependencies": {
-    "@weft/core": "^0.0.1",
-    "@weft/data": "^0.0.1",
-    "@weft/runtime": "^0.0.1",
-    "@weft/server": "^0.0.1",
-    "@weft/theme": "^0.0.1",
-    "@weft/ui": "^0.0.1"
+    "@weft-framework/core": "^0.0.1",
+    "@weft-framework/data": "^0.0.1",
+    "@weft-framework/runtime": "^0.0.1",
+    "@weft-framework/server": "^0.0.1",
+    "@weft-framework/theme": "^0.0.1",
+    "@weft-framework/ui": "^0.0.1"
   },
   "devDependencies": {
+    "@weft-framework/cli": "^0.0.1",
     "@tailwindcss/node": "^4.3.5",
     "tailwindcss": "^4.3.5",
     "typescript": "^5.9.0"

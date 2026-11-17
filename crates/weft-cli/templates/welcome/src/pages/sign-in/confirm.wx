@@ -1,4 +1,4 @@
-import type { PageContext } from "@weft/server";
+import type { PageContext } from "@weft-framework/server";
 import { email } from "../../lib/accounts.ts";
 import { AuthShell } from "../../components/AuthShell.wx";
 import { buttonVariants } from "../../components/ui/button.wx";

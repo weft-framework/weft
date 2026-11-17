@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { defineComponent, defineRoom, escapeHtml } from "@weft/runtime";
+import { defineComponent, defineRoom, escapeHtml } from "@weft-framework/runtime";
 import { createApp } from "../src/app.ts";
 import { definePresence } from "../src/presence.ts";
 

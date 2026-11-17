@@ -1,4 +1,4 @@
-import { defineI18n } from "@weft/i18n";
+import { defineI18n } from "@weft-framework/i18n";
 import en from "./locales/en.ts";
 
 export const i18n = defineI18n({

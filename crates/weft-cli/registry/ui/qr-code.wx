@@ -1,4 +1,4 @@
-import { qrCode, qrPath, qrViewBox, type QrLevel } from "@weft/runtime";
+import { qrCode, qrPath, qrViewBox, type QrLevel } from "@weft-framework/runtime";
 import { cn } from "../../lib/utils.ts";
 
 component QrCode(value: string, label: string, level?: QrLevel, ...attrs: Attrs) {

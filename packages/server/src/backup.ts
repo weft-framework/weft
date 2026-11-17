@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { openSqlite } from "@weft/data/sqlite";
+import { openSqlite } from "@weft-framework/data/sqlite";
 import { presignS3, type S3Options } from "./uploads.ts";
 import type { Secret } from "./secret.ts";
 

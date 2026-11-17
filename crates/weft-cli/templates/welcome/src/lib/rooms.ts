@@ -1,5 +1,5 @@
-import { defineBookings, SqlBookingStore, type Availability } from "@weft/server/calendar";
-import type { PageContext } from "@weft/server";
+import { defineBookings, SqlBookingStore, type Availability } from "@weft-framework/server/calendar";
+import type { PageContext } from "@weft-framework/server";
 import { access } from "../access.ts";
 import { db } from "./db.ts";
 import { notify } from "./notify.ts";

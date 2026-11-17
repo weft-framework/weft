@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { Driver, Model, SqlDatabase } from "@weft/data";
-import { useDatabase } from "@weft/data";
+import type { Driver, Model, SqlDatabase } from "@weft-framework/data";
+import { useDatabase } from "@weft-framework/data";
 
 type Db = SqlDatabase & { close(): void };
 
@@ -22,7 +22,7 @@ export class ModelStorage {
   async attach(models: readonly Model<unknown>[], opts: StorageOptions = {}): Promise<void> {
     if (opts.database !== undefined) {
       if (this.dbPath !== opts.database) {
-        const { openSqlite } = await import("@weft/data/sqlite");
+        const { openSqlite } = await import("@weft-framework/data/sqlite");
         if (opts.database !== ":memory:") {
           mkdirSync(dirname(opts.database), { recursive: true });
         }

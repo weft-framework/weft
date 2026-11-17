@@ -1,5 +1,5 @@
-import { rowSource, type Change, type Model } from "@weft/data";
-import { applyEdit, diffText, moveIndex, transform, type Edit, type ServerMessage, type SharedCursor, type TextMessage } from "@weft/runtime";
+import { rowSource, type Change, type Model } from "@weft-framework/data";
+import { applyEdit, diffText, moveIndex, transform, type Edit, type ServerMessage, type SharedCursor, type TextMessage } from "@weft-framework/runtime";
 
 export interface SharedFieldOptions {
   label?: (actor: unknown) => string | null | undefined;

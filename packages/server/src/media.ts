@@ -1,5 +1,5 @@
 import { createPrivateKey, sign as rsaSign, timingSafeEqual, createHmac, randomBytes } from "node:crypto";
-import { onFileRelease, type SqlDatabase } from "@weft/data";
+import { onFileRelease, type SqlDatabase } from "@weft-framework/data";
 import type { Uploads } from "./uploads.ts";
 
 export type Revealable = string | { reveal(): string };
@@ -349,7 +349,7 @@ export class SqlMediaStore implements MediaStore {
   readonly #db: SqlDatabase;
   readonly #t: string;
   constructor(db: SqlDatabase, table = "weft_media") {
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(table)) throw new Error(`@weft/server: not a valid table name: ${table}`);
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(table)) throw new Error(`@weft-framework/server: not a valid table name: ${table}`);
     this.#db = db;
     this.#t = `"${table}"`;
     db.exec(

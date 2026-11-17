@@ -615,7 +615,7 @@ mod tests {
 
     #[test]
     fn reads_documented_catalog_forms() {
-        let src = r#"import { messages } from "@weft/i18n";
+        let src = r#"import { messages } from "@weft-framework/i18n";
 // comment { not a catalog }
 export default messages({
   nav: { home: "Home", 'about-us': 'About \'us\'' }, /* block */

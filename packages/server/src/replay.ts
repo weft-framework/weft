@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import type { EventPayload, ServerMessage } from "@weft/runtime";
+import type { EventPayload, ServerMessage } from "@weft-framework/runtime";
 
 export class ReplayError extends Error {}
 
@@ -208,7 +208,7 @@ export function recordingTest(rec: Recording, name: string, url: string): string
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseRecording, replay } from "@weft/server/replay";
+import { parseRecording, replay } from "@weft-framework/server/replay";
 
 const recording = parseRecording(JSON.stringify(${json}));
 

@@ -1,22 +1,3 @@
-// SPDX-License-Identifier: MIT
-//
-// @weft/ui: headless, accessible behaviour for Weft components.
-//
-// Every export that takes an element is a `use:` attachment: it is called
-// with the real element (and the attachment's value), sets up behaviour,
-// and returns a cleanup. Components keep their state in `client signal`s
-// and their markup and ARIA in the view; these functions add what markup
-// alone cannot: focus management, keyboard models, dismissal, positioning.
-//
-//   client import { modal, dismissable, roving } from "@weft/ui"
-//
-//   <dialog use:modal={{ open, onClose: close }}>...</dialog>
-//   <div role="menu" use:roving={{ orientation: "vertical" }}>...</div>
-//
-// Stacking uses the browser's top layer (`<dialog>`, `popover`) instead of
-// moving elements to the end of <body> ("portals"), so live patches keep
-// working on content that sits on top of the page.
-
 const FOCUSABLE = [
   "a[href]",
   "area[href]",
@@ -31,8 +12,6 @@ const FOCUSABLE = [
   "[tabindex]",
 ].join(",");
 
-/** The keyboard-focusable elements under `root`, in tab order of the DOM
- * (visible, not inert, not `tabindex="-1"`). */
 export function focusable(root) {
   return [...root.querySelectorAll(FOCUSABLE)].filter(
     (el) => el.tabIndex >= 0 && !el.closest("[inert]") && el.getClientRects().length > 0,
@@ -42,11 +21,6 @@ export function focusable(root) {
 function disabled(el) {
   return el.hasAttribute("disabled") || el.getAttribute("aria-disabled") === "true";
 }
-
-// --- dismiss layers -------------------------------------------------------
-// Open layers (dialogs, popovers, menus), newest last. Escape and a press
-// outside go to the topmost layer only, so closing a menu inside a dialog
-// leaves the dialog open.
 
 const layers = [];
 
@@ -86,9 +60,6 @@ function pushLayer(layer) {
   };
 }
 
-/** Elements counted as inside a layer: its trigger(s), found by
- * `aria-controls` / `popovertarget` / `commandfor` naming the layer's id,
- * and anything marked `data-weft-layer-part`. */
 function partOfLayer(el, target) {
   const owner = target instanceof Element ? target.closest("[aria-controls],[popovertarget],[commandfor],[data-weft-layer-part]") : null;
   if (!owner) return false;
@@ -102,26 +73,13 @@ function partOfLayer(el, target) {
   );
 }
 
-/**
- * `use:dismissable={onDismiss}`: while the value is a function, Escape or a
- * press outside the element (and outside its triggers) calls it with
- * "escape" or "outside". A falsy value leaves the element inactive.
- */
 export function dismissable(el, onDismiss) {
   if (typeof onDismiss !== "function") return undefined;
   return pushLayer({ el, dismiss: (reason) => onDismiss(reason), inside: (t) => partOfLayer(el, t) });
 }
 
-// --- focus trap -----------------------------------------------------------
-
 const traps = [];
 
-/**
- * `use:focusTrap` / `use:focusTrap={active}`: keeps Tab and Shift+Tab inside
- * the element while active, moves focus in (to `[autofocus]`, else the first
- * focusable element, else the element itself), and gives focus back to
- * where it was on cleanup. Nested traps: the newest one is in charge.
- */
 export function focusTrap(el, active = true) {
   if (active === false || active === null) return undefined;
   const previous = document.activeElement;
@@ -164,23 +122,12 @@ export function focusTrap(el, active = true) {
   };
 }
 
-// --- roving tabindex and typeahead ------------------------------------------
-
 const ITEMS = "[role=tab],[role=menuitem],[role=menuitemcheckbox],[role=menuitemradio],[role=option],[role=radio],[role=treeitem],[data-weft-item]";
 
-/**
- * `use:roving` / `use:roving={{ orientation, loop, typeahead, items,
- * followFocus }}`: one Tab stop for a group (tabs, menu items, options,
- * toolbar buttons); arrow keys move between items (per `orientation`,
- * default from `aria-orientation`, else both), Home/End jump, typing a
- * prefix jumps to the matching item. `followFocus` clicks the item it moves
- * to (tabs with automatic activation).
- */
 export function roving(el, options) {
   const opts = options ?? {};
   const selector = opts.items ?? ITEMS;
   const loop = opts.loop !== false;
-  // Items inside a hidden part of the group (a collapsed submenu) are out.
   const items = () =>
     [...el.querySelectorAll(selector)].filter((i) => {
       const h = i.closest("[hidden]");
@@ -228,7 +175,6 @@ export function roving(el, options) {
       const now = Date.now();
       buffer = now - bufferAt > 500 ? e.key.toLowerCase() : buffer + e.key.toLowerCase();
       bufferAt = now;
-      // Search from the item after the current one, wrapping around.
       const order = [...all.slice(at + 1), ...all.slice(0, at + 1)];
       const hit = order.find((i) => (i.getAttribute("aria-label") ?? i.textContent ?? "").trim().toLowerCase().startsWith(buffer));
       if (hit) move(hit);
@@ -246,11 +192,6 @@ export function roving(el, options) {
   };
 }
 
-// --- positioning ------------------------------------------------------------
-
-/** Where `floating` goes next to `anchor` (both DOMRects) for `placement`
- * (`top|bottom|left|right` with `-start|-end`), flipped to the opposite
- * side when it would leave the viewport. Pure: exported for tests. */
 export function place(anchor, floating, placement = "bottom", offset = 4, viewport = { width: innerWidth, height: innerHeight }) {
   let [side, align = "center"] = placement.split("-");
   const fits = (s) =>
@@ -284,13 +225,6 @@ function anchorOf(el, anchor) {
   return id ? document.querySelector(`[popovertarget="${CSS.escape(id)}"],[aria-controls~="${CSS.escape(id)}"]`) : null;
 }
 
-/**
- * `use:position={{ anchor, placement, offset }}`: keeps a floating element
- * (fixed, usually a popover in the top layer) next to its anchor (an
- * element, an id, or by default the element whose `popovertarget` /
- * `aria-controls` names it), following scroll, resize and size changes, and
- * sets `data-side` / `data-align` for styling.
- */
 export function position(el, options) {
   const opts = options ?? {};
   let frame = 0;
@@ -323,16 +257,6 @@ export function position(el, options) {
   };
 }
 
-// --- dialog -----------------------------------------------------------------
-
-/**
- * `use:modal={open}` or `use:modal={{ open, onClose, dismissable }}` on a
- * `<dialog>`: shown as a modal (top layer, page inert, focus moved in and
- * restored by the browser) while `open` is true, closed when false. A close
- * the visitor makes (Escape, a click on the backdrop unless `dismissable` is
- * false, a `<form method="dialog">` button) calls `onClose`, so the
- * component's state follows.
- */
 export function modal(el, state) {
   const s = typeof state === "object" && state !== null ? state : { open: Boolean(state) };
   if (!(el instanceof HTMLDialogElement)) throw new Error("modal: attach to a <dialog>");
@@ -364,14 +288,6 @@ export function modal(el, state) {
   };
 }
 
-// --- popover ----------------------------------------------------------------
-
-/**
- * `use:popover={open}` or `use:popover={{ open, onToggle }}` on a `popover`
- * element: shown or hidden to match `open`; a toggle the browser makes
- * (light dismiss, Escape, a `popovertarget` button) calls `onToggle(open)`.
- * Without a value it only reports nothing: use `popovertarget` alone.
- */
 export function popover(el, state) {
   const s = typeof state === "object" && state !== null ? state : state === undefined ? {} : { open: Boolean(state) };
   const onToggle = (e) => {
@@ -387,23 +303,11 @@ export function popover(el, state) {
   return () => el.removeEventListener("toggle", onToggle);
 }
 
-// --- tabs -------------------------------------------------------------------
-
-/**
- * `use:tabs` on the element holding a `role="tablist"` of `role="tab"`
- * buttons whose `aria-controls` name `role="tabpanel"` elements: clicking or
- * arrowing to a tab selects it (`aria-selected`, one Tab stop, the other
- * panels `hidden`) and dispatches `weft:change` (detail: the tab's id).
- * `{ activation: "manual" }` selects on Enter/Space/click only.
- */
 let tabsSeq = 0;
 export function tabs(el, options) {
   const opts = options ?? {};
   const list = el.querySelector("[role=tablist]") ?? el;
   const all = () => [...list.querySelectorAll("[role=tab]")];
-  // Tabs and panels may be paired by `data-value` instead of ids: give
-  // them ids and the ARIA links. Selection is client state from here on,
-  // so live patches leave it alone (`data-weft-own`).
   const base = el.id || `weft-tabs-${(tabsSeq += 1)}`;
   for (const t of all()) {
     const v = t.dataset.value;
@@ -451,15 +355,6 @@ export function tabs(el, options) {
   };
 }
 
-// --- menu -------------------------------------------------------------------
-
-/**
- * `use:menu` on a `popover` element with `role="menu"` (opened by a
- * `popovertarget` button): when it opens, focus goes to the first item;
- * arrows, Home/End and typeahead move between `menuitem`s; Enter/Space or a
- * click activates one and closes the menu; closing returns focus to the
- * button that opened it.
- */
 export function menu(el) {
   let opener = null;
   const items = () => [...el.querySelectorAll("[role=menuitem],[role=menuitemcheckbox],[role=menuitemradio]")].filter((i) => !disabled(i));
@@ -468,8 +363,6 @@ export function menu(el) {
       opener = document.activeElement;
       requestAnimationFrame(() => items()[0]?.focus());
     } else if (opener instanceof HTMLElement) {
-      // Closed with focus inside (Escape) or lost: back to the button. A
-      // click elsewhere keeps the focus it gave.
       const at = document.activeElement;
       if (!at || at === document.body || el.contains(at)) opener.focus();
     }
@@ -520,16 +413,8 @@ export function menu(el) {
   };
 }
 
-// --- tooltip ----------------------------------------------------------------
-
 let tooltipSeq = 0;
 
-/**
- * `use:tooltip={text}` or `use:tooltip={{ text, placement, delay, class }}`:
- * a `role="tooltip"` bubble (a manual popover, so it sits in the top layer)
- * shown after `delay` ms (default 400) on hover or focus, hidden on leave,
- * blur or Escape, and named by the element's `aria-describedby`.
- */
 export function tooltip(el, value) {
   const o = typeof value === "object" && value !== null ? value : { text: value };
   if (o.text === undefined || o.text === null || o.text === "") return undefined;
@@ -580,17 +465,6 @@ export function tooltip(el, value) {
   };
 }
 
-// --- combobox ---------------------------------------------------------------
-
-/**
- * `use:combobox` on a wrapper holding an `<input role="combobox">` and a
- * `role="listbox"` of `role="option"` elements: typing filters the options
- * (by text, or `data-value`), arrows move the active option
- * (`aria-activedescendant`, focus stays in the input), Enter picks it
- * (`aria-selected`, the input's value, a `weft:change` event with the
- * option's `data-value`), Escape closes. The listbox is shown while the
- * input has focus and something matches.
- */
 export function combobox(el, options) {
   const opts = options ?? {};
   const input = el.querySelector("[role=combobox]");
@@ -657,7 +531,7 @@ export function combobox(el, options) {
   const onDown = (e) => {
     const o = e.target instanceof Element ? e.target.closest("[role=option]") : null;
     if (o && list.contains(o) && !disabled(o)) {
-      e.preventDefault(); // keep focus in the input
+      e.preventDefault();
       pick(o);
     }
   };
@@ -677,16 +551,6 @@ export function combobox(el, options) {
   };
 }
 
-// --- toast ------------------------------------------------------------------
-
-/**
- * `toast(title, { description, variant, duration })`: a notification in the
- * page's toast region (an element with `data-weft-toaster`, e.g. the shadcn
- * `<Toaster />`; created on demand otherwise), announced politely to screen
- * readers, removed after `duration` ms (default 4000; 0 keeps it) or by its
- * close button. Item classes come from the region's `data-item-class`
- * (and `data-<variant>-class`). Returns a function that dismisses it.
- */
 export function toast(title, options = {}) {
   let region = document.querySelector("[data-weft-toaster]");
   if (!region) {
@@ -733,9 +597,6 @@ export function toast(title, options = {}) {
   return dismiss;
 }
 
-// --- shared helpers for markup-driven widgets ------------------------------
-
-/** Add attribute names to `data-weft-own`: client state patches keep. */
 function own(el, ...names) {
   const set = new Set((el.getAttribute("data-weft-own") ?? "").split(/\s+/).filter(Boolean));
   for (const n of names) set.add(n);
@@ -758,19 +619,8 @@ function hidePop(pop) {
   if (pop && typeof pop.hidePopover === "function" && isOpen(pop)) pop.hidePopover();
 }
 
-// --- uncontrolled dialogs ----------------------------------------------------
-
 const nativeCommands = typeof HTMLButtonElement !== "undefined" && "command" in HTMLButtonElement.prototype;
 
-/**
- * `use:dialog` on a `<dialog id>`: opened and closed by markup alone, no
- * client state. Buttons with `commandfor="<id>"` and `command="show-modal"
- * | "close" | "request-close"` drive it (natively where the browser has
- * invoker commands, by this attachment where not); `<form method="dialog">`
- * closes it; a backdrop click or Escape closes it unless the dialog has
- * `data-dismissable="false"`. `data-state` is "open" / "closed" for
- * styling, and focus goes back to the opener on close.
- */
 export function dialog(el) {
   if (!(el instanceof HTMLDialogElement)) throw new Error("dialog: attach to a <dialog>");
   let opener = null;
@@ -801,9 +651,6 @@ export function dialog(el) {
   };
   const onClose = () => {
     state();
-    // `close` is a queued event: the browser has usually given focus back
-    // already, and the user may have moved it on since. Only take focus
-    // that was lost (or is still in the closed dialog).
     const at = document.activeElement;
     const lost = !at || at === document.body || el.contains(at);
     if (lost && opener instanceof HTMLElement && opener.isConnected) opener.focus();
@@ -814,7 +661,6 @@ export function dialog(el) {
     const r = el.getBoundingClientRect();
     if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) el.close();
   };
-  // `open` also changes through native invokers: mirror it.
   const watch = new MutationObserver(state);
   watch.observe(el, { attributes: true, attributeFilter: ["open"] });
   document.addEventListener("click", onDoc, true);
@@ -830,14 +676,6 @@ export function dialog(el) {
   };
 }
 
-// --- clipboard ---------------------------------------------------------------
-
-/**
- * `use:copy={text}` on a button: a click writes `text` to the clipboard and
- * sets `data-state="copied"` for two seconds ("failed" when the browser
- * refuses, e.g. on an insecure origin). Dispatches `weft:change` (detail:
- * true on success).
- */
 export function copy(el, text) {
   own(el, "data-state");
   const value = text ?? "";
@@ -868,13 +706,6 @@ export function copy(el, text) {
   };
 }
 
-// --- toggles -----------------------------------------------------------------
-
-/**
- * `use:toggle` on a `<button aria-pressed>`: a click flips `aria-pressed`
- * and `data-state` ("on" / "off") and dispatches `weft:change` (detail:
- * the new pressed state).
- */
 export function toggle(el) {
   own(el, "aria-pressed", "data-state");
   const sync = () => {
@@ -892,13 +723,6 @@ export function toggle(el) {
   return () => el.removeEventListener("click", onClick);
 }
 
-/**
- * `use:toggleGroup={{ type: "single" | "multiple" }}` on a group of
- * `<button data-value aria-pressed>`: one Tab stop with arrow keys; in a
- * single group pressing one releases the others. `weft:change` carries the
- * pressed value (single, "" for none) or values (multiple). A hidden
- * `<input name>` in the group gets them, comma-joined, for forms.
- */
 export function toggleGroup(el, options) {
   const multiple = (options ?? {}).type === "multiple";
   const items = () => [...el.querySelectorAll("[data-value]")].filter((b) => b.tagName === "BUTTON");
@@ -931,13 +755,6 @@ export function toggleGroup(el, options) {
   };
 }
 
-// --- context menu ------------------------------------------------------------
-
-/**
- * `use:contextMenu={"menu-id"}` on the area: a right click (or the context
- * menu key / Shift+F10) opens the `popover` menu with that id at the
- * pointer. Give the menu `use:menu` for its keyboard model.
- */
 export function contextMenu(el, id) {
   const onMenu = (e) => {
     const pop = document.getElementById(String(id ?? ""));
@@ -961,13 +778,6 @@ export function contextMenu(el, id) {
   return () => el.removeEventListener("contextmenu", onMenu);
 }
 
-// --- hover card --------------------------------------------------------------
-
-/**
- * `use:hoverCard={"card-id"}` (or `{ id, placement, openDelay, closeDelay }`)
- * on a trigger: hovering or focusing it shows the `popover="manual"` card
- * with that id next to it; leaving both trigger and card hides it.
- */
 export function hoverCard(el, value) {
   const o = typeof value === "object" && value !== null ? value : { id: value };
   let timer = 0;
@@ -1015,18 +825,10 @@ export function hoverCard(el, value) {
   };
 }
 
-// --- menubar and navigation menu --------------------------------------------
-
 function popOf(trigger) {
   return document.getElementById(trigger.getAttribute("popovertarget") ?? "");
 }
 
-/**
- * `use:menubar` on a `role="menubar"` of `role="menuitem"` buttons, each
- * with `popovertarget` naming a `use:menu` popover: one Tab stop, Left /
- * Right move along the bar, and while a menu is open moving (or hovering)
- * opens the neighbour's menu instead. Down opens the focused one.
- */
 export function menubar(el) {
   const triggers = () => [...el.querySelectorAll(":scope > [role=menuitem], :scope > * > [role=menuitem]")];
   const openOne = () => triggers().find((t) => isOpen(popOf(t) ?? el));
@@ -1044,7 +846,7 @@ export function menubar(el) {
     const owner = inBar ? t : triggers().find((x) => popOf(x)?.contains(e.target));
     if (!owner) return;
     if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-      if (!inBar && e.target.closest("[aria-haspopup]")) return; // a submenu
+      if (!inBar && e.target.closest("[aria-haspopup]")) return;
       e.preventDefault();
       move(owner, e.key === "ArrowRight" ? 1 : -1);
     } else if (inBar && e.key === "ArrowDown") {
@@ -1075,12 +877,6 @@ export function menubar(el) {
   };
 }
 
-/**
- * `use:navigationMenu` on a `<nav>` whose triggers carry `popovertarget`:
- * hovering a trigger opens its panel (clicks still toggle it), moving to
- * another trigger switches panels, and leaving trigger and panel closes it.
- * Panels are positioned under the nav.
- */
 export function navigationMenu(el) {
   let timer = 0;
   let current = null;
@@ -1141,15 +937,6 @@ export function navigationMenu(el) {
   };
 }
 
-// --- carousel ----------------------------------------------------------------
-
-/**
- * `use:carousel` on a region holding a scroll-snapping
- * `[data-slot=carousel-content]` track of `[data-slot=carousel-item]`s and
- * `[data-carousel=prev|next]` buttons: the buttons and Left / Right (Up /
- * Down when `data-orientation="vertical"`) move one item; the buttons are
- * disabled at the ends. `weft:change` carries the first visible index.
- */
 export function carousel(el) {
   const track = el.querySelector("[data-slot=carousel-content]");
   if (!track) return undefined;
@@ -1209,16 +996,6 @@ export function carousel(el) {
   };
 }
 
-// --- resizable panels --------------------------------------------------------
-
-/**
- * `use:resizable` on a flex group of `[data-slot=resizable-panel]`s with a
- * `[data-slot=resizable-handle]` between each pair (`role="separator"`,
- * `tabindex="0"`): dragging a handle, or arrowing on it (Home / End for the
- * limits), moves space between its two neighbours. Panels take their start
- * size from `data-size` (percent) and their limits from `data-min-size` /
- * `data-max-size`. `data-direction="vertical"` stacks them.
- */
 export function resizable(el) {
   const vertical = el.dataset.direction === "vertical";
   const panels = () => [...el.children].filter((c) => c.dataset.slot === "resizable-panel");
@@ -1307,18 +1084,6 @@ export function resizable(el) {
   };
 }
 
-// --- select --------------------------------------------------------------------
-
-/**
- * `use:select` on a wrapper holding a trigger button (`popovertarget` → a
- * `popover` `role="listbox"`), `[data-slot=select-value]` inside the
- * trigger, `role="option"` items with `data-value`, and a hidden
- * `<input name>`: picking an option (click, Enter, Space) sets the input,
- * shows the option's text in the trigger, marks it `aria-selected`, closes
- * the list and dispatches `weft:change` (detail: the value). Arrows, Home /
- * End and typeahead move in the open list; the list opens on the selected
- * option. Typing on the closed trigger opens it.
- */
 export function select(el) {
   const trigger = el.querySelector("[popovertarget]");
   const list = trigger ? popOf(trigger) : null;
@@ -1399,16 +1164,6 @@ export function select(el) {
 }
 let selectSeq = 0;
 
-// --- one-time code -------------------------------------------------------------
-
-/**
- * `use:inputOtp` on a wrapper holding one real `<input maxlength>` (laid
- * over the boxes, transparent) and `[data-slot=input-otp-slot]` boxes:
- * the boxes show the typed characters, `data-active` marks the box the
- * caret is in, and `data-complete` is set on the wrapper when every box is
- * filled (`weft:change` then carries the code). The input keeps paste,
- * autofill (`autocomplete="one-time-code"`) and screen readers working.
- */
 export function inputOtp(el) {
   const input = el.querySelector("input");
   if (!input) return undefined;
@@ -1444,26 +1199,12 @@ export function inputOtp(el) {
   };
 }
 
-// --- calendar ------------------------------------------------------------------
-
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const fromIso = (s) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s ?? "");
   return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
 };
 
-/**
- * `use:calendar` on an element holding a hidden `<input name>` (its value
- * an ISO date, the selection) and `[data-slot=calendar-grid]`: builds an
- * accessible month grid (`role="grid"`, one Tab stop; arrows move by day /
- * week, Page Up / Down by month, Home / End to the week's ends), with
- * `[data-calendar=prev|next]` buttons and a `[data-slot=calendar-caption]`.
- * `data-min` / `data-max` (ISO) limit it, `data-locale` names the locale
- * (default: the page's `lang`), `data-week-start` the first weekday (0-6,
- * default 1, Monday). Picking a day sets the input and dispatches
- * `weft:change` (detail: the ISO date). Classes for the generated buttons
- * come from `data-day-class` and `data-weekday-class`.
- */
 export function calendar(el) {
   const field = el.querySelector("input[type=hidden]");
   const grid = el.querySelector("[data-slot=calendar-grid]");
@@ -1487,7 +1228,7 @@ export function calendar(el) {
     head.setAttribute("role", "row");
     head.className = el.dataset.headClass ?? "";
     for (let i = 0; i < 7; i += 1) {
-      const d = new Date(2024, 0, 1 + ((weekStart + i + 6) % 7)); // 2024-01-01 is a Monday
+      const d = new Date(2024, 0, 1 + ((weekStart + i + 6) % 7));
       const th = document.createElement("div");
       th.setAttribute("role", "columnheader");
       th.setAttribute("aria-label", d.toLocaleDateString(locale, { weekday: "long" }));
@@ -1590,16 +1331,6 @@ export function calendar(el) {
   };
 }
 
-// --- sidebar -------------------------------------------------------------------
-
-/**
- * `use:sidebar` on the sidebar's wrapper: buttons with
- * `data-sidebar-trigger` (anywhere on the page) and Ctrl/Cmd+B toggle
- * `data-state` between "expanded" and "collapsed" on it, remembered in a
- * `sidebar_state` cookie so the server renders it the same next time.
- * Below 768px wide the toggle opens it as an overlay instead
- * (`data-mobile="open"`), closed again by Escape or a press outside.
- */
 export function sidebar(el) {
   own(el, "data-state", "data-mobile");
   const mobile = () => matchMedia("(max-width: 767px)").matches;
@@ -1638,10 +1369,6 @@ export function sidebar(el) {
   };
 }
 
-// --- rich text --------------------------------------------------------------
-
-/** `href` as a link the editor may create: http(s), mailto, or a path on
- * this site. Anything else (javascript:, data:, //host) is refused. */
 export function safeHref(href) {
   const h = String(href ?? "").trim();
   if (h === "" || h.length > 2000 || h.startsWith("//")) return null;
@@ -1655,11 +1382,6 @@ export function safeHref(href) {
   }
 }
 
-/**
- * The mention being typed just before the caret: the text after an `@`
- * that starts the text or follows a space or opening bracket or quote, up
- * to 32 characters with no spaces. Null when the caret is not in one.
- */
 export function mentionQuery(before) {
   const m = /(?:^|[\s(\[{"'])@([^\s@]{0,32})$/u.exec(String(before));
   return m ? m[1] : null;
@@ -1667,8 +1389,6 @@ export function mentionQuery(before) {
 
 const fold = (s) => String(s).normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 
-/** Whether a candidate called `label` fits `query`: case- and accent-blind,
- * at the start of the label or of any word in it. */
 export function mentionMatches(query, label) {
   const q = fold(query);
   if (q === "") return true;
@@ -1676,32 +1396,11 @@ export function mentionMatches(query, label) {
   return l.startsWith(q) || l.split(/[\s._-]+/).some((w) => w.startsWith(q));
 }
 
-/** The ids `fromDom` and `parseRichText` accept for a mention. */
 const MENTION_ID = /^[A-Za-z0-9._:@-]{1,128}$/;
 
 const RICH_BLOCKS = { h2: "h2", h3: "h3", p: "p", quote: "blockquote" };
 const RICH_MARKS = { bold: "bold", italic: "italic", underline: "underline", strike: "strikeThrough" };
 
-/**
- * `use:richText` on an editor: a `[data-rich-surface]` contenteditable and
- * buttons `[data-rich-command]`. Commands go through the browser's editing
- * commands, so undo (Ctrl/Cmd+Z) keeps working; each button's
- * `aria-pressed` follows the selection. `link` (or Ctrl/Cmd+K) shows the
- * `[data-rich-link]` input: Enter applies the address if `safeHref` allows
- * it, Escape goes back to the text. Pasted content arrives as plain text,
- * so no markup or styles come in from other pages. Read the result with
- * `fromDom` (@weft/runtime) and check it on the server with
- * `parseRichText`: the browser is never trusted with the document.
- *
- * Mentions: put a `[data-rich-mentions]` list in the editor holding one
- * `[data-mention-option]` element per person the app lets this actor
- * mention, each with `data-id` and `data-label` (markup and styles are the
- * app's). Typing `@` opens the list, filtered as the name is typed (see
- * `mentionMatches`); Up/Down choose, Enter or Tab inserts, Escape closes.
- * The list never fetches anyone: it offers only the people the page
- * rendered, and the server still checks the ids from `mentionsIn` before
- * it notifies or links anyone.
- */
 export function richText(el) {
   const surface = el.querySelector("[data-rich-surface]");
   if (!surface) return () => {};
@@ -1740,7 +1439,6 @@ export function richText(el) {
         return v === RICH_BLOCKS[cmd];
       }
     } catch {
-      // queryCommand* can throw outside an editable selection.
     }
     return false;
   };
@@ -1835,7 +1533,6 @@ export function richText(el) {
     pick = null;
     hidePicker();
   };
-  // Open, filter or close the list from the text just before the caret.
   const updatePicker = () => {
     if (!picker) return;
     const s = selection();
@@ -1856,7 +1553,6 @@ export function richText(el) {
     surface.setAttribute("aria-expanded", "true");
     choose(chosen() ?? first);
   };
-  // Replace the typed `@name` with a mention of `o`, then a space.
   const insertMention = (o) => {
     const id = o.dataset.id ?? "";
     const label = (o.dataset.label ?? o.textContent ?? "").trim().slice(0, 200);
@@ -1884,7 +1580,6 @@ export function richText(el) {
     surface.focus();
     changed();
   };
-  // Picker keys come first while the list is open; true when handled.
   const pickerKey = (e) => {
     if (!picker || picker.hidden || e.altKey || e.metaKey || e.ctrlKey) return false;
     const list = shownOptions();
@@ -1908,7 +1603,6 @@ export function richText(el) {
     if (o && picker.contains(o) && !o.hidden) insertMention(o);
   };
   const onPickerKeyup = (e) => {
-    // Moving through the list must not refilter it.
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp" && e.key !== "Escape") updatePicker();
   };
 
@@ -1934,7 +1628,6 @@ export function richText(el) {
     e.preventDefault();
     run(b.dataset.richCommand);
   };
-  // Keep the selection in the text while a toolbar button is pressed.
   const onDown = (e) => {
     if (e.target instanceof Element && e.target.closest("[data-rich-command]")) e.preventDefault();
   };
@@ -1963,7 +1656,6 @@ export function richText(el) {
     if (text) document.execCommand("insertText", false, text);
   };
   const onDrop = (e) => {
-    // Dropped HTML would bring its markup with it.
     e.preventDefault();
   };
   const onLinkKey = (e) => {
@@ -1980,7 +1672,6 @@ export function richText(el) {
   try {
     document.execCommand("defaultParagraphSeparator", false, "p");
   } catch {
-    // Older engines: paragraphs come out as <div>, which fromDom reads too.
   }
   if (linkBox) linkBox.hidden = true;
   surface.setAttribute("role", surface.getAttribute("role") ?? "textbox");

@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { openSqlite } from "@weft/data/sqlite";
+import { openSqlite } from "@weft-framework/data/sqlite";
 import { findCompiler } from "../src/compiler.ts";
 import { MigrateError, migrateProject } from "../src/migrate.ts";
 
@@ -23,7 +23,7 @@ function hasCargo(): boolean {
 
 function model(fields: string, attrs = ""): string {
   return (
-    `import { defineModel } from "@weft/data"\n` +
+    `import { defineModel } from "@weft-framework/data"\n` +
     `export const Note = defineModel<any>("Note", { fields: { ${fields} }, ${attrs} read: () => true, write: () => true })\n`
   );
 }

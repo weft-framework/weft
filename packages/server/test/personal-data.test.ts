@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { openSqlite } from "@weft/data/sqlite";
+import { openSqlite } from "@weft-framework/data/sqlite";
 import { findCompiler } from "../src/compiler.ts";
 import { parsePlan, PersonalDataError, personalDataCommand } from "../src/personal-data.ts";
 import { seedProject } from "../src/seed.ts";

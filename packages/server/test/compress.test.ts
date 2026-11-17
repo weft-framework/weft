@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { gunzipSync } from "node:zlib";
-import { defineComponent } from "@weft/runtime";
+import { defineComponent } from "@weft-framework/runtime";
 import { createApp } from "../src/app.ts";
 import { acceptsGzip, compress, compressibleType } from "../src/compress.ts";
 import { csrfToken, importSecret, verifyCsrf } from "../src/security.ts";

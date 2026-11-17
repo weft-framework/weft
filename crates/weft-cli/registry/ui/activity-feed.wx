@@ -1,4 +1,4 @@
-import type { ActivityItem } from "@weft/data";
+import type { ActivityItem } from "@weft-framework/data";
 import { cn } from "../../lib/utils.ts";
 
 export function activityWhen(at: number, now: number): string {

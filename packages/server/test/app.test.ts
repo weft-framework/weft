@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { defineComponent, escapeHtml, signal } from "@weft/runtime";
+import { defineComponent, escapeHtml, signal } from "@weft-framework/runtime";
 import { createApp, type AppOptions, type LiveSocket, type SocketData } from "../src/app.ts";
 
 const Counter = defineComponent("Counter", (props: { start: number }) => {

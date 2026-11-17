@@ -3,7 +3,7 @@ import { mkdirSync, realpathSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { migrate, planMigrations, type MigrationPlan, type Model } from "@weft/data";
+import { migrate, planMigrations, type MigrationPlan, type Model } from "@weft-framework/data";
 import { CompileError, findCompiler, type Compiler } from "./compiler.ts";
 import { ConfigError } from "./config.ts";
 import { ProjectError, loadProject } from "./project.ts";
@@ -25,7 +25,7 @@ export async function migrateProject(root: string, opts: MigrateCommandOptions):
       throw new MigrateError("no `database` in weft.config.ts; models are kept in memory");
     }
     const models = Object.values(project.models) as Model<unknown>[];
-    const { openSqlite } = await import("@weft/data/sqlite");
+    const { openSqlite } = await import("@weft-framework/data/sqlite");
     if (project.database !== ":memory:") {
       mkdirSync(dirname(project.database), { recursive: true });
     }

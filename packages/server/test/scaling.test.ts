@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bridgeChanges, ChangeFeed, defineModel, LocalBroadcast, useDatabase } from "@weft/data";
-import { openSqlite } from "@weft/data/sqlite";
-import { defineComponent, escapeHtml } from "@weft/runtime";
+import { bridgeChanges, ChangeFeed, defineModel, LocalBroadcast, useDatabase } from "@weft-framework/data";
+import { openSqlite } from "@weft-framework/data/sqlite";
+import { defineComponent, escapeHtml } from "@weft-framework/runtime";
 import { createApp, type App } from "../src/app.ts";
 import { defineAction } from "../src/action.ts";
 import { login, SqlSessionStore } from "../src/auth.ts";

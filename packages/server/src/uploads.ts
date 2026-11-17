@@ -1,4 +1,4 @@
-import { holdFile, onFileRelease, sweepHeldFiles, type FileRef, type SqlDatabase } from "@weft/data";
+import { holdFile, onFileRelease, sweepHeldFiles, type FileRef, type SqlDatabase } from "@weft-framework/data";
 import { ActionError } from "./action.ts";
 import { authState } from "./auth.ts";
 import type { PageContext } from "./context.ts";
@@ -72,7 +72,7 @@ export class SqlFileStore implements FileStore {
   readonly #db: SqlDatabase;
   readonly #t: string;
   constructor(db: SqlDatabase, table = "weft_files") {
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(table)) throw new Error(`@weft/server: not a valid table name: ${table}`);
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(table)) throw new Error(`@weft-framework/server: not a valid table name: ${table}`);
     this.#db = db;
     this.#t = `"${table}"`;
     db.exec(

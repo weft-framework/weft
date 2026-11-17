@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { runtimeAttrs, type PointAt, type PointMessage, type Pointer, type PointSel, type PointView, type ServerMessage } from "@weft/runtime";
+import { runtimeAttrs, type PointAt, type PointMessage, type Pointer, type PointSel, type PointView, type ServerMessage } from "@weft-framework/runtime";
 import type { PageContext } from "./context.ts";
 import { pointerPresence, presenceIn, watchRooms, type Presence } from "./presence.ts";
 
@@ -40,10 +40,10 @@ function parseToken(token: string): { presence: string; room: string } | null {
 
 export function pointerArea(presence: Presence<any>, room: string): Readonly<Record<string, string>> {
   if (!pointerPresence(presence.name)) {
-    throw new Error(`@weft/server: presence ${presence.name} does not share pointers; define it with \`pointers: {}\``);
+    throw new Error(`@weft-framework/server: presence ${presence.name} does not share pointers; define it with \`pointers: {}\``);
   }
   if (typeof room !== "string" || room === "" || room.length > 256) {
-    throw new Error("@weft/server: a room is a string of 1-256 characters");
+    throw new Error("@weft-framework/server: a room is a string of 1-256 characters");
   }
   return runtimeAttrs({ "data-weft-point": tokenOf(presence.name, room) });
 }

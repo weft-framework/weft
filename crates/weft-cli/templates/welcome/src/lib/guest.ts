@@ -1,4 +1,4 @@
-import type { PageContext } from "@weft/server";
+import type { PageContext } from "@weft-framework/server";
 
 export interface Guest {
   id: string;

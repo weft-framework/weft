@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { defineComponent, escapeHtml, signal } from "@weft/runtime";
+import { defineComponent, escapeHtml, signal } from "@weft-framework/runtime";
 import { createApp, edgeReason, type AppOptions, type Route } from "../src/app.ts";
 
 const ORIGIN = "http://app.test";

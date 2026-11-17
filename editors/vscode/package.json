@@ -1,15 +1,30 @@
 {
   "name": "weft-vscode",
   "displayName": "Weft",
-  "description": "Weft (.wx) language support: syntax highlighting and the Weft language server.",
   "version": "0.0.1",
-  "publisher": "weft",
-  "license": "MIT",
-  "author": "Vakea",
+  "description": "Weft (.wx) language support: syntax highlighting and the Weft language server.",
+  "keywords": [
+    "weft",
+    "wx",
+    "language-server",
+    "syntax-highlighting"
+  ],
+  "homepage": "https://github.com/weft-framework/weft/tree/main/editors/vscode#readme",
+  "bugs": {
+    "url": "https://github.com/weft-framework/weft/issues"
+  },
   "repository": {
     "type": "git",
-    "url": "https://github.com/aleroycz/weft"
+    "url": "git+https://github.com/weft-framework/weft.git",
+    "directory": "editors/vscode"
   },
+  "license": "MIT",
+  "author": {
+    "name": "Vakea",
+    "email": "alex.leroy8303@seznam.cz",
+    "url": "https://github.com/aleroycz"
+  },
+  "publisher": "weft",
   "type": "commonjs",
   "main": "./extension.js",
   "engines": {

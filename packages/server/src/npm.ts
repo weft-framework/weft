@@ -253,7 +253,7 @@ export function browserModules(
   const out: Record<string, string> = {};
   for (const [key, { js, dir }] of Object.entries(modules)) {
     out[key] = rewrite(js, (spec) => {
-      if (spec.startsWith("/_weft/") || spec === "@weft/runtime") return null;
+      if (spec.startsWith("/_weft/") || spec === "@weft-framework/runtime") return null;
       if (BUILTINS.has(spec) || spec.startsWith("node:")) {
         throw new NpmError(`${key}: \`${spec}\` is a Node built-in and cannot run in the browser`);
       }
@@ -275,7 +275,7 @@ export function browserModules(
     let code = readFileSync(file, "utf8");
     const dir = dirname(file);
     const map = (spec: string): string | null => {
-      if (spec === "@weft/runtime") return "/_weft/rt/index.js";
+      if (spec === "@weft-framework/runtime") return "/_weft/rt/index.js";
       const t = resolveFrom(spec, dir, pkg, local && !isBare(spec));
       if (!t) {
         warn(`${url}: cannot resolve \`${spec}\` for the browser`);

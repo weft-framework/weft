@@ -1,7 +1,7 @@
-import { defineModel } from "@weft/data";
-import { openSqlite } from "@weft/data/sqlite";
-import { useDatabase } from "@weft/data";
-import { defineComponent, escapeHtml, signal } from "@weft/runtime";
+import { defineModel } from "@weft-framework/data";
+import { openSqlite } from "@weft-framework/data/sqlite";
+import { useDatabase } from "@weft-framework/data";
+import { defineComponent, escapeHtml, signal } from "@weft-framework/runtime";
 import { createApp } from "../../src/app.ts";
 import { external } from "../../src/api.ts";
 import { MemorySessionStore } from "../../src/auth.ts";

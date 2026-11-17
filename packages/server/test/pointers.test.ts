@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { decodeClientMessage, type ServerMessage } from "@weft/runtime";
+import { decodeClientMessage, type ServerMessage } from "@weft-framework/runtime";
 import type { PageContext } from "../src/context.ts";
 import { definePresence, presenceBegin, presenceEnd, presenceRelease } from "../src/presence.ts";
 import { pointerArea, pointLeave, pointMessage, resetPointers } from "../src/pointers.ts";

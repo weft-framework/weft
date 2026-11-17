@@ -1,4 +1,4 @@
-import { openSqlite } from "@weft/data/sqlite";
+import { openSqlite } from "@weft-framework/data/sqlite";
 import { mkdirSync } from "node:fs";
 
 type Db = ReturnType<typeof openSqlite>;

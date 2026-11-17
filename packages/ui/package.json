@@ -1,12 +1,32 @@
 {
-  "name": "@weft/ui",
+  "name": "@weft-framework/ui",
   "version": "0.0.1",
   "description": "Weft UI: headless, accessible behaviour for components (focus trap, dismiss layers, roving focus, typeahead, positioning, dialog, popover, tabs, menu, tooltip, combobox, toast) as `use:` attachments.",
+  "keywords": [
+    "weft",
+    "ui",
+    "headless",
+    "accessibility",
+    "a11y",
+    "components",
+    "dialog",
+    "combobox"
+  ],
+  "homepage": "https://github.com/weft-framework/weft/tree/main/packages/ui#readme",
+  "bugs": {
+    "url": "https://github.com/weft-framework/weft/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/weft-framework/weft.git",
+    "directory": "packages/ui"
+  },
   "license": "MIT",
-  "author": "Vakea",
-  "repository": { "type": "git", "url": "git+https://github.com/aleroycz/weft.git", "directory": "packages/ui" },
-  "homepage": "https://github.com/aleroycz/weft#readme",
-  "bugs": { "url": "https://github.com/aleroycz/weft/issues" },
+  "author": {
+    "name": "Vakea",
+    "email": "alex.leroy8303@seznam.cz",
+    "url": "https://github.com/aleroycz"
+  },
   "type": "module",
   "exports": {
     ".": {

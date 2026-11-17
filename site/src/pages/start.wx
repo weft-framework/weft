@@ -1,0 +1,56 @@
+import type { PageMeta } from "@weft-framework/server";
+import { create, layout, add, build, source } from "../lib/site.ts";
+
+export const meta: PageMeta = {
+  title: "Getting started",
+  description: "Create a Weft project, find your way around it and put it in production.",
+};
+
+component Page() {
+  view {
+    <h1>Getting started</h1>
+    <p class="lede">From an empty folder to a running app in about a minute.</p>
+
+    <h2>Create a project</h2>
+    <pre><code>{create}</code></pre>
+    <p>
+      Open <code>http://localhost:3000</code>. Every save rebuilds and reloads the page. The default starter is a
+      complete app with sign-in, workspaces and the component library, so you can see how the pieces fit
+      together. If you'd rather start from almost nothing, add <code>-- --minimal</code> after the project name.
+    </p>
+
+    <h2>Find your way around</h2>
+    <pre><code>{layout}</code></pre>
+    <p>
+      A page can export <code>meta</code> for its title and description, and <code>load</code> when it needs
+      data from the request. Pages without either are rendered once at build time and served as plain HTML.
+    </p>
+
+    <h2>Add components</h2>
+    <pre><code>{add}</code></pre>
+    <p>
+      Components are copied into <code>src/components/ui</code>. They're yours now, so change them however you
+      like. Run <code>npx weft add --list</code> to see everything that's available.
+    </p>
+
+    <h2>Editor support</h2>
+    <p>
+      The VS Code extension gives you highlighting, errors as you type, hover types, completion, go to
+      definition and rename. It talks to <code>weft lsp</code>, which is already in your project.
+    </p>
+
+    <h2>Put it in production</h2>
+    <pre><code>{build}</code></pre>
+    <p>
+      The build writes a server you start with Node, plus plain HTML for every page that doesn't need one. You
+      can put those on a CDN and let the server handle everything else.
+    </p>
+
+    <h2>Build Weft itself</h2>
+    <pre><code>{source}</code></pre>
+    <p>
+      You'll need Rust 1.80 or newer and Node 22.6 or newer. If something doesn't work the way this page says,
+      please open an issue. That's a bug in the docs or in Weft, and either way I want to know.
+    </p>
+  }
+}

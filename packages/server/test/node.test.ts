@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { defineComponent, escapeHtml, signal } from "@weft/runtime";
+import { defineComponent, escapeHtml, signal } from "@weft-framework/runtime";
 import { createApp } from "../src/app.ts";
 import { rewriteImports, runtimeAssets, serveNode } from "../src/node.ts";
 

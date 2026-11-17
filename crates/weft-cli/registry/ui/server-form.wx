@@ -1,4 +1,4 @@
-import type { WeftEvent } from "@weft/runtime";
+import type { WeftEvent } from "@weft-framework/runtime";
 import { cn } from "../../lib/utils.ts";
 import { buttonVariants } from "./button.wx";
 import { inputClass } from "./input.wx";

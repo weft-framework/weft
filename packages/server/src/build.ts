@@ -165,7 +165,7 @@ export async function build(root: string, opts: BuildOptions): Promise<BuildMani
   writeFileSync(
     join(out, "server.mjs"),
     "// Production entry written by `weft build`: node dist/server.mjs (or bun).\n" +
-      'import { runProduction } from "@weft/server/production";\n\n' +
+      'import { runProduction } from "@weft-framework/server/production";\n\n' +
       "await runProduction(new URL(\".\", import.meta.url));\n",
   );
   return manifest;

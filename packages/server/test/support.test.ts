@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { defineComponent, escapeHtml } from "@weft/runtime";
-import { defineModel, isReadOnlyActor } from "@weft/data";
+import { defineComponent, escapeHtml } from "@weft-framework/runtime";
+import { defineModel, isReadOnlyActor } from "@weft-framework/data";
 import { createApp, type App } from "../src/app.ts";
 import { defineAction } from "../src/action.ts";
 import { allowWhileViewing, login, switchTenant, viewAs } from "../src/auth.ts";
@@ -348,7 +348,7 @@ test("arguments and declarations", () => {
 });
 
 test("the SQL session store keeps a view and adds its column to an older table", async () => {
-  const { openSqlite } = await import("@weft/data/sqlite");
+  const { openSqlite } = await import("@weft-framework/data/sqlite");
   const { SqlSessionStore } = await import("../src/auth.ts");
   const db = openSqlite(":memory:");
   db.exec(`CREATE TABLE weft_sessions (sid TEXT PRIMARY KEY NOT NULL, user TEXT NOT NULL, created INTEGER NOT NULL, seen INTEGER NOT NULL)`);

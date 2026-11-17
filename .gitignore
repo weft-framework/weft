@@ -35,7 +35,7 @@ desktop.ini
 packages/*/test/.weft
 
 # Local app data: runtime SQLite databases and the dev signing key.
-# Anchored so it never touches the @weft/data source package.
+# Anchored so it never touches the @weft-framework/data source package.
 /data/
 /packages/server/data/
 **/data/app.db

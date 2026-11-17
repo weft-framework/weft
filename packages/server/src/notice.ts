@@ -1,5 +1,5 @@
-import { NOTICE_KIND } from "@weft/runtime";
-import type { Model } from "@weft/data";
+import { NOTICE_KIND } from "@weft-framework/runtime";
+import type { Model } from "@weft-framework/data";
 
 export interface Notice {
   text: string;

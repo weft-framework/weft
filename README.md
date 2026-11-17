@@ -10,7 +10,7 @@ Typed server-driven hypermedia, in a superset of TypeScript.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-dark.svg">
-  <img src="docs/images/hero-light.svg" alt="weft — typed server-driven hypermedia" width="760">
+  <img src="docs/images/hero-light.svg" alt="weft: typed server-driven hypermedia" width="760">
 </picture>
 
 [Quick start](#quick-start) ·
@@ -102,7 +102,7 @@ compatibility and quick startup come for free.
 ## Quick start
 
 ```sh
-npm create weft my-app
+npm create @weft-framework my-app
 cd my-app && npm install
 npm run dev              # http://localhost:3000, rebuild and reload on save
 ```
@@ -161,7 +161,9 @@ npm run dev -- examples/todo/TodoApp.wx --port 3000
 | `packages/data/` | Models with `@read`/`@write` on every query; SQLite driver and migrations |
 | `packages/core/` | Tenancy, roles, invitations and SCIM |
 | `packages/ui/`, `packages/theme/`, `packages/i18n/` | Component primitives, theming and localization |
-| `packages/create-weft/` | `npm create weft` scaffolding |
+| `packages/create-weft/` | `npm create @weft-framework` scaffolding |
+| `packages/cli/` | `@weft-framework/cli`: the prebuilt `weft` binary on npm, one package per platform |
+| `site/` | The project website on GitHub Pages, itself a Weft app built to static HTML |
 | `examples/` | Small single-file examples, roughly one per language feature |
 | `bench/` | Served-page benchmarks: TTFB, throughput, JavaScript shipped, memory per live page |
 

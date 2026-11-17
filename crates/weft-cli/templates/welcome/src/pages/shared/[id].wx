@@ -1,5 +1,5 @@
-import { acceptGrant, type PageContext } from "@weft/server";
-import { renderRichText } from "@weft/runtime";
+import { acceptGrant, type PageContext } from "@weft-framework/server";
+import { renderRichText } from "@weft-framework/runtime";
 import { Notes, type Note } from "../../lib/notes.ts";
 import { nameOf } from "../../lib/users.ts";
 import { Icon } from "../../components/Icon.wx";

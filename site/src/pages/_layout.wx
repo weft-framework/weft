@@ -1,0 +1,25 @@
+import type { PageMeta } from "@weft-framework/server";
+import { site } from "../lib/site.ts";
+
+export const meta: PageMeta = {
+  titleTemplate: `%s | ${site.name}`,
+  description: site.description,
+  openGraph: { siteName: site.name, type: "website" },
+};
+
+component Layout(children: Html, path: string) {
+  view {
+    <header class="top">
+      <a class="name" href="/">weft</a>
+      <nav aria-label="Site">
+        <a href="/start" class={path == "/start" ? "here" : ""}>Getting started</a>
+        <a href={site.repo}>GitHub</a>
+        <a href="https://www.npmjs.com/org/weft-framework">npm</a>
+      </nav>
+    </header>
+    <main>{children}</main>
+    <footer>
+      <p>MIT licensed. Made by Vakea. This page is itself a Weft project, built to static HTML.</p>
+    </footer>
+  }
+}

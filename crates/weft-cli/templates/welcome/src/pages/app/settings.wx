@@ -1,5 +1,5 @@
-import { redirect, type PageContext } from "@weft/server";
-import { fail } from "@weft/server/action";
+import { redirect, type PageContext } from "@weft-framework/server";
+import { fail } from "@weft-framework/server/action";
 import { access } from "../../access.ts";
 import { gate, meOf, ZONES, type Me } from "../../lib/workspaces.ts";
 import { AppShell } from "../../components/AppShell.wx";

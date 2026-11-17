@@ -1,0 +1,416 @@
+# Release Weft.
+#
+# Push a tag like v0.1.0 and this runs, in order:
+#
+#   1. security   secret scan, dependency audits, CodeQL, version check
+#   2. checks     tests on Windows, macOS and Linux, lint, build
+#   3. binaries   the weft compiler for six platforms
+#   4. packages   every npm tarball, including @weft-framework/cli with the binaries
+#   5. pages      the website, built with Weft, deployed to GitHub Pages
+#   6. publish    everything to the public npm registry
+#   7. release    a GitHub release with the binaries and checksums
+#
+# Each stage waits for the one before, so nothing reaches npm unless every
+# check passed. Running it by hand (Actions > Release > Run workflow) does a
+# dry run: it builds everything but publishes and deploys nothing, unless you
+# tick "publish".
+#
+# Needs an NPM_TOKEN secret (an npm automation token that can publish to the
+# @weft-framework scope) and Pages set to "GitHub Actions" under Settings > Pages.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish to npm and deploy the website (otherwise a dry run)
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  PUBLISH: ${{ github.event_name == 'push' || inputs.publish }}
+
+jobs:
+  # ---------------------------------------------------------------- 1. security
+
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Every version matches the tag
+        id: v
+        env:
+          REF: ${{ github.ref }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = "push" ]; then
+            version=$(node scripts/check-version.mjs "$REF")
+          else
+            version=$(node scripts/check-version.mjs)
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          case "$version" in
+            *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+          echo "Releasing $version" >> "$GITHUB_STEP_SUMMARY"
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # Only what users install. Dev tools (tsc, tailwind) never ship.
+      - name: npm audit
+        run: npm audit --omit=dev --audit-level=high
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      - name: cargo audit
+        run: cargo audit --deny warnings
+
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript, rust]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}
+
+  # ------------------------------------------------------------------ 2. checks
+
+  checks:
+    name: Checks
+    needs: [version, secrets, audit, codeql]
+    uses: ./.github/workflows/checks.yml
+    with:
+      upload: true
+
+  # ---------------------------------------------------------------- 3. binaries
+
+  binaries:
+    name: Binary (${{ matrix.platform }})
+    needs: [version, checks]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: win32-x64, os: windows-latest, target: x86_64-pc-windows-msvc, native: true }
+          - { platform: win32-arm64, os: windows-latest, target: aarch64-pc-windows-msvc, native: false }
+          - { platform: linux-x64, os: ubuntu-latest, target: x86_64-unknown-linux-musl, native: true }
+          - { platform: linux-arm64, os: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl, native: true }
+          - { platform: darwin-x64, os: macos-latest, target: x86_64-apple-darwin, native: false }
+          - { platform: darwin-arm64, os: macos-latest, target: aarch64-apple-darwin, native: true }
+    env:
+      CARGO_PROFILE_RELEASE_STRIP: symbols
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      # Linux builds are static (musl), so one binary runs on any distro,
+      # Alpine included.
+      - name: musl tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Build
+        run: cargo build --release --locked -p weft-cli --target ${{ matrix.target }}
+
+      - name: Stage
+        id: stage
+        shell: bash
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          PLATFORM: ${{ matrix.platform }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          exe=weft
+          [ "$RUNNER_OS" = "Windows" ] && exe=weft.exe
+          mkdir -p "bins/$PLATFORM" dist
+          cp "target/$TARGET/release/$exe" "bins/$PLATFORM/$exe"
+          chmod +x "bins/$PLATFORM/$exe"
+          name="weft-$VERSION-$PLATFORM"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            (cd "bins/$PLATFORM" && 7z a -tzip "../../dist/$name.zip" "$exe" > /dev/null)
+            7z a -tzip "dist/$name.zip" LICENSE README.md > /dev/null
+          else
+            tar -czf "dist/$name.tar.gz" -C "bins/$PLATFORM" "$exe" -C "$GITHUB_WORKSPACE" LICENSE README.md
+          fi
+          echo "exe=bins/$PLATFORM/$exe" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke test
+        if: matrix.native
+        shell: bash
+        env:
+          EXE: ${{ steps.stage.outputs.exe }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          out=$("./$EXE" version)
+          echo "$out"
+          case "$out" in
+            *"$VERSION"*) ;;
+            *) echo "::error::the binary reports '$out', expected $VERSION"; exit 1 ;;
+          esac
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bin-${{ matrix.platform }}
+          path: |
+            bins/
+            dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  # ---------------------------------------------------------------- 4. packages
+
+  packages:
+    name: npm packages
+    needs: [version, binaries]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: bin-*
+          merge-multiple: true
+
+      - name: Build and pack
+        run: node scripts/build-packages.mjs --pack --cli bins --require-all
+
+      # Install the Linux tarballs into an empty project, the way a user
+      # would, and make sure `npx weft` runs.
+      - name: Try the packages
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          t="$PWD/target/npm"
+          mkdir -p /tmp/try && cd /tmp/try
+          echo '{"name":"try","private":true,"type":"module"}' > package.json
+          npm install --no-audit --no-fund "$t/weft-framework-cli-linux-x64-$VERSION.tgz" "$t/weft-framework-cli-$VERSION.tgz"
+          npx weft version | grep -F "$VERSION"
+
+      - name: Checksums
+        run: |
+          mkdir -p release
+          cp dist/* release/
+          cd release && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-tarballs
+          path: target/npm/*.tgz
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-files
+          path: release/
+          if-no-files-found: error
+
+  # ------------------------------------------------------------------- 5. pages
+
+  pages-build:
+    name: Website
+    needs: [packages]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: bin-linux-x64
+
+      - id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Build the site with Weft
+        env:
+          PAGES_BASE: ${{ steps.pages.outputs.base_path }}
+        run: |
+          export WEFT_BIN="$PWD/bins/linux-x64/weft"
+          chmod +x "$WEFT_BIN"
+          "$WEFT_BIN" build site
+          node scripts/pages.mjs site/dist/edge _site
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  pages-deploy:
+    name: Deploy website
+    needs: [pages-build]
+    if: github.event_name == 'push' || inputs.publish
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+  # ----------------------------------------------------------------- 6. publish
+
+  publish:
+    name: Publish to npm
+    needs: [version, packages, pages-build, pages-deploy]
+    if: |
+      always() && needs.packages.result == 'success' && needs.pages-build.result == 'success'
+      && needs.pages-deploy.result != 'failure' && needs.pages-deploy.result != 'cancelled'
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-tarballs
+          path: tarballs
+
+      # Dependencies before the packages that need them. A version that is
+      # already on npm is skipped, so a failed run can simply be re-run.
+      - name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          VERSION: ${{ needs.version.outputs.version }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          tag=latest
+          [ "$PRERELEASE" = "true" ] && tag=next
+          order="runtime data server core theme i18n ui
+                 cli-win32-x64 cli-win32-arm64 cli-linux-x64 cli-linux-arm64 cli-darwin-x64 cli-darwin-arm64
+                 cli create"
+          for short in $order; do
+            file="tarballs/weft-framework-$short-$VERSION.tgz"
+            name="@weft-framework/$short"
+            if [ ! -f "$file" ]; then
+              echo "::error::$file is missing"
+              exit 1
+            fi
+            if npm view "$name@$VERSION" version > /dev/null 2>&1; then
+              echo "$name@$VERSION is already on npm, skipping"
+              continue
+            fi
+            if [ "$PUBLISH" = "true" ]; then
+              npm publish "$file" --access public --provenance --tag "$tag"
+              echo "- published \`$name@$VERSION\`" >> "$GITHUB_STEP_SUMMARY"
+            else
+              npm publish "$file" --access public --tag "$tag" --dry-run
+              echo "- would publish \`$name@$VERSION\` (dry run)" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+
+  # ----------------------------------------------------------------- 7. release
+
+  github-release:
+    name: GitHub release
+    needs: [version, publish]
+    if: always() && needs.publish.result == 'success' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-files
+          path: release
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: Weft ${{ needs.version.outputs.version }}
+          prerelease: ${{ needs.version.outputs.prerelease == 'true' }}
+          generate_release_notes: true
+          files: release/*
+          body: |
+            Install with `npm create @weft-framework my-app`, or add the compiler to an existing project with
+            `npm install --save-dev @weft-framework/cli`.
+
+            The archives below hold the same `weft` binary that npm installs, if you'd rather put it on your PATH
+            yourself. Check them against `SHA256SUMS.txt`.

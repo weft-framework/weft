@@ -3,7 +3,7 @@ import { realpathSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { fuzzRules, type FuzzReport, type Model } from "@weft/data";
+import { fuzzRules, type FuzzReport, type Model } from "@weft-framework/data";
 import { CompileError, findCompiler, type Compiler } from "./compiler.ts";
 import { ConfigError } from "./config.ts";
 import { ProjectError, loadProject } from "./project.ts";
@@ -54,7 +54,7 @@ export async function testRules(root: string, opts: RulesTestOptions): Promise<R
   const outDir = join(root, ".weft", "rules", randomUUID());
   try {
     const project = await loadProject(root, { compiler: opts.compiler, outDir, browserAssets: false, cacheKey: outDir });
-    const { openSqlite } = await import("@weft/data/sqlite");
+    const { openSqlite } = await import("@weft-framework/data/sqlite");
     let models = (Object.values(project.models) as Model<unknown>[]).filter(
       (m) => typeof (m as unknown as Record<symbol, unknown>)[EXPLAIN] !== "function",
     );

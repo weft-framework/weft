@@ -1,4 +1,4 @@
-import { SqlSessionStore, type Identity } from "@weft/server";
+import { SqlSessionStore, type Identity } from "@weft-framework/server";
 import { access } from "./access.ts";
 import { db } from "./lib/db.ts";
 import { userByEmail, userById } from "./lib/users.ts";

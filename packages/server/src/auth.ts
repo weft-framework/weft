@@ -1,4 +1,4 @@
-import type { SqlDatabase } from "@weft/data";
+import type { SqlDatabase } from "@weft-framework/data";
 import type { PageContext } from "./context.ts";
 import type { EmailSignIn } from "./email-signin.ts";
 import type { Identity, Provider } from "./oauth.ts";
@@ -112,7 +112,7 @@ export class SqlSessionStore implements SessionStore {
 
   constructor(db: SqlDatabase, table = "weft_sessions") {
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(table)) {
-      throw new Error(`@weft/server: not a valid table name: ${table}`);
+      throw new Error(`@weft-framework/server: not a valid table name: ${table}`);
     }
     this.db = db;
     this.table = `"${table}"`;
@@ -235,10 +235,10 @@ export function attachAuth(ctx: PageContext, control: AuthControl): void {
 function control(ctx: PageContext): AuthControl {
   const c = controls.get(ctx);
   if (!c) {
-    throw new Error("@weft/server: login/logout/switchTenant need the context of a request being handled");
+    throw new Error("@weft-framework/server: login/logout/switchTenant need the context of a request being handled");
   }
   if (c.refused !== null) {
-    throw new Error(`@weft/server: login/logout/switchTenant ${c.refused}`);
+    throw new Error(`@weft-framework/server: login/logout/switchTenant ${c.refused}`);
   }
   return c;
 }
@@ -250,7 +250,7 @@ export function signInWith(ctx: PageContext, identity: Identity): Promise<LoginR
 export function authState(ctx: PageContext): Promise<AuthState | null> {
   const c = controls.get(ctx);
   if (!c) {
-    throw new Error("@weft/server: the login state needs the context of a request being handled");
+    throw new Error("@weft-framework/server: the login state needs the context of a request being handled");
   }
   return c.state();
 }
@@ -258,7 +258,7 @@ export function authState(ctx: PageContext): Promise<AuthState | null> {
 export function listSessions(ctx: PageContext): Promise<SessionInfo[]> {
   const c = controls.get(ctx);
   if (!c) {
-    throw new Error("@weft/server: listSessions needs the context of a request being handled");
+    throw new Error("@weft-framework/server: listSessions needs the context of a request being handled");
   }
   return c.sessions();
 }
@@ -280,7 +280,7 @@ export async function signOutEverywhere(ctx: PageContext, o: { keepThis?: boolea
 
 export function signOutUser(ctx: PageContext, user: string): Promise<number> {
   if (typeof user !== "string" || user === "") {
-    throw new TypeError("@weft/server: signOutUser needs a user id");
+    throw new TypeError("@weft-framework/server: signOutUser needs a user id");
   }
   return control(ctx).revoke(user, { keep: false });
 }
@@ -291,14 +291,14 @@ export function completeTwoFactor(ctx: PageContext): Promise<boolean> {
 
 export function switchTenant(ctx: PageContext, tenant: string | null): Promise<boolean> {
   if (tenant !== null && (typeof tenant !== "string" || tenant === "")) {
-    throw new TypeError("@weft/server: switchTenant needs a non-empty tenant id or null");
+    throw new TypeError("@weft-framework/server: switchTenant needs a non-empty tenant id or null");
   }
   return control(ctx).switchTenant(tenant);
 }
 
 export function login(ctx: PageContext, userId: string, opts: { multiFactor?: boolean } = {}): Promise<LoginResult> {
   if (typeof userId !== "string" || userId === "") {
-    throw new TypeError("@weft/server: login needs a non-empty user id");
+    throw new TypeError("@weft-framework/server: login needs a non-empty user id");
   }
   return control(ctx).login(userId, opts.multiFactor === true);
 }
@@ -336,9 +336,9 @@ export function runsWhileViewing(action: object): boolean {
 }
 
 export function viewAs(ctx: PageContext, user: string, o: { tenant?: string; until: number }): Promise<boolean> {
-  if (typeof user !== "string" || user === "") throw new TypeError("@weft/server: viewAs needs a user id");
-  if (!o || typeof o.until !== "number" || !Number.isFinite(o.until)) throw new TypeError("@weft/server: viewAs needs `until` (ms)");
-  if (o.tenant !== undefined && (typeof o.tenant !== "string" || o.tenant === "")) throw new TypeError("@weft/server: viewAs tenant is an id");
+  if (typeof user !== "string" || user === "") throw new TypeError("@weft-framework/server: viewAs needs a user id");
+  if (!o || typeof o.until !== "number" || !Number.isFinite(o.until)) throw new TypeError("@weft-framework/server: viewAs needs `until` (ms)");
+  if (o.tenant !== undefined && (typeof o.tenant !== "string" || o.tenant === "")) throw new TypeError("@weft-framework/server: viewAs tenant is an id");
   return control(ctx).startViewAs(user, o.tenant, o.until);
 }
 

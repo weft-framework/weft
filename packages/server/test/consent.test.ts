@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ChangeFeed, defineConsent, defineModel } from "@weft/data";
-import { defineComponent, escapeHtml } from "@weft/runtime";
+import { ChangeFeed, defineConsent, defineModel } from "@weft-framework/data";
+import { defineComponent, escapeHtml } from "@weft-framework/runtime";
 import { createApp } from "../src/app.ts";
 
 const ORIGIN = "http://app.test";

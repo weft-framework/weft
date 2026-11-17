@@ -1,6 +1,6 @@
-import type { PageContext } from "@weft/server";
-import type { WeftEvent } from "@weft/runtime";
-import type { ConversationView } from "@weft/core/chat";
+import type { PageContext } from "@weft-framework/server";
+import type { WeftEvent } from "@weft-framework/runtime";
+import type { ConversationView } from "@weft-framework/core/chat";
 import { gate, type Me } from "../../lib/workspaces.ts";
 import { chat } from "../../lib/chat.ts";
 import { assignable } from "../../lib/tasks.ts";

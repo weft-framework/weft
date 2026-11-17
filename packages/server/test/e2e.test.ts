@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import type { Component, EventPayload } from "@weft/runtime";
+import type { Component, EventPayload } from "@weft-framework/runtime";
 import { LivePage } from "../src/live.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));

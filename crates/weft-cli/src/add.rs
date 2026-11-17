@@ -88,13 +88,13 @@ const THEME: &str = "// Your site's colours, radii and fonts (from weft add). Th
 // CSS custom properties and Tailwind colours (bg-primary, text-muted-foreground,\n\
 // ...); override any of them here, or add themes beside light and dark.\n\
 \n\
-import { shadcnTheme } from \"@weft/theme\";\n\
+import { shadcnTheme } from \"@weft-framework/theme\";\n\
 \n\
 export default shadcnTheme();\n";
 
-const UI_PACKAGE: (&str, &str) = ("@weft/ui", "^0.0.1");
-const THEME_PACKAGE: (&str, &str) = ("@weft/theme", "^0.0.1");
-const DATA_PACKAGE: (&str, &str) = ("@weft/data", "^0.0.1");
+const UI_PACKAGE: (&str, &str) = ("@weft-framework/ui", "^0.0.1");
+const THEME_PACKAGE: (&str, &str) = ("@weft-framework/theme", "^0.0.1");
+const DATA_PACKAGE: (&str, &str) = ("@weft-framework/data", "^0.0.1");
 
 fn source(name: &str) -> Option<&'static str> {
     COMPONENTS.iter().find(|(n, _)| *n == name).map(|(_, s)| *s)
@@ -174,14 +174,14 @@ pub fn add(root: &Path, names: &[String], overwrite: bool) -> Result<Added, Stri
     let mut wanted = vec![THEME_PACKAGE];
     if all
         .iter()
-        .any(|n| source(n).unwrap_or_default().contains("from \"@weft/ui\""))
+        .any(|n| source(n).unwrap_or_default().contains("from \"@weft-framework/ui\""))
     {
         wanted.push(UI_PACKAGE);
     }
     if all.iter().any(|n| {
         source(n)
             .unwrap_or_default()
-            .contains("from \"@weft/data\"")
+            .contains("from \"@weft-framework/data\"")
     }) {
         wanted.push(DATA_PACKAGE);
     }
@@ -388,24 +388,24 @@ mod tests {
 
     #[test]
     fn package_json_gains_missing_dependencies() {
-        let pkg = "{\n  \"name\": \"x\",\n  \"dependencies\": {\n    \"@weft/server\": \"^0.0.1\"\n  }\n}\n";
+        let pkg = "{\n  \"name\": \"x\",\n  \"dependencies\": {\n    \"@weft-framework/server\": \"^0.0.1\"\n  }\n}\n";
         let (next, added) =
-            with_dependencies(pkg, &[UI_PACKAGE, THEME_PACKAGE, ("@weft/server", "^0")]);
-        assert_eq!(added, ["@weft/ui", "@weft/theme"]);
+            with_dependencies(pkg, &[UI_PACKAGE, THEME_PACKAGE, ("@weft-framework/server", "^0")]);
+        assert_eq!(added, ["@weft-framework/ui", "@weft-framework/theme"]);
         assert_eq!(
             next,
-            "{\n  \"name\": \"x\",\n  \"dependencies\": {\n    \"@weft/ui\": \"^0.0.1\",\n    \"@weft/theme\": \"^0.0.1\",\n    \"@weft/server\": \"^0.0.1\"\n  }\n}\n"
+            "{\n  \"name\": \"x\",\n  \"dependencies\": {\n    \"@weft-framework/ui\": \"^0.0.1\",\n    \"@weft-framework/theme\": \"^0.0.1\",\n    \"@weft-framework/server\": \"^0.0.1\"\n  }\n}\n"
         );
         let (same, none) = with_dependencies(&next, &[UI_PACKAGE]);
         assert_eq!((same.as_str(), none.len()), (next.as_str(), 0));
         let (fresh, _) = with_dependencies("{\n  \"name\": \"x\"\n}\n", &[UI_PACKAGE]);
         assert!(
-            fresh.contains("\"dependencies\": {\n    \"@weft/ui\": \"^0.0.1\"\n  },"),
+            fresh.contains("\"dependencies\": {\n    \"@weft-framework/ui\": \"^0.0.1\"\n  },"),
             "{fresh}"
         );
         let (empty, _) = with_dependencies("{\n  \"dependencies\": {}\n}\n", &[UI_PACKAGE]);
         assert!(
-            empty.contains("\"dependencies\": {\n    \"@weft/ui\": \"^0.0.1\"\n  }"),
+            empty.contains("\"dependencies\": {\n    \"@weft-framework/ui\": \"^0.0.1\"\n  }"),
             "{empty}"
         );
     }
@@ -417,7 +417,7 @@ mod tests {
         fs::create_dir_all(root.join("src")).unwrap();
         fs::write(
             root.join("package.json"),
-            "{\n  \"dependencies\": {\n    \"@weft/server\": \"^0.0.1\"\n  }\n}\n",
+            "{\n  \"dependencies\": {\n    \"@weft-framework/server\": \"^0.0.1\"\n  }\n}\n",
         )
         .unwrap();
         let done = add(&root, &["dialog".to_string()], false).unwrap();
@@ -429,7 +429,7 @@ mod tests {
                 "src/lib/utils.ts"
             ]
         );
-        assert!(done.theme && done.packages == ["@weft/theme", "@weft/ui"]);
+        assert!(done.theme && done.packages == ["@weft-framework/theme", "@weft-framework/ui"]);
         assert!(fs::read_to_string(root.join("src/theme.ts"))
             .unwrap()
             .contains("shadcnTheme()"));

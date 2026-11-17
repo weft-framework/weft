@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { defineComponent, escapeHtml, signal, type Html } from "@weft/runtime";
+import { defineComponent, escapeHtml, signal, type Html } from "@weft-framework/runtime";
 import { createApp, notFound, type AppOptions, type Route } from "../src/app.ts";
 import { redirect } from "../src/live.ts";
 import { mergeMeta, renderMeta, resolveTitle, scriptJson } from "../src/meta.ts";

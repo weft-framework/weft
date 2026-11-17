@@ -1,6 +1,6 @@
-import type { PageContext } from "@weft/server";
-import type { WeftEvent } from "@weft/runtime";
-import { parseCsv, transaction } from "@weft/data";
+import type { PageContext } from "@weft-framework/server";
+import type { WeftEvent } from "@weft-framework/runtime";
+import { parseCsv, transaction } from "@weft-framework/data";
 import { gate, type Me } from "../../../lib/workspaces.ts";
 import { createTask } from "../../../lib/tasks.ts";
 import { userByEmail } from "../../../lib/users.ts";

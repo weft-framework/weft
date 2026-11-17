@@ -1,5 +1,5 @@
-import { toCsv } from "@weft/data";
-import type { PageContext } from "@weft/server";
+import { toCsv } from "@weft-framework/data";
+import type { PageContext } from "@weft-framework/server";
 import { Tasks, STATUS_LABEL } from "../../../lib/tasks.ts";
 import { meOf } from "../../../lib/workspaces.ts";
 import { userById } from "../../../lib/users.ts";

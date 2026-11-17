@@ -1,7 +1,7 @@
 import { cn, variants } from "../../lib/utils.ts";
 import { buttonVariants } from "./button.wx";
 import { closeIconClass } from "./dialog.wx";
-client import { dialog } from "@weft/ui"
+client import { dialog } from "@weft-framework/ui"
 
 export type SheetSide = "top" | "right" | "bottom" | "left";
 

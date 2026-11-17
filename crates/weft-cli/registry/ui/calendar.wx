@@ -1,6 +1,6 @@
 import { cn } from "../../lib/utils.ts";
 import { buttonVariants } from "./button.wx";
-client import { calendar } from "@weft/ui"
+client import { calendar } from "@weft-framework/ui"
 
 export const calendarDayClass =
   "inline-flex size-8 items-center justify-center rounded-md p-0 text-sm font-normal hover:bg-accent hover:text-accent-foreground focus-visible:ring-ring/50 outline-none focus-visible:ring-[3px] disabled:pointer-events-none disabled:opacity-50 data-[outside]:text-muted-foreground data-[today]:bg-accent data-[today]:text-accent-foreground data-[selected]:bg-primary data-[selected]:text-primary-foreground data-[selected]:hover:bg-primary data-[selected]:hover:text-primary-foreground";

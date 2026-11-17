@@ -1,4 +1,4 @@
-import { escapeAttr } from "@weft/runtime";
+import { escapeAttr } from "@weft-framework/runtime";
 
 export const DEFAULT_SHELL = `<!doctype html>
 <html lang="%lang%">

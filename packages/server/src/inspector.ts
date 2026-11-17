@@ -1,4 +1,4 @@
-import { defineModel, type Model } from "@weft/data";
+import { defineModel, type Model } from "@weft-framework/data";
 import { defineAction, type Action } from "./action.ts";
 import { viewingAs } from "./auth.ts";
 import type { PageContext } from "./context.ts";

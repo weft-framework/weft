@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { defineComponent, escapeHtml } from "@weft/runtime";
-import { audit, defineModel, isReadOnlyActor, SqlAuditLog } from "@weft/data";
-import { openSqlite } from "@weft/data/sqlite";
+import { defineComponent, escapeHtml } from "@weft-framework/runtime";
+import { audit, defineModel, isReadOnlyActor, SqlAuditLog } from "@weft-framework/data";
+import { openSqlite } from "@weft-framework/data/sqlite";
 import { createApp, type App } from "../src/app.ts";
 import { defineAction } from "../src/action.ts";
 import { login } from "../src/auth.ts";

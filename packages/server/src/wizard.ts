@@ -1,4 +1,4 @@
-import type { SqlDatabase } from "@weft/data";
+import type { SqlDatabase } from "@weft-framework/data";
 import type { PageContext } from "./context.ts";
 
 interface FieldBase {

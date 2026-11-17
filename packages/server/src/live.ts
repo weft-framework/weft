@@ -14,7 +14,7 @@ import {
   type RenderContext,
   type ServerMessage,
   type Signal,
-} from "@weft/runtime";
+} from "@weft-framework/runtime";
 import { randomId } from "./security.ts";
 
 export class Redirect {
@@ -359,7 +359,7 @@ export class LivePage {
   private create(id: string, def: ComponentDef<object>, props: object, path: string): Rec {
     const max = this.opts.maxInstances ?? 10_000;
     if (this.byId.size >= max) {
-      throw new Error(`@weft/server: live page exceeded ${max} component instances`);
+      throw new Error(`@weft-framework/server: live page exceeded ${max} component instances`);
     }
     const live = { ...props };
     const made = collectSignals(() => def.setup(live));

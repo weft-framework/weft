@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { defineComponent } from "@weft/runtime";
+import { defineComponent } from "@weft-framework/runtime";
 import { createApp, type AppOptions } from "../src/app.ts";
 import { ConfigError, parseConfig, resolveSecret } from "../src/config.ts";
 import { loadConfig } from "../src/load-config.ts";

@@ -49,10 +49,10 @@ export function bridgeChanges(feed: ChangeFeed, channel: Broadcast, opts: Bridge
   const origin = opts.origin ?? crypto.randomUUID();
   for (const r of [opts.channelRegion, opts.region]) {
     if (r !== undefined && !(typeof r === "string" && /^[a-z][a-z0-9-]{0,31}$/.test(r))) {
-      throw new Error("@weft/data: change bridge: a region is a name like `eu` or `us-east`");
+      throw new Error("@weft-framework/data: change bridge: a region is a name like `eu` or `us-east`");
     }
   }
-  const report = opts.onError ?? ((err: unknown) => console.error("@weft/data: change bridge:", err));
+  const report = opts.onError ?? ((err: unknown) => console.error("@weft-framework/data: change bridge:", err));
   const relayed = new WeakSet<Change>();
   let sent = 0;
   const heard = new Map<string, number>();
@@ -80,7 +80,7 @@ export function bridgeChanges(feed: ChangeFeed, channel: Broadcast, opts: Bridge
       return;
     }
     if (!msg) {
-      report(new Error("@weft/data: change bridge: unexpected message"));
+      report(new Error("@weft-framework/data: change bridge: unexpected message"));
       return;
     }
     if (msg.origin === origin) {
@@ -101,7 +101,7 @@ export function bridgeChanges(feed: ChangeFeed, channel: Broadcast, opts: Bridge
     if (change.redacted === true) {
       change = redact(change);
     } else if (opts.region !== undefined && !mayCross(change, opts.region)) {
-      report(new Error(`@weft/data: change bridge: refused rows of ${change.model} resident in ${change.regions!.join(", ")}`));
+      report(new Error(`@weft-framework/data: change bridge: refused rows of ${change.model} resident in ${change.regions!.join(", ")}`));
       change = redact(change);
     }
     relayed.add(change);
@@ -121,7 +121,7 @@ export function bridgeChanges(feed: ChangeFeed, channel: Broadcast, opts: Bridge
 export function broadcastChannel(name: string): Broadcast & { close(): void } {
   const Ctor = (globalThis as { BroadcastChannel?: typeof BroadcastChannel }).BroadcastChannel;
   if (!Ctor) {
-    throw new Error("@weft/data: this runtime has no BroadcastChannel");
+    throw new Error("@weft-framework/data: this runtime has no BroadcastChannel");
   }
   const ch = new Ctor(name);
   (ch as { unref?(): void }).unref?.();

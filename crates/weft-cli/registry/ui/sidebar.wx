@@ -1,6 +1,6 @@
 import { cn, variants } from "../../lib/utils.ts";
 import { buttonVariants } from "./button.wx";
-client import { sidebar } from "@weft/ui"
+client import { sidebar } from "@weft-framework/ui"
 
 component SidebarProvider(collapsed?: boolean, children: Html, ...attrs: Attrs) {
   view {

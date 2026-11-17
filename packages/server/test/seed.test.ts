@@ -4,7 +4,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { openSqlite } from "@weft/data/sqlite";
+import { openSqlite } from "@weft-framework/data/sqlite";
 import { findCompiler } from "../src/compiler.ts";
 import { SeedError, seedProject } from "../src/seed.ts";
 
@@ -30,12 +30,12 @@ test("weft db seed fills the database through the rules; reset starts over", { s
   mkdirSync(join(root, "src", "models"), { recursive: true });
   writeFileSync(
     join(root, "src", "models", "Note.ts"),
-    `import { defineModel } from "@weft/data"\n` +
+    `import { defineModel } from "@weft-framework/data"\n` +
       `export const Note = defineModel<any>("Note", { fields: { id: "string", owner: "string", title: "string" }, read: () => true, write: (a: any, n: any) => n.owner === a.id })\n`,
   );
   writeFileSync(
     join(root, "src", "factories.ts"),
-    `import { defineFactory } from "@weft/data"\nimport { Note } from "./models/Note.ts"\n` +
+    `import { defineFactory } from "@weft-framework/data"\nimport { Note } from "./models/Note.ts"\n` +
       `export const notes = defineFactory(Note, (n: number) => ({ id: "n" + n, owner: "ada", title: "Note " + n }))\n`,
   );
   const seedFile = join(root, "src", "seed.ts");

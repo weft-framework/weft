@@ -1,4 +1,4 @@
-import type { PageContext } from "@weft/server";
+import type { PageContext } from "@weft-framework/server";
 import { gate, type Me } from "../../../lib/workspaces.ts";
 import { Tasks, STATUS_LABEL, type Task } from "../../../lib/tasks.ts";
 import { AppShell } from "../../../components/AppShell.wx";

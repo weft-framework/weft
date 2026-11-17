@@ -3,7 +3,7 @@ import { realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { eraseData, personalData, type ErasePlan, type Model, type PersonalData } from "@weft/data";
+import { eraseData, personalData, type ErasePlan, type Model, type PersonalData } from "@weft-framework/data";
 import { CompileError, findCompiler, type Compiler } from "./compiler.ts";
 import { ConfigError } from "./config.ts";
 import { ProjectError, loadProject } from "./project.ts";

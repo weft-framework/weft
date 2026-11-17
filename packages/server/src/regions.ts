@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import type { Change, Model } from "@weft/data";
+import type { Change, Model } from "@weft-framework/data";
 import type { SessionRecord, SessionStore } from "./auth.ts";
 
 type Revealable = string | { reveal(): string };

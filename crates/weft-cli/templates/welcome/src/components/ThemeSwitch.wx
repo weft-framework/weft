@@ -1,5 +1,5 @@
 import { Icon } from "./Icon.wx";
-client import { setTheme, isDark } from "@weft/theme/client"
+client import { setTheme, isDark } from "@weft-framework/theme/client"
 
 component ThemeSwitch() {
   client function flip() {

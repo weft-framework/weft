@@ -1,7 +1,7 @@
 // Rows kept sorted by name on the server. Typing a name that sorts first
 // moves the row being edited above the others: the browser blurs a moved
 // element, and the runtime has to put focus and caret back.
-import type { WeftEvent } from "@weft/runtime";
+import type { WeftEvent } from "@weft-framework/runtime";
 
 interface Row {
   id: number;

@@ -28,7 +28,7 @@ const DEFAULT_MAX_SESSIONS = 10_000;
 
 export function defineStore<T>(name: string, scope: StoreScope, init: () => T, opts: StoreOptions = {}): Store<T> {
   if (scope !== "app" && scope !== "session") {
-    throw new Error(`@weft/runtime: store ${name}: unknown scope ${String(scope)}`);
+    throw new Error(`@weft-framework/runtime: store ${name}: unknown scope ${String(scope)}`);
   }
   const max = opts.maxSessions ?? DEFAULT_MAX_SESSIONS;
   let app: Signal<T> | null = null;
@@ -41,7 +41,7 @@ export function defineStore<T>(name: string, scope: StoreScope, init: () => T, o
     }
     const sid = hooks.session();
     if (sid === undefined) {
-      throw new Error(`@weft/runtime: session store ${name} used outside a request`);
+      throw new Error(`@weft-framework/runtime: session store ${name} used outside a request`);
     }
     let sig = sessions.get(sid);
     if (sig) {
@@ -97,7 +97,7 @@ export function defineRoom<T>(name: string, init: (key: string) => T, opts: Room
     name,
     in(key: string): Store<T> {
       if (typeof key !== "string" || key === "" || key.length > MAX_ROOM_KEY) {
-        throw new Error(`@weft/runtime: room ${name}: a key is a string of 1-${MAX_ROOM_KEY} characters`);
+        throw new Error(`@weft-framework/runtime: room ${name}: a key is a string of 1-${MAX_ROOM_KEY} characters`);
       }
       let store = keys.get(key);
       if (store) {

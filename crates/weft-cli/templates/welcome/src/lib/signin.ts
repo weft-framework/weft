@@ -1,4 +1,4 @@
-import { verifyPassword } from "@weft/server/password";
+import { verifyPassword } from "@weft-framework/server/password";
 import { userByEmail, normalEmail } from "./users.ts";
 
 export function nextPath(next: string | null | undefined, fallback = "/app"): string {

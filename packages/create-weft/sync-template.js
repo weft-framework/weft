@@ -1,11 +1,3 @@
-// SPDX-License-Identifier: MIT
-//
-// Copy the starter templates and the component registry from the Rust CLI
-// (their single source, embedded in `weft new`) into this package as
-// `template/{welcome,minimal,registry}`, so the published `create-weft`
-// carries them. Run by `npm pack`/`npm publish` (prepack); the
-// copy is git-ignored.
-
 import { cpSync, existsSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";

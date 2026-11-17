@@ -1,4 +1,4 @@
-import { escapeAttr, escapeHtml } from "@weft/runtime";
+import { escapeAttr, escapeHtml } from "@weft-framework/runtime";
 
 export interface MetaTag {
   name?: string;

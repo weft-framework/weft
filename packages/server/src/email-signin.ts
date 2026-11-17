@@ -1,9 +1,9 @@
-import type { SqlDatabase } from "@weft/data";
+import type { SqlDatabase } from "@weft-framework/data";
 import { signInWith } from "./auth.ts";
 import type { PageContext } from "./context.ts";
 import type { Identity } from "./oauth.ts";
 import { base64url, RateLimiter, timingSafeEqual } from "./security.ts";
-import { isSafePath } from "@weft/runtime";
+import { isSafePath } from "@weft-framework/runtime";
 
 type Maybe<T> = T | Promise<T>;
 

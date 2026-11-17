@@ -1,4 +1,4 @@
-import { defineRoom, type Room } from "@weft/runtime";
+import { defineRoom, type Room } from "@weft-framework/runtime";
 import type { PageContext } from "./context.ts";
 
 interface Member {
@@ -37,10 +37,10 @@ class PresenceImpl<I> implements Presence<I> {
   join(ctx: PageContext, room: string, info: I): void {
     const m = members.get(ctx);
     if (!m) {
-      throw new Error(`@weft/server: presence ${this.name}: join from the load of a live page`);
+      throw new Error(`@weft-framework/server: presence ${this.name}: join from the load of a live page`);
     }
     if (typeof room !== "string" || room === "" || room.length > 256) {
-      throw new Error(`@weft/server: presence ${this.name}: a room is a string of 1-256 characters`);
+      throw new Error(`@weft-framework/server: presence ${this.name}: a room is a string of 1-256 characters`);
     }
     let mine = m.recs.get(this as PresenceImpl<unknown>);
     if (!mine) {
@@ -112,10 +112,10 @@ export function presenceIn(ctx: PageContext, name: string, room: string): { info
 
 export function definePresence<I>(name: string, opts: PresenceOptions<I> = {}): Presence<I> {
   if (typeof name !== "string" || !/^[A-Za-z0-9_.-]{1,64}$/.test(name)) {
-    throw new Error("@weft/server: a presence name is 1-64 letters, digits, `_`, `-` or `.`");
+    throw new Error("@weft-framework/server: a presence name is 1-64 letters, digits, `_`, `-` or `.`");
   }
   if (opts.pointers !== undefined && (typeof opts.pointers !== "object" || opts.pointers === null || (opts.pointers.label !== undefined && typeof opts.pointers.label !== "function"))) {
-    throw new Error("@weft/server: presence `pointers` is `{ label?: (info) => string }`");
+    throw new Error("@weft-framework/server: presence `pointers` is `{ label?: (info) => string }`");
   }
   const p = new PresenceImpl<I>(name, opts);
   named.set(name, p as PresenceImpl<unknown>);
