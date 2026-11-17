@@ -77,10 +77,21 @@ export function parseAddress(input: AddressInput): Address {
   let email: string;
   if (typeof input === "string") {
     if (CONTROL_RE.test(input)) throw invalid("an address is one line");
-    const m = /^\s*(?:(.*?)\s*<([^<>]*)>|([^<>\s]+))\s*$/s.exec(input);
-    if (!m) throw invalid(`not an address: ${JSON.stringify(input.slice(0, 80))}`);
-    name = (m[1] ?? "").replace(/^"(.*)"$/s, "$1");
-    email = m[2] ?? m[3]!;
+    const t = input.trim();
+    if (t.endsWith(">")) {
+      const lt = t.lastIndexOf("<");
+      email = lt < 0 ? "" : t.slice(lt + 1, -1);
+      if (lt < 0 || email.includes("<") || email.includes(">")) {
+        throw invalid(`not an address: ${JSON.stringify(input.slice(0, 80))}`);
+      }
+      name = t.slice(0, lt).trim();
+      if (name.length >= 2 && name.startsWith('"') && name.endsWith('"')) name = name.slice(1, -1);
+    } else if (t.includes("<") || t.includes(">")) {
+      throw invalid(`not an address: ${JSON.stringify(input.slice(0, 80))}`);
+    } else {
+      name = "";
+      email = t;
+    }
   } else if (input && typeof input === "object" && typeof input.email === "string") {
     name = input.name ?? "";
     email = input.email;
@@ -189,21 +200,88 @@ function decodeEntities(s: string): string {
   });
 }
 
+function hrefOf(tag: string): string {
+  const href = tag.toLowerCase().indexOf("href");
+  if (href < 0) return "";
+  let i = href + 4;
+  while (i < tag.length && tag[i] === " ") i++;
+  if (tag[i] !== "=") return "";
+  i++;
+  while (i < tag.length && tag[i] === " ") i++;
+  const q = tag[i];
+  if (q === '"' || q === "'") {
+    const end = tag.indexOf(q, i + 1);
+    return decodeEntities(tag.slice(i + 1, end < 0 ? tag.length : end)).trim();
+  }
+  let end = i;
+  while (end < tag.length && tag[end] !== " " && tag[end] !== ">") end++;
+  return decodeEntities(tag.slice(i, end)).trim();
+}
+
+function skipBlock(html: string, from: number, name: string): number {
+  const close = `</${name}`;
+  let j = from;
+  while (j < html.length) {
+    const at = html.toLowerCase().indexOf(close, j);
+    if (at < 0) return html.length;
+    let k = at + close.length;
+    while (k < html.length && html[k] === " ") k++;
+    if (html[k] === ">") return k + 1;
+    j = at + close.length;
+  }
+  return html.length;
+}
+
 export function htmlToText(html: string): string {
-  let s = html.replace(/<!--[\s\S]*?-->/g, "").replace(/<(script|style|head|title)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "");
-  s = s.replace(/<a\b[^>]*?\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')[^>]*>([\s\S]*?)<\/a\s*>/gi, (_m, d?: string, q?: string, inner?: string) => {
-    const href = decodeEntities(d ?? q ?? "").trim();
-    const label = decodeEntities((inner ?? "").replace(/<[^>]*>/g, "")).replace(/\s+/g, " ").trim();
-    if (!href || href.startsWith("#") || /^(javascript|data|vbscript):/i.test(href)) return label;
-    return label === "" || label === href || `mailto:${label}` === href ? href.replace(/^mailto:/i, "") : `${label} (${href})`;
-  });
-  s = s
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<li\b[^>]*>/gi, "\n- ")
-    .replace(/<\/?(p|div|h[1-6]|ul|ol|table|tr|blockquote|section|article|header|footer|hr|pre)\b[^>]*>/gi, "\n\n")
-    .replace(/<\/(td|th)\s*>/gi, " ")
-    .replace(/<[^>]*>/g, "");
-  return decodeEntities(s)
+  const BLOCK = new Set(["p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "table", "tr", "blockquote", "section", "article", "header", "footer", "hr", "pre"]);
+  let out = "";
+  let i = 0;
+  while (i < html.length) {
+    const lt = html.indexOf("<", i);
+    if (lt < 0) {
+      out += html.slice(i);
+      break;
+    }
+    out += html.slice(i, lt);
+    if (html.startsWith("<!--", lt)) {
+      const end = html.indexOf("-->", lt + 4);
+      i = end < 0 ? html.length : end + 3;
+      continue;
+    }
+    const gt = html.indexOf(">", lt + 1);
+    if (gt < 0) {
+      out += html.slice(lt);
+      break;
+    }
+    const raw = html.slice(lt + 1, gt);
+    const name = raw.replace(/^\s*\//, "").split(/[\s>/]/, 1)[0]!.toLowerCase();
+    if (name === "script" || name === "style" || name === "head" || name === "title") {
+      i = raw.trimStart().startsWith("/") ? gt + 1 : skipBlock(html, gt + 1, name);
+      continue;
+    }
+    if (name === "a" && !raw.trimStart().startsWith("/")) {
+      const innerFrom = gt + 1;
+      i = skipBlock(html, innerFrom, "a");
+      const closeAt = html.toLowerCase().lastIndexOf("</a", i);
+      const inner = htmlToText(html.slice(innerFrom, closeAt < innerFrom ? innerFrom : closeAt));
+      const href = hrefOf(raw);
+      const label = inner.replace(/[ \t\u00a0]+/g, " ").trim();
+      if (!href || href.startsWith("#") || href.toLowerCase().startsWith("javascript:") || href.toLowerCase().startsWith("data:") || href.toLowerCase().startsWith("vbscript:")) {
+        out += label;
+      } else if (label === "" || label === href || `mailto:${label}` === href) {
+        out += href.toLowerCase().startsWith("mailto:") ? href.slice(7) : href;
+      } else {
+        out += `${label} (${href})`;
+      }
+      continue;
+    }
+    if (name === "br") out += "\n";
+    else if (name === "li" && !raw.trimStart().startsWith("/")) out += "\n- ";
+    else if (BLOCK.has(name)) out += "\n\n";
+    else if ((name === "td" || name === "th") && raw.trimStart().startsWith("/")) out += " ";
+    i = gt + 1;
+  }
+  return decodeEntities(out)
     .split("\n")
     .map((l) => l.replace(/[ \t\u00a0]+/g, " ").trim())
     .join("\n")

@@ -47,10 +47,10 @@ export function parseShell(source: string = DEFAULT_SHELL): Shell {
   if (source.indexOf(HEAD) > source.indexOf(BODY)) {
     throw new Error(`index.html: ${HEAD} must come before ${BODY}`);
   }
-  if (/<[a-z][^>]*\son[a-z]+\s*=/i.test(source)) {
+  if (tagHeads(source).some(hasInlineHandler)) {
     throw new Error("index.html: inline event handler attributes are blocked by the CSP; use a <script>");
   }
-  if (/<(script|style)\b[^>]*\snonce\s*=/i.test(source)) {
+  if (tagHeads(source).some(hasNonce)) {
     throw new Error("index.html: nonces are added per response; remove the nonce attribute");
   }
   const withNonce = source.replace(/<(script|style)\b/gi, (m) => `${m} nonce="${NONCE}"`);
@@ -65,6 +65,52 @@ export function parseShell(source: string = DEFAULT_SHELL): Shell {
       return fill(before) + head + fill(between) + body + fill(afterBody);
     },
   };
+}
+
+function tagHeads(source: string): string[] {
+  const out: string[] = [];
+  let i = 0;
+  while (i < source.length) {
+    const lt = source.indexOf("<", i);
+    if (lt < 0) break;
+    const gt = source.indexOf(">", lt + 1);
+    if (gt < 0) {
+      out.push(source.slice(lt + 1).toLowerCase());
+      break;
+    }
+    out.push(source.slice(lt + 1, gt).toLowerCase());
+    i = gt + 1;
+  }
+  return out;
+}
+
+function hasInlineHandler(head: string): boolean {
+  let p = 0;
+  while (p < head.length) {
+    const on = head.indexOf(" on", p);
+    if (on < 0) return false;
+    let n = on + 3;
+    if (n >= head.length || head.charCodeAt(n) < 97 || head.charCodeAt(n) > 122) {
+      p = n;
+      continue;
+    }
+    while (n < head.length && head.charCodeAt(n) >= 97 && head.charCodeAt(n) <= 122) n++;
+    while (n < head.length && head[n] === " ") n++;
+    if (head[n] === "=") return true;
+    p = n;
+  }
+  return false;
+}
+
+function hasNonce(head: string): boolean {
+  const nameEnd = head.search(/[\s/]/);
+  const name = (nameEnd < 0 ? head : head.slice(0, nameEnd)).trim();
+  if (name !== "script" && name !== "style") return false;
+  const nonce = head.indexOf(" nonce");
+  if (nonce < 0) return false;
+  let n = nonce + 6;
+  while (n < head.length && head[n] === " ") n++;
+  return head[n] === "=";
 }
 
 function splitOnce(s: string, sep: string): [string, string] {

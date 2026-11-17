@@ -98,11 +98,11 @@ test("saving: values checked per setting, only changed and editable ones", async
 
   const shown = (await s.view(ada))!.shown;
   store.set("ada", { ...store.get("ada"), "digest.day": "monday" });
-  r = await s.save(ada, { "digest.day": "friday", signature: "A." }, shown);
+  await s.save(ada, { "digest.day": "friday", signature: "A." }, shown);
   assert.deepEqual(saved.at(-1), { signature: "A." });
   assert.equal(store.get("ada")!["digest.day"], "monday");
 
-  r = await s.save(ctxOf("bob"), { "page.size": "50", signature: "Bob" });
+  await s.save(ctxOf("bob"), { "page.size": "50", signature: "Bob" });
   assert.deepEqual(saved.at(-1), { signature: "Bob" }, "canEdit refused the page size");
   const n = saved.length;
   await s.save(ctxOf("bob"), { signature: "Bob" });

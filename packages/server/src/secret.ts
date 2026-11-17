@@ -50,7 +50,7 @@ export function secretEnv(
   return new Secret(name, value);
 }
 
-const LINE = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/;
+const LINE = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/;
 
 export function parseEnv(text: string, file = ".env"): Record<string, string> {
   const out: Record<string, string> = {};
@@ -59,7 +59,7 @@ export function parseEnv(text: string, file = ".env"): Record<string, string> {
     if (/^\s*(#.*)?$/.test(raw)) return;
     const m = LINE.exec(raw);
     if (!m) throw new Error(`${file}:${i + 1}: expected KEY=value`);
-    let v = m[2];
+    let v = m[2].trimEnd();
     const q = v[0];
     if (q === '"' || q === "'") {
       const end = v.lastIndexOf(q);

@@ -347,7 +347,7 @@ function fakeS3() {
     if (method === "POST" && u.searchParams.has("uploads")) {
       const id = `up${++n}&x`;
       uploads.set(id, new Map());
-      return new Response(`<InitiateMultipartUploadResult><UploadId>${id.replace("&", "&amp;")}</UploadId></InitiateMultipartUploadResult>`);
+      return new Response(`<InitiateMultipartUploadResult><UploadId>${id.replaceAll("&", "&amp;")}</UploadId></InitiateMultipartUploadResult>`);
     }
     const uploadId = u.searchParams.get("uploadId");
     if (method === "PUT" && presigned) {

@@ -50,7 +50,10 @@ test("the starter project serves pages, layouts, metadata and public files", { s
   assert.ok(home.html.includes('<meta name="description" content="A Weft application.">'));
   assert.ok(home.html.includes('<meta property="og:site_name" content="demo-app">'));
   assert.ok(home.html.includes('<link rel="stylesheet" href="/styles.css">'), "shell kept");
-  assert.ok(home.html.includes('<a href="/" class="active">Home</a>'), "nav marks the active page");
+  assert.ok(
+    home.html.includes('<a data-weft-key="/" href="/" class="active" aria-current="page">Home</a>'),
+    "nav marks the active page",
+  );
   assert.ok(home.html.includes('<button data-weft-on-click="increment">Clicked 0 times</button>'));
 
   const post = await get(app, "/blog/hello-weft");
@@ -60,7 +63,7 @@ test("the starter project serves pages, layouts, metadata and public files", { s
 
   const blog = await get(app, "/blog");
   assert.ok(blog.html.includes('<a href="/blog/live-pages">Live pages</a>'));
-  assert.ok(blog.html.includes('<a href="/blog" class="active">Blog</a>'));
+  assert.ok(blog.html.includes('<a data-weft-key="/blog" href="/blog" class="active" aria-current="page">Blog</a>'));
 
   for (const path of ["/blog/no-such-post", "/nope", "/../package.json", "/.gitignore"]) {
     const missing = await get(app, path);

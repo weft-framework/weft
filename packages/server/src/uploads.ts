@@ -612,7 +612,6 @@ function randomId(): string {
 
 const UPLOADS = "/_weft/uploads/";
 const FILES = "/_weft/files/";
-const CONTROL_RE = /[\x00-\x1f\x7f]/;
 
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {

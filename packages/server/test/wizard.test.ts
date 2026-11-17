@@ -62,7 +62,12 @@ test("steps are checked as they are saved and the draft resumes after a reload",
 
   const bad = await wizard.save(ada, "profile", new URLSearchParams({ name: "x".repeat(21), email: "nope" }));
   assert.deepEqual(bad, { ok: false, reason: "invalid", errors: { name: "At most 20 characters.", email: "Enter an email address." } });
-  const ok = await wizard.save(ada, "profile", new URLSearchParams({ name: " Ada ", email: "ada@example.com", __proto__: "x", admin: "1" }));
+  const polluted = new URLSearchParams();
+  polluted.set("name", " Ada ");
+  polluted.set("email", "ada@example.com");
+  polluted.set("__proto__", "x");
+  polluted.set("admin", "1");
+  const ok = await wizard.save(ada, "profile", polluted);
   assert.deepEqual(ok, { ok: true, step: "team" });
 
   const again = (await wizard.view(ada))!;

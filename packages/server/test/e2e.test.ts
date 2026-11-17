@@ -39,10 +39,16 @@ test("compiled Counter.wx counts on the server", { skip: !hasCargo() }, async ()
   const html = page.render();
   const scope = /class="counter (w-[0-9a-z]+)"/.exec(html)?.[1];
   assert.ok(scope, html);
-  assert.ok(html.startsWith(`<weft-c data-weft-c="r"><div class="counter ${scope}" data-weft-vars="{&quot;--${scope}-0&quot;:&quot;0&quot;}">`), html);
+  assert.ok(
+    html.startsWith(
+      `<weft-c data-weft-c="r"><div class="counter ${scope}" data-weft-vars="{&quot;--${scope}-0&quot;:&quot;0&quot;}">`,
+    ),
+    html,
+  );
   assert.ok(!html.includes(`--${scope}-1`), "one property per distinct expression");
-  assert.match(html, /Count: 0 \(doubled: 0\)/);
-  assert.match(html, new RegExp(`<button data-weft-on-click="increment" class="${scope}">\\+1</button>`));
+  assert.match(html, /<output class="[^"]+">0<\/output>/);
+  assert.match(html, /doubled is 0/);
+  assert.match(html, new RegExp(`<button class="step ${scope}" data-weft-on-click="increment" aria-label="Increase">`));
   assert.ok(Counter.def.css?.includes(`:where(.${scope})`), Counter.def.css);
 
   for (let i = 1; i <= 2; i++) {
@@ -54,10 +60,11 @@ test("compiled Counter.wx counts on the server", { skip: !hasCargo() }, async ()
       seq: i,
     });
     assert.ok(msg.t === "patch", JSON.stringify(msg));
-    assert.match(msg.html, new RegExp(`Count: ${i} \\(doubled: ${i * 2}\\)`));
+    assert.match(msg.html, new RegExp(`<output class="[^"]+">${i}</output>`));
+    assert.match(msg.html, new RegExp(`doubled is ${i * 2}`));
   }
 
-  assert.match(Counter({}), /Count: 0/);
+  assert.match(Counter({}), /<output class="[^"]+">0<\/output>/);
 });
 
 test("compiled TodoApp.wx: forms, bound arguments, child components", { skip: !hasCargo() }, async () => {
@@ -72,12 +79,9 @@ test("compiled TodoApp.wx: forms, bound arguments, child components", { skip: !h
     assert.ok(m.t === "patch", JSON.stringify(m));
     return m.html;
   };
-  const tokens = (html: string, type: string) =>
-    [...html.matchAll(new RegExp(`data-weft-args-${type}="(\\d+)"`, "g"))].map((m) => m[1]);
-
   const first = page.render();
-  assert.match(first, /Nothing to do yet\./);
-  assert.match(first, /<\/p>\s*<p class="stats">0 of 0 open<\/p>\s*<\/section>/);
+  assert.match(first, /Nothing here yet\./);
+  assert.match(first, /<p class="stats">0 open, 0 done, 0 total<\/p>/);
   assert.equal(page.size, 1);
   assert.match(first, /<button data-weft-busy>Add<\/button>/);
 
@@ -85,18 +89,20 @@ test("compiled TodoApp.wx: forms, bound arguments, child components", { skip: !h
   let html = await send("add", { type: "submit", form: { title: "Ship <v0.1>" } });
   assert.match(html, /Write docs/);
   assert.match(html, /Ship &lt;v0\.1&gt;/, "escaped");
-  assert.match(html, /2 of 2 open/);
+  assert.match(html, /2 open, 0 done, 2 total/);
   assert.ok(!html.includes(" checked"));
   assert.match(html, /data-weft-mod-click="confirm" data-weft-confirm-click="Remove this task\?"/);
 
-  html = await send("toggle", { type: "change", checked: true }, tokens(html, "change")[1]);
+  const arg = (markup: string, handler: string, type: string) =>
+    [...markup.matchAll(new RegExp(`data-weft-on-${type}="${handler}"[^>]*data-weft-args-${type}="(\\d+)"`, "g"))].map((m) => m[1]);
+  html = await send("toggle", { type: "change", checked: true }, arg(html, "toggle", "change")[1]);
   assert.equal(html.match(/ checked/g)?.length, 1);
-  assert.match(html, /1 of 2 open/);
+  assert.match(html, /1 open, 1 done, 2 total/);
 
-  html = await send("remove", { type: "click" }, tokens(html, "click")[0]);
+  html = await send("remove", { type: "click" }, arg(html, "remove", "click")[0]);
   assert.ok(!html.includes("Write docs"));
   assert.match(html, /Ship &lt;v0\.1&gt;/);
-  assert.match(html, /0 of 1 open/);
+  assert.match(html, /0 open, 1 done, 1 total/);
   assert.equal(page.size, 1, "inert stats never becomes an instance");
 
   assert.deepEqual(

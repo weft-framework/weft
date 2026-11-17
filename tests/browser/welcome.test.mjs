@@ -118,8 +118,12 @@ async function go(page, path) {
   await page.waitFor(`document.querySelector('meta[name="weft-live"]')`, { what: `live meta on ${path}` });
 }
 
+function jsString(value) {
+  return JSON.stringify(value).replace(/[<>\u2028\u2029]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
+}
+
 const click = (label) =>
-  `[...document.querySelectorAll('button')].find((x) => x.innerText.includes(${JSON.stringify(label)}) || x.getAttribute('aria-label') === ${JSON.stringify(label)}).click()`;
+  `[...document.querySelectorAll('button')].find((x) => x.innerText.includes(${jsString(label)}) || x.getAttribute('aria-label') === ${jsString(label)}).click()`;
 
 test("live data: a guest's new task reaches the other, whose delete the data rules refuse", { skip, timeout: 60_000 }, async () => {
   await go(a, "/live-data");

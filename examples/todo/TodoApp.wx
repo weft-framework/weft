@@ -9,10 +9,8 @@ interface Todo {
 type Filter = "all" | "open" | "done"
 
 component TodoStats(total: number, open: number) uses none {
-  derived done = total - open
-
   view {
-    <p class="stats">{open} open, {done} done, {total} total</p>
+    <p class="stats">{open} open, {total - open} done, {total} total</p>
   }
 }
 

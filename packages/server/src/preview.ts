@@ -19,12 +19,26 @@ export interface PreviewState {
 }
 
 export function previewName(branch: string): string {
-  const plain = branch
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 32)
-    .replace(/-+$/g, "");
+  const chars: string[] = [];
+  let dash = true;
+  for (let k = 0; k < branch.length; k++) {
+    const c = branch.charCodeAt(k);
+    const lower = c >= 65 && c <= 90 ? c + 32 : c;
+    const alnum = (lower >= 97 && lower <= 122) || (lower >= 48 && lower <= 57);
+    if (alnum) {
+      chars.push(String.fromCharCode(lower));
+      dash = false;
+    } else if (!dash) {
+      chars.push("-");
+      dash = true;
+    }
+  }
+  if (chars.length && chars[chars.length - 1] === "-") chars.pop();
+  let plain = chars.join("");
+  if (plain.length > 32) {
+    plain = plain.slice(0, 32);
+    while (plain.endsWith("-")) plain = plain.slice(0, -1);
+  }
   if (plain === branch && plain.length > 0) return plain;
   const tag = createHash("sha256").update(branch).digest("hex").slice(0, 6);
   return plain ? `${plain}-${tag}` : `branch-${tag}`;

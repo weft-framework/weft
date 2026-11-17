@@ -103,7 +103,7 @@ test("retry and cancel in the right state; the actions", async () => {
   assert.equal(r.ok, true);
   assert.equal((r as { job: { status: string } }).job.status, "queued");
   assert.deepEqual(await admin.retry(ops, id), { ok: false, reason: "wrong state" });
-  r = await admin.cancel(ops, id);
+  await admin.cancel(ops, id);
   assert.equal((await jobs.get(id))!.status, "cancelled");
   assert.deepEqual(await admin.cancel(ops, id), { ok: false, reason: "wrong state" });
 

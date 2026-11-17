@@ -122,7 +122,14 @@ test("rendering escapes text, checks URLs and resolves mentions now", () => {
       image: (src) => (src === "file_1" ? "/_weft/files/f1?sig=a&b" : src.startsWith("https://") ? src : null),
     }),
   );
-  assert.doesNotMatch(html, /<script|<img src=x|<img [^>]*onerror/, "markup in text stays text");
+  assert.ok(!html.includes("<script"), "markup in text stays text");
+  assert.ok(!html.includes("<img src=x"), "markup in text stays text");
+  let img = 0;
+  while ((img = html.indexOf("<img", img)) >= 0) {
+    const end = html.indexOf(">", img);
+    assert.ok(!html.slice(img, end < 0 ? html.length : end).includes("onerror"), "markup in text stays text");
+    img += 4;
+  }
   assert.match(html, /<p><strong><code>&lt;script&gt;alert\(1\)&lt;\/script&gt; &amp; &quot;q&quot;<\/code><\/strong>/);
   assert.match(html, /<a href="\/x">site<\/a>/);
   assert.match(html, /<a href="https:\/\/other\.example\/\?a=1&amp;b=&quot;2&quot;" rel="noopener noreferrer nofollow ugc">out<\/a>/);

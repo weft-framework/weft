@@ -27,6 +27,14 @@ const READS = new Set(["get", "all", "where", "find", "query", "count", "exists"
 const WRITES = new Set(["create", "update", "updateLocked", "updateRows", "delete", "deleteRows", "restore", "upsert", "insert"]);
 const UNSCOPED_WRITES = new Set(["removeUnscoped", "unlinkUnscoped", "purgeTrash", "purgeExpired"]);
 
+function regexIdent(name: string): string {
+  let out = "";
+  for (const ch of name) {
+    out += (ch >= "A" && ch <= "Z") || (ch >= "a" && ch <= "z") || (ch >= "0" && ch <= "9") || ch === "_" ? ch : `\\${ch}`;
+  }
+  return out;
+}
+
 interface ModuleInfo {
   imports: string[];
   packages: string[];
@@ -238,7 +246,7 @@ export async function dataManifest(serverDir: string): Promise<DataManifest> {
     const a = emptyAccess();
     const imports = [...info.source.matchAll(IMPORT)].map((m) => [m.index, m.index + m[0].length] as const);
     for (const [name, ms] of info.bindings) {
-      const re = new RegExp(`(?<![\\w$.])${name.replace(/[.$]/g, "\\$&")}(?![\\w$])`, "g");
+      const re = new RegExp(`(?<![\\w$.])${regexIdent(name)}(?![\\w$])`, "g");
       for (const m of info.code.matchAll(re)) {
         if (imports.some(([s, e]) => m.index >= s && m.index < e)) continue;
         const calls = chain(info.code, m.index + m[0].length);

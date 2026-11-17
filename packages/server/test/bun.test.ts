@@ -57,7 +57,7 @@ test("serveBun configures Bun.serve: idle timeout above the SSE heartbeat, pings
   assert.equal(errors.length, 1);
   await server.close();
   assert.equal(bun.stopped(), true);
-  assert.equal(serveBun(app(), { idleTimeout: 9999 }, fakeBun().api) !== null, true);
+  assert.ok(serveBun(app(), { idleTimeout: 9999 }, fakeBun().api));
 });
 
 test("a live page upgrades and answers events over the adapter's WebSocket", async () => {

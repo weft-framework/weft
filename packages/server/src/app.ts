@@ -2337,7 +2337,7 @@ export function createApp(opts: AppOptions): App {
       const rootSel = JSON.stringify(`weft-c[data-weft-c="${page.rootId}"]`);
       const fill =
         `<script nonce="${nonce}">(function(){var s=document.currentScript,t=s.previousElementSibling,` +
-        `r=document.querySelector(${rootSel.replace(/</g, "\u003c")});` +
+        `r=document.querySelector(${rootSel.replace(/</g, "\\u003c")});` +
         `if(t&&r)r.replaceWith(t.content);if(t)t.remove();s.remove()})()</script>`;
       let cancelled = false;
       const chunks = new ReadableStream<Uint8Array>({
@@ -3099,7 +3099,7 @@ export function createApp(opts: AppOptions): App {
         value = await withSession(sid, () => action.run(ctx, ...([...heldArgs, ...decoded.args] as never[])));
       } catch (err) {
         if (err instanceof ActionError) {
-          return answer(err.status, { ok: false, error: err.message });
+          return answer(err.status, { ok: false, error: String(err.message ?? "Request refused") });
         }
         if (err instanceof NotFound) {
           return answer(404, { ok: false, error: "Not found" });
@@ -3868,7 +3868,7 @@ function seeOther(to: string): Response {
 }
 
 function jsonResponse(code: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), {
+  return new Response(JSON.stringify(body, (key, value) => (key === "stack" ? undefined : value)), {
     status: code,
     headers: {
       "content-type": "application/json; charset=utf-8",

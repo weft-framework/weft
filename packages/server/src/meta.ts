@@ -99,9 +99,13 @@ export function resolveTitle(meta: PageMeta): string {
     return title;
   }
   if (title === "") {
-    return tpl
-      .replace(/\s*[|\-\u2013\u2014:\u00b7]?\s*%s\s*[|\-\u2013\u2014:\u00b7]?\s*/, " ")
-      .trim();
+    const i = tpl.indexOf("%s");
+    const marks = (ch: string) => ch === " " || ch === "|" || ch === "-" || ch === ":" || ch === "\u2013" || ch === "\u2014" || ch === "\u00b7";
+    let left = tpl.slice(0, i);
+    let right = tpl.slice(i + 2);
+    while (left.length && marks(left[left.length - 1]!)) left = left.slice(0, -1);
+    while (right.length && marks(right[0]!)) right = right.slice(1);
+    return `${left} ${right}`.trim();
   }
   return tpl.replace("%s", () => title);
 }

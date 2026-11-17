@@ -155,6 +155,7 @@ fn lower_island(c: &Component, out: &mut String) {
             .map(|r| r.name.clone())
             .collect(),
         props: Default::default(),
+        defaults: Default::default(),
         client: Rc::new(client),
         binds: Rc::new(Vec::new()),
         uses: Rc::new(Vec::new()),

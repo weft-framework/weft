@@ -186,6 +186,7 @@ pub struct Param {
     pub ty: String,
     pub optional: bool,
     pub rest: bool,
+    pub default: Option<String>,
     pub span: Span,
 }
 

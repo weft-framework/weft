@@ -7,7 +7,31 @@ import { browserModules, type BrowserModulesOptions } from "./npm.ts";
 const RT = "/_weft/rt/";
 
 export function rewriteImports(js: string): string {
-  return js.replace(/(\bfrom\s*|\bimport\s*\(?\s*)(["'])(\.\.?\/[^"']+)\.ts\2/g, "$1$2$3.js$2");
+  let out = "";
+  let i = 0;
+  while (i < js.length) {
+    const ts = js.indexOf(".ts", i);
+    if (ts < 0) {
+      out += js.slice(i);
+      break;
+    }
+    const q = js[ts + 3];
+    if (q !== '"' && q !== "'") {
+      out += js.slice(i, ts + 3);
+      i = ts + 3;
+      continue;
+    }
+    const open = js.lastIndexOf(q, ts - 1);
+    const spec = open < 0 ? "" : js.slice(open + 1, ts);
+    if (open >= 0 && (spec.startsWith("./") || spec.startsWith("../"))) {
+      out += js.slice(i, ts) + ".js";
+      i = ts + 3;
+    } else {
+      out += js.slice(i, ts + 3);
+      i = ts + 3;
+    }
+  }
+  return out;
 }
 
 export function runtimeAssets(): Record<string, string> {

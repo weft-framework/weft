@@ -1277,7 +1277,7 @@ impl<'a> Parser<'a> {
             loop {
                 match &tokens[i].kind {
                     TokenKind::Eof => break,
-                    TokenKind::Comma if depth == 0 => break,
+                    TokenKind::Comma | TokenKind::Eq if depth == 0 => break,
                     TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace | TokenKind::Lt => {
                         depth += 1
                     }
@@ -1290,12 +1290,41 @@ impl<'a> Parser<'a> {
                 i += 1;
             }
             let ty = slice[ty_start..ty_end].trim().to_string();
+            let mut end = ty_end;
+            let default = if tokens[i].kind == TokenKind::Eq {
+                i += 1;
+                let def_start = tokens[i].span.start;
+                let mut def_end = def_start;
+                let mut depth: i32 = 0;
+                loop {
+                    match &tokens[i].kind {
+                        TokenKind::Eof => break,
+                        TokenKind::Comma if depth == 0 => break,
+                        TokenKind::LParen
+                        | TokenKind::LBracket
+                        | TokenKind::LBrace
+                        | TokenKind::Lt => depth += 1,
+                        TokenKind::RParen
+                        | TokenKind::RBracket
+                        | TokenKind::RBrace
+                        | TokenKind::Gt => depth -= 1,
+                        _ => {}
+                    }
+                    def_end = tokens[i].span.end;
+                    i += 1;
+                }
+                end = def_end;
+                Some(slice[def_start..def_end].trim().to_string())
+            } else {
+                None
+            };
             params.push(Param {
                 name,
                 ty,
                 optional,
                 rest,
-                span: shift(Span::new(start, ty_end), base),
+                default,
+                span: shift(Span::new(start, end), base),
             });
             if tokens[i].kind == TokenKind::Comma {
                 i += 1;
@@ -1479,6 +1508,20 @@ mod tests {
             panic!("expected component");
         };
         assert_eq!(c.params[0].ty, "Array<Map<string, number>>");
+    }
+
+    #[test]
+    fn param_defaults_are_not_part_of_the_type() {
+        let f = parse_ok(
+            "component Counter(start: number = 0, step: number = 1) { view { <p/> } }\n",
+        );
+        let Item::Component(c) = &f.items[0] else {
+            panic!("{:?}", f.items)
+        };
+        assert_eq!(c.params[0].ty, "number");
+        assert_eq!(c.params[0].default.as_deref(), Some("0"));
+        assert_eq!(c.params[1].ty, "number");
+        assert_eq!(c.params[1].default.as_deref(), Some("1"));
     }
 
     #[test]

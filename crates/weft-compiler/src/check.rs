@@ -1078,6 +1078,7 @@ impl<'a> Checker<'a> {
             if !p.rest
                 && !given.contains(p.name.as_str())
                 && !p.optional
+                && p.default.is_none()
                 && !is_optional_type(&p.ty)
             {
                 self.error(

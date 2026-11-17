@@ -79,12 +79,38 @@ function humanize(key: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+function numberToken(t: string): boolean {
+  let i = 0;
+  if (t[i] === "-") i++;
+  let digits = false;
+  while (i < t.length && t.charCodeAt(i) >= 48 && t.charCodeAt(i) <= 57) {
+    i++;
+    digits = true;
+  }
+  if (t[i] === ".") {
+    i++;
+    while (i < t.length && t.charCodeAt(i) >= 48 && t.charCodeAt(i) <= 57) {
+      i++;
+      digits = true;
+    }
+  }
+  if (!digits) return false;
+  if (t[i] === "e" || t[i] === "E") {
+    i++;
+    if (t[i] === "+" || t[i] === "-") i++;
+    const exp = i;
+    while (i < t.length && t.charCodeAt(i) >= 48 && t.charCodeAt(i) <= 57) i++;
+    if (i === exp) return false;
+  }
+  return i === t.length;
+}
+
 function parse(spec: SettingSpec, raw: unknown): unknown {
   if (typeof raw !== "string") return raw;
   if (spec.type === "boolean") return raw === "true" ? true : raw === "false" ? false : raw;
   if (spec.type === "number") {
     const t = raw.trim();
-    return t === "" || !/^-?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i.test(t) ? Number.NaN : Number(t);
+    return t === "" || !numberToken(t) ? Number.NaN : Number(t);
   }
   return raw;
 }

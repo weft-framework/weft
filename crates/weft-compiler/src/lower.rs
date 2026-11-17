@@ -1,5 +1,5 @@
 use std::cell::{Cell, RefCell};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use crate::ast::{
@@ -691,6 +691,7 @@ fn escape_dq(s: &str) -> String {
 pub(crate) struct Scope {
     pub(crate) sigs: HashSet<String>,
     pub(crate) props: HashSet<String>,
+    pub(crate) defaults: HashMap<String, String>,
     pub(crate) client: Rc<HashSet<String>>,
     pub(crate) binds: Rc<Vec<(String, crate::token::Span)>>,
     pub(crate) uses: Rc<Vec<usize>>,
@@ -711,6 +712,7 @@ impl Scope {
         for n in names {
             s.sigs.remove(n);
             s.props.remove(n);
+            s.defaults.remove(n);
         }
         s
     }
@@ -816,7 +818,18 @@ fn lower_component(c: &Component, out: &mut String) {
             .params
             .iter()
             .filter(|p| !p.rest)
-            .map(|p| format!("{}{}: {}", p.name, if p.optional { "?" } else { "" }, p.ty))
+            .map(|p| {
+                format!(
+                    "{}{}: {}",
+                    p.name,
+                    if p.optional || p.default.is_some() {
+                        "?"
+                    } else {
+                        ""
+                    },
+                    p.ty
+                )
+            })
             .collect::<Vec<_>>()
             .join("; ");
         match c.params.iter().find(|p| p.rest) {
@@ -873,6 +886,11 @@ fn lower_component(c: &Component, out: &mut String) {
             .iter()
             .filter(|p| !p.rest)
             .map(|p| p.name.clone())
+            .collect(),
+        defaults: c
+            .params
+            .iter()
+            .filter_map(|p| p.default.clone().map(|d| (p.name.clone(), d)))
             .collect(),
         client: Rc::new(client),
         binds: Rc::new(binds),
@@ -1445,7 +1463,7 @@ fn is_inert_component(c: &Component, css_vars: bool) -> bool {
         })
     }
     c.reactives.is_empty()
-        && c.functions.is_empty()
+        && c.functions.iter().all(|f| !f.client)
         && c.lifecycle.is_empty()
         && !css_vars
         && quiet(&c.view.nodes)
@@ -1983,6 +2001,8 @@ fn rewrite_tokens(src: &str, tokens: &[Token], scope: &Scope, base: Option<usize
                 }
                 let value = if is_sig {
                     format!("{name}.value")
+                } else if let Some(d) = scope.defaults.get(name) {
+                    format!("(props.{name} ?? ({d}))")
                 } else {
                     format!("props.{name}")
                 };
@@ -1990,6 +2010,8 @@ fn rewrite_tokens(src: &str, tokens: &[Token], scope: &Scope, base: Option<usize
                     edits.push(Edit::Shorthand(tok.span.end, format!(": {value}")));
                 } else if is_sig {
                     edits.push(Edit::Suffix(tok.span.end));
+                } else if scope.defaults.contains_key(name) {
+                    edits.push(Edit::Replace(tok.span.start..tok.span.end, value));
                 } else {
                     edits.push(Edit::Prefix(tok.span.start));
                 }
@@ -2333,6 +2355,20 @@ mod tests {
     }
 
     #[test]
+    fn prop_defaults_are_applied_on_read() {
+        let out = lower_src(
+            "component Counter(start: number = 0, step: number = 1) {\n  signal count = start\n  function increment() { count = count + step }\n  view { <button @click={increment}>{count}</button> }\n}",
+        );
+        assert!(
+            out.contains("(props: { start?: number; step?: number }) => {"),
+            "got:\n{out}"
+        );
+        assert!(out.contains("const count = signal((props.start ?? (0)));"), "got:\n{out}");
+        assert!(out.contains("count.value = count.value + (props.step ?? (1))"), "got:\n{out}");
+        assert!(!out.contains("start: number = 0"), "got:\n{out}");
+    }
+
+    #[test]
     fn greeting_lowers_with_escaped_interp() {
         let src = "component Greeting(name: string) { view { <h1>Hello, {name}</h1> } }";
         let out = lower_src(src);
@@ -2378,6 +2414,8 @@ mod tests {
             "component B(t: string, xs: string[]) { view { <h1 title={t}>{t}</h1>{#each xs as x}<Row v={x} />{/each}<slot /> } }",
             "component C(ok: boolean) { view { {#if ok}<form action={save}><button>Go</button></form>{:else}<p>no</p>{/if} } }",
             "component S(children: Html, ...attrs: Attrs) { view { <summary {...attrs}>{children}</summary> } }",
+            "component N(path: string) { function current(href: string): boolean { return href === path } view { <a href={path} class={current(path) ? \"active\" : \"\"}>x</a> } }",
+            "const links = [{ href: \"/\", label: \"Home\" }];\ncomponent Nav(path: string) {\n  function current(href: string): boolean { return href === path }\n  view {\n    <nav>{#each links as link (link.href)}<a href={link.href} class={current(link.href) ? \"active\" : \"\"} aria-current={current(link.href) ? \"page\" : false}>{link.label}</a>{/each}</nav>\n  }\n}\n",
         ] {
             let out = lower_src(src);
             assert!(out.contains("inert: true"), "{src} got:\n{out}");

@@ -76,7 +76,21 @@ type App = ReturnType<typeof createApp>;
 async function text(app: App, path: string): Promise<string> {
   const html = await (await app.fetch(new Request(ORIGIN + path)))!.text();
   const m = /<p id="out">([^<]*)<\/p>/.exec(html);
-  return m ? m[1]!.replace(/&amp;/g, "&").replace(/&#39;/g, "'") : "(no page)";
+  if (!m) return "(no page)";
+  let s = m[1]!;
+  let out = "";
+  for (let i = 0; i < s.length; i++) {
+    if (s.startsWith("&#39;", i)) {
+      out += "'";
+      i += 4;
+    } else if (s.startsWith("&amp;", i)) {
+      out += "&";
+      i += 4;
+    } else {
+      out += s[i];
+    }
+  }
+  return out;
 }
 
 async function live(app: App, path: string) {
