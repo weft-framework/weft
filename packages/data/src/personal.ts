@@ -1,5 +1,6 @@
+import { out, sub, type Flow, type Out } from "./flow.ts";
 import type { Model } from "./model.ts";
-import { transaction } from "./tx.ts";
+import { atomic } from "./tx.ts";
 
 export type ErasePlan = "delete" | "unlink" | "keep";
 
@@ -30,7 +31,7 @@ export function personalData(
   subject: Model<any, any>,
   key: unknown,
   opts: PersonalDataOptions = {},
-): PersonalData {
+): Out<PersonalData> {
   const all = models as readonly Model<unknown>[];
   if (!all.includes(subject as Model<unknown>)) throw new Error("personalData: the subject's model must be among the models");
   const byName = new Map(all.map((m) => [m.name, m]));
@@ -42,7 +43,18 @@ export function personalData(
   }
   const maxRows = opts.maxRows ?? 100_000;
   if (!Number.isInteger(maxRows) || maxRows < 1) throw new Error("personalData: maxRows is a positive whole number");
-  const me = (subject as Model<unknown>).publicUnscoped().find((r) => keyOf(subject as Model<unknown>, r) === key);
+  return out(gather(all, subject as Model<unknown>, key, plan, maxRows, byName));
+}
+
+function* gather(
+  all: readonly Model<unknown>[],
+  subject: Model<unknown>,
+  key: unknown,
+  plan: Record<string, ErasePlan>,
+  maxRows: number,
+  byName: Map<string, Model<unknown>>,
+): Flow<PersonalData> {
+  const me = ((yield* sub(subject.publicUnscoped())) as unknown[]).find((r) => keyOf(subject, r) === key);
   if (me === undefined) throw new Error(`personalData: no ${subject.name} with that key`);
 
   const missing = new Set<string>();
@@ -60,12 +72,12 @@ export function personalData(
     }
   }
 
+  // Load every referencing model once up front (maybe-async), then walk the graph in memory.
   const cache = new Map<Model<unknown>, unknown[]>();
-  const rowsOf = (m: Model<unknown>) => {
-    let r = cache.get(m);
-    if (!r) cache.set(m, (r = m.publicUnscoped()));
-    return r;
-  };
+  for (const list of refs.values()) {
+    for (const r of list) if (!cache.has(r.model)) cache.set(r.model, (yield* sub(r.model.publicUnscoped())) as unknown[]);
+  }
+  const rowsOf = (m: Model<unknown>) => cache.get(m)!;
 
   const owned = new Map<Model<unknown>, Map<unknown, unknown>>([[subject as Model<unknown>, new Map([[key, me]])]]);
   const linked = new Map<Model<unknown>, Map<unknown, { row: unknown; fields: Set<string> }>>();
@@ -165,19 +177,22 @@ export function personalData(
   };
 }
 
-export function eraseData(data: PersonalData): { removed: Record<string, number>; unlinked: Record<string, number> } {
-  const removed: Record<string, number> = {};
-  const unlinked: Record<string, number> = {};
-  transaction(() => {
-    for (const s of data.steps) {
-      if (s.action === "unlink") {
-        for (const f of s.fields) unlinked[s.model.name] = (unlinked[s.model.name] ?? 0) + s.model.unlinkUnscoped(s.keys, f, "erasure");
-      } else {
-        removed[s.model.name] = (removed[s.model.name] ?? 0) + s.model.removeUnscoped(s.keys, "erasure");
+export function eraseData(data: PersonalData): Out<{ removed: Record<string, number>; unlinked: Record<string, number> }> {
+  return atomic(
+    data.steps.some((s) => s.model.isAsync),
+    function* () {
+      const removed: Record<string, number> = {};
+      const unlinked: Record<string, number> = {};
+      for (const s of data.steps) {
+        if (s.action === "unlink") {
+          for (const f of s.fields) unlinked[s.model.name] = (unlinked[s.model.name] ?? 0) + (yield* sub(s.model.unlinkUnscoped(s.keys, f, "erasure")));
+        } else {
+          removed[s.model.name] = (removed[s.model.name] ?? 0) + (yield* sub(s.model.removeUnscoped(s.keys, "erasure")));
+        }
       }
-    }
-  });
-  return { removed, unlinked };
+      return { removed, unlinked };
+    },
+  );
 }
 
 function keyOf(m: Model<unknown>, row: unknown): unknown {

@@ -1,5 +1,6 @@
 import { noteRead } from "./changes.ts";
 import type { Change } from "./changes.ts";
+import { andThen, out, sub, wait, type Flow, type Out } from "./flow.ts";
 import { Model, ScopedModel, type Actor } from "./model.ts";
 
 export interface AggregateOptions<T> {
@@ -51,7 +52,10 @@ export class Aggregate<T> {
     this.#off = feed.subscribe((c) => {
       if (c.model === model.name) this.#apply(c as Change<T>);
     });
-    this.#offGap = feed.onGap(() => this.#groups.clear());
+    this.#offGap = feed.onGap(() => {
+      this.#seq += 1;
+      this.#groups.clear();
+    });
   }
 
   stop(): void {
@@ -60,24 +64,28 @@ export class Aggregate<T> {
     this.#groups.clear();
   }
 
-  count(scoped: ScopedModel<T, any>): number {
-    return this.totals(scoped).count;
+  count(scoped: ScopedModel<T, any>): Out<number> {
+    return andThen(this.totals(scoped) as Totals | Promise<Totals>, (t) => t.count) as Out<number>;
   }
 
-  sum(scoped: ScopedModel<T, any>, field: keyof T & string): number {
+  sum(scoped: ScopedModel<T, any>, field: keyof T & string): Out<number> {
     if (!this.#sum.includes(field)) throw new AggregateError(`${this.model.name}: \`${field}\` is not in this aggregate's sum`);
-    return this.totals(scoped).sums[field]!;
+    return andThen(this.totals(scoped) as Totals | Promise<Totals>, (t) => t.sums[field]!) as Out<number>;
   }
 
-  totals(scoped: ScopedModel<T, any>): Totals {
+  totals(scoped: ScopedModel<T, any>): Out<Totals> {
     if (!(scoped instanceof ScopedModel) || scoped.model !== this.model || scoped.trashed) {
       throw new TypeError(`aggregate of ${this.model.name}: pass ${this.model.name}.as(actor)`);
     }
     noteRead(this.model as Model<unknown>, scoped.actor);
+    return out(this.#totalsG(scoped));
+  }
+
+  *#totalsG(scoped: ScopedModel<T, any>): Flow<Totals> {
     const g = this.#o.of(scoped.actor);
-    const out = g === null || g === undefined ? this.#empty() : this.#group(String(g));
-    const copy = { count: out.count, sums: { ...out.sums } };
-    if (this.#verify) this.#check(scoped, copy);
+    const found = g === null || g === undefined ? this.#empty() : yield* this.#group(String(g));
+    const copy = { count: found.count, sums: { ...found.sums } };
+    if (this.#verify) yield* this.#check(scoped, copy);
     return copy;
   }
 
@@ -101,7 +109,7 @@ export class Aggregate<T> {
     return v === null || v === undefined;
   }
 
-  #group(g: string): Totals {
+  *#group(g: string): Flow<Totals> {
     let t = this.#groups.get(g);
     if (t) {
       this.#groups.delete(g);
@@ -109,9 +117,13 @@ export class Aggregate<T> {
       return t;
     }
     t = this.#empty();
-    for (const row of this.model.driver.select([])) {
+    const seen = this.#seq;
+    const rows = yield* wait(this.model.driver.select([]));
+    for (const row of rows) {
       if (this.#live(row) && this.#groupOf(row) === g && this.#counts(row)) this.#add(t, row, 1);
     }
+    // On an async driver changes may land while the rows load; such a snapshot is used once, not kept.
+    if (this.#seq !== seen) return t;
     if (this.#groups.size >= this.#max) this.#groups.delete(this.#groups.keys().next().value as string);
     this.#groups.set(g, t);
     return t;
@@ -125,7 +137,10 @@ export class Aggregate<T> {
     }
   }
 
+  #seq = 0;
+
   #apply(c: Change<T>): void {
+    this.#seq += 1;
     if (this.#groups.size === 0) return;
     const side = (row: T | undefined) => (row !== undefined && this.#live(row) && this.#counts(row) ? this.#groupOf(row) : null);
     if ((c.op !== "create" && c.before === undefined) || (c.op !== "delete" && c.after === undefined)) {
@@ -144,10 +159,10 @@ export class Aggregate<T> {
     }
   }
 
-  #check(scoped: ScopedModel<T, any>, got: Totals): void {
+  *#check(scoped: ScopedModel<T, any>, got: Totals): Flow<void> {
     const want = this.#empty();
     const g = this.#o.of(scoped.actor);
-    for (const row of scoped.all()) {
+    for (const row of yield* sub(scoped.all())) {
       if (!this.#counts(row)) continue;
       if (g === null || g === undefined || this.#groupOf(row) !== String(g)) {
         throw new AggregateError(

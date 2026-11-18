@@ -150,10 +150,18 @@ export async function explainProject(root: string, opts: ExplainOptions): Promis
       if (project.database === undefined || project.database === ":memory:") {
         throw new ExplainError("--tenant needs a `database` file in weft.config.ts");
       }
-      const { openSqlite } = await import("@weft-framework/data/sqlite");
-      const db = openSqlite(project.database, { readOnly: true });
-      close = () => db.close();
-      useDatabase(db, models as unknown as Model<never>[], { migrate: false, onWarning: () => {} });
+      const pg = await import("@weft-framework/data/postgres");
+      if (pg.isPostgresUrl(project.database)) {
+        const pool = await pg.openPostgres(project.database);
+        close = () => void pool.end();
+        // Access models are `replica: true`: their rows are loaded into memory for sync reads.
+        await pg.usePostgres(pool, models as unknown as Model<never>[], { migrate: false, onWarning: () => {} });
+      } else {
+        const { openSqlite } = await import("@weft-framework/data/sqlite");
+        const db = openSqlite(project.database, { readOnly: true });
+        close = () => db.close();
+        useDatabase(db, models as unknown as Model<never>[], { migrate: false, onWarning: () => {} });
+      }
     }
     try {
       const parts: string[] = [];

@@ -58,10 +58,11 @@ test("database: rows persist across builds and a reopened storage", async () => 
   }
 });
 
-test("config: database is a path or :memory:, never a URL", () => {
+test("config: database is a path, :memory:, or a Postgres URL; never another URL", () => {
   assert.equal(parseConfig({ database: "data/app.db" }).database, "data/app.db");
   assert.equal(parseConfig({ database: ":memory:" }).database, ":memory:");
-  for (const bad of ["", "  ", "postgres://x/y", "a\0b", 3]) {
+  assert.equal(parseConfig({ database: "postgres://x/y" }).database, "postgres://x/y");
+  for (const bad of ["", "  ", "mysql://x/y", "http://x/y", "a\0b", 3]) {
     assert.throws(() => parseConfig({ database: bad }), /database must be/);
   }
 });

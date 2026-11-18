@@ -1,4 +1,5 @@
 import { defaultActorId } from "./audit.ts";
+import { flow, isThenable, out, sub, type Flow, type Out } from "./flow.ts";
 import { defineModel, Model, ScopedModel, type Actor, type WriteEvent } from "./model.ts";
 
 export interface HistoryRow {
@@ -80,9 +81,11 @@ export class History<T> {
       readWhere: { truthy: { actor: ["weftHistory"] } },
       writeWhere: { truthy: { actor: ["weftHistory"] } },
     });
+    // On Postgres the hook returns a Promise and the source write waits for it (same transaction).
     this.#off = source.onWrite((w) => {
       try {
-        this.#record(w);
+        const done = flow(this.#record(w));
+        if (isThenable(done)) return Promise.resolve(done).then(() => {}, (err) => this.#onError(err));
       } catch (err) {
         this.#onError(err);
       }
@@ -93,31 +96,33 @@ export class History<T> {
     this.#off();
   }
 
-  #record(w: WriteEvent<T>): void {
+  *#record(w: WriteEvent<T>): Flow<void> {
     const key = JSON.stringify(w.key);
     const store = this.model.as(ACCESS);
     if (w.action === "delete") {
-      store.delete((r) => r.key === key);
+      yield* sub(store.delete((r) => r.key === key));
       return;
     }
-    const last = store.query().where({ key }).orderBy("version", "desc").first();
+    const last = yield* sub(store.query().where({ key }).orderBy("version", "desc").first());
     const version = (last?.version ?? 0) + 1;
     const row: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(w.after as Record<string, unknown>)) {
       if (!this.#omit.has(k)) row[k] = v;
     }
-    store.create({
-      id: `${key}#${version}`,
-      key,
-      version,
-      at: this.#now(),
-      actor: w.actor === null ? null : this.#actorId(w.actor),
-      action: w.action,
-      data: JSON.stringify(row),
-    });
+    yield* sub(
+      store.create({
+        id: `${key}#${version}`,
+        key,
+        version,
+        at: this.#now(),
+        actor: w.actor === null ? null : this.#actorId(w.actor),
+        action: w.action,
+        data: JSON.stringify(row),
+      }),
+    );
     if (version > this.#keep) {
       const drop = version - this.#keep;
-      store.delete((r) => r.key === key && r.version <= drop);
+      yield* sub(store.delete((r) => r.key === key && r.version <= drop));
     }
   }
 
@@ -127,20 +132,24 @@ export class History<T> {
     }
   }
 
-  #readable(scoped: ScopedModel<T, any>, key: unknown): boolean {
+  *#readable(scoped: ScopedModel<T, any>, key: unknown): Flow<boolean> {
     this.#check(scoped);
-    if (scoped.get(key) !== undefined) return true;
+    if ((yield* sub(scoped.get(key))) !== undefined) return true;
     if (this.source.trashField === null) return false;
-    return scoped.trash().get(key) !== undefined;
+    return (yield* sub(scoped.trash().get(key))) !== undefined;
   }
 
-  #rows(key: unknown): HistoryRow[] {
-    return this.model.as(ACCESS).query().where({ key: JSON.stringify(key) }).orderBy("version", "asc").all() as HistoryRow[];
+  *#rows(key: unknown): Flow<HistoryRow[]> {
+    return (yield* sub(this.model.as(ACCESS).query().where({ key: JSON.stringify(key) }).orderBy("version", "asc").all())) as HistoryRow[];
   }
 
-  versions(scoped: ScopedModel<T, any>, key: unknown, o: { limit?: number } = {}): Version<T>[] | null {
-    if (!this.#readable(scoped, key)) return null;
-    const rows = this.#rows(key);
+  versions(scoped: ScopedModel<T, any>, key: unknown, o: { limit?: number } = {}): Out<Version<T>[] | null> {
+    return out(this.#versionsG(scoped, key, o));
+  }
+
+  *#versionsG(scoped: ScopedModel<T, any>, key: unknown, o: { limit?: number }): Flow<Version<T>[] | null> {
+    if (!(yield* this.#readable(scoped, key))) return null;
+    const rows = yield* this.#rows(key);
     const out: Version<T>[] = [];
     let prev: Record<string, unknown> = {};
     for (const r of rows) {
@@ -159,8 +168,12 @@ export class History<T> {
     return out.slice(0, clampLimit(o.limit, 100));
   }
 
-  recent(scoped: ScopedModel<T, any>, o: { limit?: number; before?: number; scan?: number } = {}): (Version<T> & { key: unknown })[] {
+  recent(scoped: ScopedModel<T, any>, o: { limit?: number; before?: number; scan?: number } = {}): Out<(Version<T> & { key: unknown })[]> {
     this.#check(scoped);
+    return out(this.#recentG(scoped, o));
+  }
+
+  *#recentG(scoped: ScopedModel<T, any>, o: { limit?: number; before?: number; scan?: number }): Flow<(Version<T> & { key: unknown })[]> {
     const limit = clampLimit(o.limit, 50);
     const scan = clampLimit(o.scan, 2000);
     const store = this.model.as(ACCESS);
@@ -170,16 +183,16 @@ export class History<T> {
     while (out.length < limit && offset < scan) {
       let q = store.query().orderBy("at", "desc").orderBy("version", "desc");
       if (o.before !== undefined) q = q.where({ at: { lt: o.before } } as never);
-      const page = q.offset(offset).limit(Math.min(200, scan - offset)).all() as HistoryRow[];
+      const page = (yield* sub(q.offset(offset).limit(Math.min(200, scan - offset)).all())) as HistoryRow[];
       if (page.length === 0) break;
       offset += page.length;
       for (const r of page) {
         let ok = seen.get(r.key);
         const key = JSON.parse(r.key) as unknown;
-        if (ok === undefined) seen.set(r.key, (ok = this.#readable(scoped, key)));
+        if (ok === undefined) seen.set(r.key, (ok = yield* this.#readable(scoped, key)));
         if (!ok) continue;
         const row = JSON.parse(r.data) as Record<string, unknown>;
-        const prior = r.version > 1 ? store.get(`${r.key}#${r.version - 1}`) : undefined;
+        const prior = r.version > 1 ? yield* sub(store.get(`${r.key}#${r.version - 1}`)) : undefined;
         out.push({
           key,
           version: r.version,
@@ -195,33 +208,48 @@ export class History<T> {
     return out;
   }
 
-  diff(scoped: ScopedModel<T, any>, key: unknown, from: number, to: number): FieldChange[] | null {
-    if (!this.#readable(scoped, key)) return null;
-    const rows = this.#rows(key);
-    const a = rows.find((r) => r.version === from);
-    const b = rows.find((r) => r.version === to);
-    if (!a || !b) return null;
-    return changes(JSON.parse(a.data) as Record<string, unknown>, JSON.parse(b.data) as Record<string, unknown>);
+  diff(scoped: ScopedModel<T, any>, key: unknown, from: number, to: number): Out<FieldChange[] | null> {
+    const self = this;
+    return out(
+      (function* (): Flow<FieldChange[] | null> {
+        if (!(yield* self.#readable(scoped, key))) return null;
+        const rows = yield* self.#rows(key);
+        const a = rows.find((r) => r.version === from);
+        const b = rows.find((r) => r.version === to);
+        if (!a || !b) return null;
+        return changes(JSON.parse(a.data) as Record<string, unknown>, JSON.parse(b.data) as Record<string, unknown>);
+      })(),
+    );
   }
 
-  restore(scoped: ScopedModel<T, any>, key: unknown, version: number): boolean {
-    if (!this.#readable(scoped, key) || scoped.trashed) return false;
-    const target = this.#rows(key).find((r) => r.version === version);
-    if (!target) return false;
-    return this.#putBack(scoped, key, JSON.parse(target.data) as Record<string, unknown>);
+  restore(scoped: ScopedModel<T, any>, key: unknown, version: number): Out<boolean> {
+    const self = this;
+    return out(
+      (function* (): Flow<boolean> {
+        if (!(yield* self.#readable(scoped, key)) || scoped.trashed) return false;
+        const target = (yield* self.#rows(key)).find((r) => r.version === version);
+        if (!target) return false;
+        return yield* self.#putBack(scoped, key, JSON.parse(target.data) as Record<string, unknown>);
+      })(),
+    );
   }
 
-  undo(scoped: ScopedModel<T, any>, key: unknown, o: { within?: number } = {}): UndoResult {
+  undo(scoped: ScopedModel<T, any>, key: unknown, o: { within?: number } = {}): Out<UndoResult> {
     this.#check(scoped);
     if (scoped.trashed) throw new TypeError(`undo on ${this.source.name}: pass the live handle, ${this.source.name}.as(actor)`);
-    if (!this.#readable(scoped, key)) return { ok: false, reason: "not-found" };
+    return out(this.#undoG(scoped, key, o));
+  }
+
+  *#undoG(scoped: ScopedModel<T, any>, key: unknown, o: { within?: number }): Flow<UndoResult> {
+    if (!(yield* this.#readable(scoped, key))) return { ok: false, reason: "not-found" };
     const me = this.#actorId(scoped.actor);
-    const rows = this.#rows(key);
+    const rows = yield* this.#rows(key);
     const last = rows[rows.length - 1];
     if (last === undefined) return { ok: false, reason: "nothing" };
     if (me === null || last.actor !== me) return { ok: false, reason: "not-yours" };
     if (o.within !== undefined && this.#now() - last.at > o.within) return { ok: false, reason: "too-old" };
-    const current = (scoped.get(key) ?? (this.source.trashField === null ? undefined : scoped.trash().get(key))) as
+    const live = yield* sub(scoped.get(key));
+    const current = (live ?? (this.source.trashField === null ? undefined : yield* sub(scoped.trash().get(key)))) as
       | Record<string, unknown>
       | undefined;
     const wrote = JSON.parse(last.data) as Record<string, unknown>;
@@ -234,43 +262,47 @@ export class History<T> {
     switch (last.action) {
       case "create":
       case "restore":
-        done = scoped.delete(mine) === 1;
+        done = (yield* sub(scoped.delete(mine))) === 1;
         break;
       case "trash":
-        done = scoped.trash().restore(mine) === 1;
+        done = (yield* sub(scoped.trash().restore(mine))) === 1;
         break;
       default: {
         const before = rows[rows.length - 2];
         if (before === undefined || before.version !== last.version - 1) return { ok: false, reason: "not-kept" };
-        done = this.#putBack(scoped, key, JSON.parse(before.data) as Record<string, unknown>);
+        done = yield* this.#putBack(scoped, key, JSON.parse(before.data) as Record<string, unknown>);
       }
     }
     return done ? { ok: true, action: last.action as Version<T>["action"], version: last.version } : { ok: false, reason: "refused" };
   }
 
-  undoable(scoped: ScopedModel<T, any>, o: { limit?: number; within?: number; scan?: number } = {}): (Version<T> & { key: unknown })[] {
+  undoable(scoped: ScopedModel<T, any>, o: { limit?: number; within?: number; scan?: number } = {}): Out<(Version<T> & { key: unknown })[]> {
     this.#check(scoped);
+    return out(this.#undoableG(scoped, o));
+  }
+
+  *#undoableG(scoped: ScopedModel<T, any>, o: { limit?: number; within?: number; scan?: number }): Flow<(Version<T> & { key: unknown })[]> {
     const me = this.#actorId(scoped.actor);
     if (me === null) return [];
     const limit = clampLimit(o.limit, 20);
     const since = o.within === undefined ? undefined : this.#now() - o.within;
     const store = this.model.as(ACCESS);
-    const out: (Version<T> & { key: unknown })[] = [];
+    const found: (Version<T> & { key: unknown })[] = [];
     const done = new Set<string>();
-    for (const v of this.recent(scoped, { limit: 10_000, scan: o.scan })) {
+    for (const v of yield* this.#recentG(scoped, { limit: 10_000, scan: o.scan })) {
       if (since !== undefined && v.at < since) break;
       const id = JSON.stringify(v.key);
       if (done.has(id)) continue;
       done.add(id);
-      if (v.actor !== me || store.get(`${id}#${v.version + 1}`) !== undefined) continue;
-      out.push(v);
-      if (out.length >= limit) break;
+      if (v.actor !== me || (yield* sub(store.get(`${id}#${v.version + 1}`))) !== undefined) continue;
+      found.push(v);
+      if (found.length >= limit) break;
     }
-    return out;
+    return found;
   }
 
-  #putBack(scoped: ScopedModel<T, any>, key: unknown, old: Record<string, unknown>): boolean {
-    const current = scoped.get(key) as Record<string, unknown> | undefined;
+  *#putBack(scoped: ScopedModel<T, any>, key: unknown, old: Record<string, unknown>): Flow<boolean> {
+    const current = (yield* sub(scoped.get(key))) as Record<string, unknown> | undefined;
     if (!current) return false;
     const fixed = new Set<string>([this.source.key, ...this.source.fileFields, ...this.#omit]);
     if (this.source.tenant !== null) fixed.add(this.source.tenant);
@@ -283,7 +315,7 @@ export class History<T> {
     }
     if (Object.keys(patch).length === 0) return true;
     const k = this.source.key;
-    return scoped.update((r) => (r as Record<string, unknown>)[k] === key, patch as Partial<T>) === 1;
+    return (yield* sub(scoped.update((r) => (r as Record<string, unknown>)[k] === key, patch as Partial<T>))) === 1;
   }
 }
 
@@ -306,18 +338,24 @@ export interface ActivitySource<T> {
   describe(v: Version<T>): string | null;
 }
 
-export function activity(sources: readonly ActivitySource<any>[], o: { limit?: number; before?: number; scan?: number } = {}): ActivityItem[] {
+export function activity(sources: readonly ActivitySource<any>[], o: { limit?: number; before?: number; scan?: number } = {}): Out<ActivityItem[]> {
   const limit = clampLimit(o.limit, 50);
-  const all: ActivityItem[] = [];
   for (const s of sources) {
     if (!(s.history instanceof History) || typeof s.describe !== "function") throw new TypeError("activity: sources are { history, scoped, describe }");
-    for (const v of s.history.recent(s.scoped, { ...o, limit: limit * 2 })) {
-      const text = s.describe(v);
-      if (typeof text !== "string" || text === "") continue;
-      all.push({ model: s.history.source.name, key: v.key, at: v.at, actor: v.actor, action: v.action, text });
-    }
   }
-  return all.sort((a, b) => b.at - a.at).slice(0, limit);
+  return out(
+    (function* (): Flow<ActivityItem[]> {
+      const all: ActivityItem[] = [];
+      for (const s of sources) {
+        for (const v of yield* sub(s.history.recent(s.scoped, { ...o, limit: limit * 2 }))) {
+          const text = s.describe(v);
+          if (typeof text !== "string" || text === "") continue;
+          all.push({ model: s.history.source.name, key: v.key, at: v.at, actor: v.actor, action: v.action, text });
+        }
+      }
+      return all.sort((a, b) => b.at - a.at).slice(0, limit);
+    })(),
+  );
 }
 
 function same(a: unknown, b: unknown): boolean {

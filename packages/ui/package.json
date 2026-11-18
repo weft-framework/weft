@@ -1,6 +1,6 @@
 {
   "name": "@weft-framework/ui",
-  "version": "0.0.1",
+  "version": "0.0.4",
   "description": "Weft UI: headless, accessible behaviour for components (focus trap, dismiss layers, roving focus, typeahead, positioning, dialog, popover, tabs, menu, tooltip, combobox, toast) as `use:` attachments.",
   "keywords": [
     "weft",

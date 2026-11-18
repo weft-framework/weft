@@ -83,7 +83,7 @@ function readable(d: Pick<Doc, "model" | "key" | "field">, actor: unknown): bool
   if (row === undefined) return false;
   const rule = d.model.fieldReads.find(([f]) => f === d.field)?.[1];
   if (!rule) return true;
-  const raw = d.model.driver.select([], d.key).find((r: Record<string, unknown>) => sameKey(r[d.model.key], d.key));
+  const raw = d.model.syncDriver().select([], d.key).find((r: Record<string, unknown>) => sameKey(r[d.model.key], d.key));
   try {
     return raw !== undefined && rule(actor as never, raw) === true;
   } catch {
@@ -92,7 +92,7 @@ function readable(d: Pick<Doc, "model" | "key" | "field">, actor: unknown): bool
 }
 
 function stored(d: Doc): string | undefined {
-  const row = d.model.driver.select([], d.key).find((r: Record<string, unknown>) => sameKey(r[d.model.key], d.key)) as
+  const row = d.model.syncDriver().select([], d.key).find((r: Record<string, unknown>) => sameKey(r[d.model.key], d.key)) as
     | Record<string, unknown>
     | undefined;
   if (!row) return undefined;

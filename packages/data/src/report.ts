@@ -1,3 +1,4 @@
+import { out, sub, type Flow, type Out } from "./flow.ts";
 import { ScopedModel, type Model } from "./model.ts";
 import { toCsv } from "./csv.ts";
 
@@ -180,18 +181,18 @@ export class Report<T> {
     this.#maxRows = max;
   }
 
-  #collect(
+  *#collect(
     scoped: ScopedModel<T, any>,
     from: number,
     to: number,
     o: RunOptions,
     fmt: Intl.DateTimeFormat,
-  ): Collected {
+  ): Flow<Collected> {
     const bound = (ms: number) => (this.#timeKind === "date" ? new Date(ms) : ms);
     const range = { [this.time]: { gte: bound(from), lt: bound(to) } };
     let q = scoped.query().where(range as never);
     if (o.where) q = q.where(o.where as never);
-    const rows = q.limit(this.#maxRows + 1).all() as Record<string, unknown>[];
+    const rows = (yield* sub(q.limit(this.#maxRows + 1).all())) as Record<string, unknown>[];
     if (rows.length > this.#maxRows) throw new Error(`report: more than ${this.#maxRows} rows in range; narrow it or raise maxRows`);
     const byLabel = new Map<string, Map<string, Acc[]>>();
     const splits = new Set<string>();
@@ -220,7 +221,11 @@ export class Report<T> {
     return { byLabel, splits };
   }
 
-  run(scoped: ScopedModel<T, any>, o: RunOptions): ReportResult {
+  run(scoped: ScopedModel<T, any>, o: RunOptions): Out<ReportResult> {
+    return out(this.#runG(scoped, o));
+  }
+
+  *#runG(scoped: ScopedModel<T, any>, o: RunOptions): Flow<ReportResult> {
     if (!(scoped instanceof ScopedModel) || scoped.model !== this.model) throw new TypeError(`report: pass ${this.model.name}.as(actor)`);
     if (!o || !["day", "week", "month"].includes(o.bucket)) throw new TypeError('report: bucket is "day", "week" or "month"');
     if (o.compare !== undefined && o.compare !== "previous" && o.compare !== "year") throw new TypeError('report: compare is "previous" or "year"');
@@ -237,7 +242,7 @@ export class Report<T> {
     const names = labels(o.bucket, zoneDay(fmt, from), zoneDay(fmt, to - 1));
     if (names.length > MAX_BUCKETS) throw new RangeError(`report: more than ${MAX_BUCKETS} buckets; use a longer bucket or a shorter range`);
 
-    const now = this.#collect(scoped, from, to, o, fmt);
+    const now = yield* this.#collect(scoped, from, to, o, fmt);
     let before: Collected | null = null;
     let prevNames: string[] = [];
     let pFrom = 0;
@@ -256,7 +261,7 @@ export class Report<T> {
         pTo = back(to);
       }
       prevNames = labels(o.bucket, zoneDay(fmt, pFrom), zoneDay(fmt, pTo - 1));
-      before = this.#collect(scoped, pFrom, pTo, o, fmt);
+      before = yield* this.#collect(scoped, pFrom, pTo, o, fmt);
     }
 
     const splits = [...new Set([...now.splits, ...(before?.splits ?? [])])].sort();

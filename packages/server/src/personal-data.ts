@@ -57,14 +57,14 @@ export async function personalDataCommand(root: string, opts: PersonalDataComman
     const key = keyField && keyField.type === "number" && /^-?\d+$/.test(opts.key) ? Number(opts.key) : opts.key;
     let data: PersonalData;
     try {
-      data = personalData(models, subject, key, { plan: opts.plan ?? {} });
+      data = await personalData(models, subject, key, { plan: opts.plan ?? {} });
     } catch (err) {
       throw new PersonalDataError(err instanceof Error ? err.message.replace(/^personalData: /, "") : String(err));
     }
     const summary = describe(data);
     const { steps: _steps, ...visible } = data;
     if (opts.command === "export" || opts.dryRun) return { data: visible, summary };
-    return { data: visible, erased: eraseData(data), summary };
+    return { data: visible, erased: await eraseData(data), summary };
   } finally {
     storage.close();
     rmSync(outDir, { recursive: true, force: true });

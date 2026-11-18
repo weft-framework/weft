@@ -1,8 +1,9 @@
 import { defaultActorId } from "./audit.ts";
 import { keyText, keyValue } from "./addons.ts";
 import { sameValue } from "./filter.ts";
+import { andThen, isThenable, sub, type Out } from "./flow.ts";
 import { defineModel, FieldLock, Model, ScopedModel, type Actor } from "./model.ts";
-import { transaction } from "./tx.ts";
+import { atomic } from "./tx.ts";
 
 type Key = string | number;
 
@@ -117,6 +118,7 @@ export class Workflow<T> {
     const readable = (a: Actor, text: string): boolean => {
       const k = keyValue(text);
       if (k === undefined || a === WRITER) return false;
+      if (source.isAsync) return false;
       try {
         return source.as(a).get(k as never) !== undefined;
       } catch {
@@ -142,7 +144,8 @@ export class Workflow<T> {
     source.onWrite((w) => {
       if (w.action !== "delete") return;
       const text = JSON.stringify(w.key);
-      this.model.as(WRITER).delete((r) => r.key === text);
+      const done = this.model.as(WRITER).delete((r) => r.key === text);
+      return isThenable(done) ? Promise.resolve(done).then(() => {}) : undefined;
     });
   }
 
@@ -171,64 +174,73 @@ export class Workflow<T> {
     return null;
   }
 
-  move(scoped: ScopedModel<T, any>, key: Key, transition: string, opts: { note?: string } = {}): MoveResult<T> {
+  move(scoped: ScopedModel<T, any>, key: Key, transition: string, opts: { note?: string } = {}): Out<MoveResult<T>> {
     this.#handle(scoped);
     const k = keyText(key);
     const tr = this.#t.get(transition);
-    if (!tr) return { ok: false, reason: "no such transition" };
+    const early = (r: MoveResult<T>): Out<MoveResult<T>> => (this.#source.isAsync ? Promise.resolve(r) : r) as Out<MoveResult<T>>;
+    if (!tr) return early({ ok: false, reason: "no such transition" });
     let note: string | null = null;
     if (opts.note !== undefined && opts.note !== null) {
-      if (typeof opts.note !== "string") return { ok: false, reason: "bad note" };
+      if (typeof opts.note !== "string") return early({ ok: false, reason: "bad note" });
       const n = opts.note.trim();
       if (n !== "") {
-        if (tr.note === "none" || n.length > this.#maxNote) return { ok: false, reason: "bad note" };
+        if (tr.note === "none" || n.length > this.#maxNote) return early({ ok: false, reason: "bad note" });
         note = n;
       }
     }
-    if (tr.note === "required" && note === null) return { ok: false, reason: "note required" };
-    return transaction((): MoveResult<T> => {
-      const row = scoped.get(key as never);
-      if (row === undefined) return { ok: false, reason: "not found" };
-      const refused = this.#may(scoped, row, transition);
+    if (tr.note === "required" && note === null) return early({ ok: false, reason: "note required" });
+    const self = this;
+    return atomic(this.#source.isAsync || this.model.isAsync, function* () {
+      const row = yield* sub(scoped.get(key as never));
+      if (row === undefined) return { ok: false, reason: "not found" } as MoveResult<T>;
+      const refused = self.#may(scoped, row, transition);
       if (refused) return refused;
-      const from = (row as Record<string, unknown>)[this.field] as string;
-      const keyField = this.#source.key;
-      const n = scoped.updateLocked(
-        this.#lock,
-        (r) =>
-          sameValue((r as Record<string, unknown>)[keyField], (row as Record<string, unknown>)[keyField]) &&
-          (r as Record<string, unknown>)[this.field] === from,
-        { [this.field]: tr.to } as Partial<T>,
+      const from = (row as Record<string, unknown>)[self.field] as string;
+      const keyField = self.#source.key;
+      const n = yield* sub(
+        scoped.updateLocked(
+          self.#lock,
+          (r) =>
+            sameValue((r as Record<string, unknown>)[keyField], (row as Record<string, unknown>)[keyField]) &&
+            (r as Record<string, unknown>)[self.field] === from,
+          { [self.field]: tr.to } as Partial<T>,
+        ),
       );
-      if (n !== 1) return { ok: false, reason: "changed meanwhile" };
-      const step = this.model.as(WRITER).create({
-        id: globalThis.crypto.randomUUID(),
-        key: k,
-        n: this.model.as(WRITER).query().where({ key: k }).count() + 1,
-        transition,
-        from,
-        to: tr.to,
-        by: this.#id(scoped.actor),
-        at: this.#now(),
-        note,
-      })!;
-      return { ok: true, row: scoped.get(key as never)!, step };
+      if (n !== 1) return { ok: false, reason: "changed meanwhile" } as MoveResult<T>;
+      const count = yield* sub(self.model.as(WRITER).query().where({ key: k }).count());
+      const step = (yield* sub(
+        self.model.as(WRITER).create({
+          id: globalThis.crypto.randomUUID(),
+          key: k,
+          n: count + 1,
+          transition,
+          from,
+          to: tr.to,
+          by: self.#id(scoped.actor),
+          at: self.#now(),
+          note,
+        }),
+      ))!;
+      const now = (yield* sub(scoped.get(key as never)))!;
+      return { ok: true, row: now, step } as MoveResult<T>;
     });
   }
 
-  available(scoped: ScopedModel<T, any>, key: Key): string[] {
+  available(scoped: ScopedModel<T, any>, key: Key): Out<string[]> {
     this.#handle(scoped);
     keyText(key);
-    const row = scoped.get(key as never);
-    if (row === undefined) return [];
-    return [...this.#t.keys()].filter((name) => this.#may(scoped, row, name) === null);
+    return andThen(scoped.get(key as never), (row) =>
+      row === undefined ? [] : [...this.#t.keys()].filter((name) => this.#may(scoped, row, name) === null),
+    ) as Out<string[]>;
   }
 
-  steps(scoped: ScopedModel<T, any>, key: Key): StepRow[] {
+  steps(scoped: ScopedModel<T, any>, key: Key): Out<StepRow[]> {
     this.#handle(scoped);
     const k = keyText(key);
-    if (scoped.get(key as never) === undefined) return [];
-    return (this.model.as(WRITER).query().where({ key: k }).orderBy("n").all() as StepRow[]);
+    return andThen(scoped.get(key as never), (row) =>
+      row === undefined ? [] : (this.model.as(WRITER).query().where({ key: k }).orderBy("n").all() as StepRow[] | Promise<StepRow[]>),
+    ) as Out<StepRow[]>;
   }
 }
 

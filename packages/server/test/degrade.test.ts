@@ -58,18 +58,22 @@ test("past the page limit, new pages render without a live page", async () => {
 
 test("above the heap limit, new pages render without a live page", async () => {
   const heard: { reason: string; heapBytes: number | null }[] = [];
-  const { app } = setup({ heapBytes: 16 * 1024 * 1024, onDegrade: (i) => heard.push(i) });
-  const used = process.memoryUsage().heapUsed;
-  const p = await get(app);
-  if (used > 16 * 1024 * 1024) {
+  const real = process.memoryUsage;
+  const fake = Object.assign(() => ({ ...real(), heapUsed: 32 * 1024 * 1024 }), { rss: real.rss });
+  process.memoryUsage = fake as typeof process.memoryUsage;
+  try {
+    const { app } = setup({ heapBytes: 16 * 1024 * 1024, onDegrade: (i) => heard.push(i) });
+    const p = await get(app);
     assert.equal(p.lid, undefined);
     assert.equal(heard[0]?.reason, "memory");
-    assert.ok((heard[0]?.heapBytes ?? 0) > 16 * 1024 * 1024);
+    assert.equal(heard[0]?.heapBytes, 32 * 1024 * 1024);
+    app.close();
+    const { app: roomy } = setup({ heapBytes: 64 * 1024 * 1024 });
+    assert.ok((await get(roomy)).lid, "a heap under the limit keeps pages live");
+    roomy.close();
+  } finally {
+    process.memoryUsage = real;
   }
-  app.close();
-  const { app: roomy } = setup({ heapBytes: 64 * 1024 * 1024 * 1024 });
-  assert.ok((await get(roomy)).lid, "a heap under the limit keeps pages live");
-  roomy.close();
 });
 
 test("degrade options are checked", () => {

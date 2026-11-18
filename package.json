@@ -28,7 +28,8 @@
     "test:packages": "node --test tests/packaging/packages.test.mjs",
     "build:packages": "node scripts/build-packages.mjs",
     "typecheck": "tsc -p .",
-    "bench": "node --expose-gc --experimental-strip-types bench/run.ts"
+    "bench": "node --expose-gc --experimental-strip-types bench/run.ts",
+    "bench:data": "node --experimental-strip-types bench/data.ts"
   },
   "engines": {
     "node": ">=22.6"

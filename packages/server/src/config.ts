@@ -107,9 +107,9 @@ export function parseConfig(raw: unknown): WeftConfig {
       src.database.trim() === "" ||
       src.database.length > 1024 ||
       src.database.includes("\0") ||
-      /^[a-z][a-z0-9+.-]*:\/\//i.test(src.database)
+      (/^[a-z][a-z0-9+.-]*:\/\//i.test(src.database) && !/^postgres(ql)?:\/\//i.test(src.database))
     ) {
-      fail('database must be a file path (relative to the project) or ":memory:"');
+      fail('database must be a SQLite file path (relative to the project), ":memory:", a postgres:// URL or pglite:<dir>');
     }
     out.database = src.database;
   }

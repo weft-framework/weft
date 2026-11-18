@@ -118,6 +118,7 @@ const writable = (a: unknown, row: { tenant: string }) => a instanceof Writer &&
 
 export function createModels(prefix: string): Models {
   const tenantRules = {
+    replica: true,
     read: (a: unknown, r: { tenant: string }) => readable(a, r),
     write: writable,
     readWhere: byTenant,
@@ -140,6 +141,7 @@ export function createModels(prefix: string): Models {
         created: "number",
       },
       attrs: { tenant: { index: true }, scope: { index: true }, user: { index: true } },
+      replica: true,
       read: (a: unknown, r: MemberRow) => readable(a, r),
       write: writable,
       readWhere: { or: [byUser, byTenant] },
@@ -179,6 +181,7 @@ export function createModels(prefix: string): Models {
         usedBy: "string | null",
       },
       attrs: { tenant: { index: true }, hash: { unique: true } },
+      replica: true,
       read: (a: unknown, r: InviteRow) => readable(a, r),
       write: writable,
       readWhere: { or: [byTenant, { cmp: "==", l: { field: ["hash"] }, r: { actor: ["hash"] } }] },

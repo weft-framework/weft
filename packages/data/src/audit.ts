@@ -177,7 +177,8 @@ export interface AuditEntry {
   certain: boolean;
 }
 
-interface RawEntry {
+/** @internal */
+export interface RawEntry {
   id: number | bigint;
   at: string;
   model: string;
@@ -192,7 +193,8 @@ interface RawEntry {
 
 const ACTIONS = new Set<string>(["read", "create", "update", "delete", "trash", "restore"]);
 
-function filters(opts: AuditQuery): { where: string; params: SqlValue[]; limit: number } {
+/** @internal Shared with `PgAuditLog`. */
+export function filters(opts: AuditQuery): { where: string; params: SqlValue[]; limit: number } {
   let where = "";
   const params: SqlValue[] = [];
   const time = (d: unknown, what: string): string => {
@@ -223,7 +225,8 @@ function filters(opts: AuditQuery): { where: string; params: SqlValue[]; limit: 
   return { where, params, limit };
 }
 
-function entry(r: RawEntry, key: SqlValue | null): AuditEntry {
+/** @internal */
+export function entry(r: RawEntry, key: SqlValue | null): AuditEntry {
   const keys = JSON.parse(r.keys) as unknown[];
   return {
     id: Number(r.id),
@@ -240,7 +243,8 @@ function entry(r: RawEntry, key: SqlValue | null): AuditEntry {
   };
 }
 
-function keyValue(key: unknown): SqlValue {
+/** @internal */
+export function keyValue(key: unknown): SqlValue {
   if (typeof key === "string") return key;
   if (typeof key === "bigint") return key.toString();
   if (typeof key === "number" && Number.isFinite(key)) return key;

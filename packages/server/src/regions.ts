@@ -211,7 +211,7 @@ export class Regions {
     if (what === "snapshot" && req.method === "GET") {
       const models: Record<string, unknown[]> = {};
       for (const [name, m] of this.#models) {
-        models[name] = (m.driver.select([]) as unknown[]).filter((row) => Regions.#reaches(m.regionsOf(row, undefined), from));
+        models[name] = (m.syncDriver().select([]) as unknown[]).filter((row) => Regions.#reaches(m.regionsOf(row, undefined), from));
       }
       return json({ epoch: this.#epoch, seq: this.#seq, models });
     }
@@ -287,7 +287,7 @@ export class Regions {
 
   #readOnly(): void {
     for (const m of this.#models.values()) {
-      const d = m.driver as unknown as Record<string, (...a: unknown[]) => unknown>;
+      const d = m.syncDriver() as unknown as Record<string, (...a: unknown[]) => unknown>;
       for (const op of ["insert", "update", "delete"] as const) {
         const real = d[op]!.bind(d);
         d[op] = (...args: unknown[]) => {
@@ -327,7 +327,7 @@ export class Regions {
     try {
       for (const [name, m] of this.#models) {
         const rows = snap.models[name] ?? [];
-        const d = m.driver;
+        const d = m.syncDriver();
         for (const old of d.select([])) d.delete((old as Record<string, unknown>)[m.key]);
         for (const row of rows) d.insert(row);
         m.publishAll();
@@ -352,7 +352,7 @@ export class Regions {
       m.publishAll();
       return;
     }
-    const d = m.driver;
+    const d = m.syncDriver();
     const before = d.select([], e.key).find((r) => (r as Record<string, unknown>)[m.key] === e.key || String((r as Record<string, unknown>)[m.key]) === String(e.key));
     this.#applying = true;
     try {

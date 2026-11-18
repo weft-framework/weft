@@ -8,6 +8,7 @@ import { holdsFile, releaseFiles, takeFile } from "./files.ts";
 import { tagRow } from "./can.ts";
 import { consentRule, watchConsent } from "./consent.ts";
 import { fieldSpecs, type FieldAttrs, type FieldSpec } from "./schema.ts";
+import { isThenable, out, wait, type Flow, type Maybe, type Out } from "./flow.ts";
 
 export interface Register {}
 
@@ -24,6 +25,12 @@ export interface ModelConfig<T> {
   readWhere?: PolicyExpr;
   writeWhere?: PolicyExpr;
   residency?: string | ((row: T) => string | null | undefined);
+  /**
+   * Keep an in-memory replica when the model is on an async database (Postgres), so
+   * `Model.as(actor).local` reads stay synchronous. For small, hot models read by policies
+   * (access data). `usePostgres` sets it up.
+   */
+  replica?: boolean;
 }
 
 export interface Grant {
@@ -44,6 +51,33 @@ export interface Driver<T> {
   update(key: unknown, row: T): void;
   delete(key: unknown): void;
   query?(scopes: Scope[], q: DriverQuery): T[];
+}
+
+/** A driver whose I/O is asynchronous (Postgres). See docs/design/async-data.md. */
+export interface AsyncDriver<T> {
+  readonly async: true;
+  select(scopes: Scope[], key?: unknown): Promise<T[]>;
+  insert(row: T): Promise<void>;
+  update(key: unknown, row: T): Promise<void>;
+  delete(key: unknown): Promise<void>;
+  query?(scopes: Scope[], q: DriverQuery): Promise<T[]>;
+  /** Optional synchronous read path over an in-process replica (`Model.as(a).local`). */
+  readonly local?: Driver<T>;
+}
+
+export type AnyDriver<T> = Driver<T> | AsyncDriver<T>;
+
+/** The operations every driver offers, with maybe-async results (used inside flows). */
+interface FlowDriver<T> {
+  select(scopes: Scope[], key?: unknown): Maybe<T[]>;
+  insert(row: T): Maybe<void>;
+  update(key: unknown, row: T): Maybe<void>;
+  delete(key: unknown): Maybe<void>;
+  query?(scopes: Scope[], q: DriverQuery): Maybe<T[]>;
+}
+
+export function isAsyncDriver<T>(d: AnyDriver<T>): d is AsyncDriver<T> {
+  return (d as { async?: unknown }).async === true;
 }
 
 export function tenantOf(actor: unknown): string | number | undefined {
@@ -136,23 +170,51 @@ export class ScopedModel<T, D extends keyof T = never> {
   private readonly grants: readonly Grant[];
   readonly trashed: boolean;
 
-  constructor(model: Model<T, D>, actor: Actor, grants: readonly Grant[] = [], trashed = false) {
+  private readonly pinned: Driver<T> | null;
+  /** Stored rows seen by this handle on an async driver, so `allows()` (and `can`) stay synchronous. */
+  private readonly seen = new Map<unknown, T>();
+
+  constructor(model: Model<T, D>, actor: Actor, grants: readonly Grant[] = [], trashed = false, pinned: Driver<T> | null = null) {
     this.model = model;
     this.actor = actor;
     this.grants = grants;
     this.trashed = trashed;
+    this.pinned = pinned;
+  }
+
+  /** The driver this handle reads and writes through. */
+  get driver(): FlowDriver<T> {
+    return this.pinned ?? this.model.driver;
+  }
+
+  /** True when terminals of this handle return Promises. */
+  get isAsync(): boolean {
+    return this.pinned === null && this.model.isAsync;
+  }
+
+  /**
+   * Synchronous reads over the model's sync driver or its in-process replica (`AsyncDriver.local`).
+   * Same rules as every other read; used by code that must not await (row policies, access checks).
+   */
+  get local(): ScopedModel<T, D> {
+    return new ScopedModel<T, D>(this.model, this.actor, this.grants, this.trashed, this.model.syncDriver());
   }
 
   using(...grants: Grant[]): ScopedModel<T, D> {
     for (const g of grants) {
       if (g.rights !== "read" && g.rights !== "write") throw new Error(`grant rights are "read" or "write"`);
     }
-    return new ScopedModel<T, D>(this.model, this.actor, [...this.grants, ...grants], this.trashed);
+    return new ScopedModel<T, D>(this.model, this.actor, [...this.grants, ...grants], this.trashed, this.pinned);
   }
 
   trash(): ScopedModel<T, D> {
     if (this.model.trashField === null) throw new Error(`${this.model.name}: no @softDelete field, so no trash`);
-    return new ScopedModel<T, D>(this.model, this.actor, this.grants, true);
+    return new ScopedModel<T, D>(this.model, this.actor, this.grants, true, this.pinned);
+  }
+
+  private remember(rows: T[]): T[] {
+    if (this.isAsync) for (const r of rows) this.seen.set(this.keyOf(r), r);
+    return rows;
   }
 
   private inView(row: T): boolean {
@@ -206,7 +268,10 @@ export class ScopedModel<T, D extends keyof T = never> {
   }
 
   allows(verb: "read" | "write", key: unknown): boolean {
-    const stored = this.model.driver.select([], key).find((r) => sameValue(this.keyOf(r), key));
+    const sync = this.pinned ?? this.model.syncDriverOrNull();
+    const stored = sync
+      ? sync.select([], key).find((r) => sameValue(this.keyOf(r), key))
+      : [...this.seen.entries()].find(([k]) => sameValue(k, key))?.[1];
     if (stored === undefined || !this.canRead(stored)) return false;
     return verb === "read" || this.canWrite(stored);
   }
@@ -271,14 +336,15 @@ export class ScopedModel<T, D extends keyof T = never> {
     return rows;
   }
 
-  private load(write: boolean, key?: unknown): T[] {
+  private *loadG(write: boolean, key?: unknown): Flow<T[]> {
     if (this.ruleMissing(write)) {
       return [];
     }
     noteRead(this.model as Model<unknown>, this.actor, key);
     const started = timingReads() ? performance.now() : null;
+    const stored = yield* wait(this.driver.select(this.scopes(write), key));
     return this.readsLogged(
-      this.model.driver.select(this.scopes(write), key).filter((r) => this.canRead(r) && (!write || this.canWrite(r))),
+      this.remember(stored.filter((r) => this.canRead(r) && (!write || this.canWrite(r)))),
       started,
     );
   }
@@ -312,9 +378,10 @@ export class ScopedModel<T, D extends keyof T = never> {
     return ids;
   }
 
-  forWrite(action: "update" | "delete", load: (write: boolean) => T[]): T[] {
-    if (!auditing()) return load(true);
-    const readable = load(false);
+  /** Rows a write may touch; with auditing on, refused rows are recorded. */
+  *forWriteG(action: "update" | "delete", load: (write: boolean) => Flow<T[]>): Flow<T[]> {
+    if (!auditing()) return yield* load(true);
+    const readable = yield* load(false);
     const ok: T[] = [];
     const refused: unknown[] = [];
     for (const r of readable) {
@@ -325,7 +392,8 @@ export class ScopedModel<T, D extends keyof T = never> {
     return ok;
   }
 
-  selectPlan(plan: QueryPlan, write: boolean): T[] {
+  /** Readable (or writable) rows matching a query plan; policies are pushed into the driver. */
+  *selectPlanG(plan: QueryPlan, write: boolean): Flow<T[]> {
     if (this.ruleMissing(write)) {
       return [];
     }
@@ -342,10 +410,10 @@ export class ScopedModel<T, D extends keyof T = never> {
     if (end === 0) {
       return [];
     }
-    const driver = this.model.driver;
+    const driver = this.driver;
     const scopes = this.scopes(write);
     if (!driver.query || this.plansOnHidden(plan)) {
-      const rows = driver.select(scopes).filter(ok);
+      const rows = this.remember((yield* wait(driver.select(scopes))).filter(ok));
       if (this.model.fieldReads.length === 0) {
         return this.readsLogged(sortRows(rows, plan.order).slice(plan.offset, end), started);
       }
@@ -357,7 +425,7 @@ export class ScopedModel<T, D extends keyof T = never> {
     let raw = 0;
     let chunk = end === Infinity ? undefined : Math.max(end, 32);
     for (;;) {
-      const batch = driver.query(scopes, { where: plan.where, order: plan.order, limit: chunk, offset: raw });
+      const batch = yield* wait(driver.query(scopes, { where: plan.where, order: plan.order, limit: chunk, offset: raw }));
       for (const r of batch) {
         if (ok(r) && out.push(r) >= end) break;
       }
@@ -365,36 +433,60 @@ export class ScopedModel<T, D extends keyof T = never> {
       raw += batch.length;
       chunk = Math.min(chunk * 2, 4096);
     }
-    return this.readsLogged(give(out.slice(plan.offset, end)), started);
+    return this.readsLogged(give(this.remember(out).slice(plan.offset, end)), started);
+  }
+
+  /** Synchronous `selectPlanG` (sync drivers and `.local` only). */
+  selectPlan(plan: QueryPlan, write: boolean): Out<T[]> {
+    return out(this.selectPlanG(plan, write));
   }
 
   query(): Query<T, D> {
     return new Query<T, D>(this);
   }
 
-  all(): T[] {
-    return this.load(false).map((r) => this.handOut(this.view(r), this.keyOf(r)));
+  *allG(): Flow<T[]> {
+    return (yield* this.loadG(false)).map((r) => this.handOut(this.view(r), this.keyOf(r)));
   }
 
-  get(key: unknown): T | undefined {
-    const stored = this.load(false, key)[0];
+  all(): Out<T[]> {
+    return out(this.allG());
+  }
+
+  *getG(key: unknown): Flow<T | undefined> {
+    const stored = (yield* this.loadG(false, key))[0];
     const row = stored === undefined ? undefined : this.handOut(this.view(stored), this.keyOf(stored));
     const reachable = this.model.config.read !== undefined || this.granted(false).length > 0;
-    if (row === undefined && auditing() && reachable && this.model.driver.select([], key).some((r) => this.inView(r))) {
-      this.audit("read", "denied", [key], "read rule");
+    if (row === undefined && auditing() && reachable) {
+      const any = yield* wait(this.driver.select([], key));
+      if (any.some((r) => this.inView(r))) this.audit("read", "denied", [key], "read rule");
     }
     return row;
   }
 
-  find(pred: (row: T) => boolean): T | undefined {
-    return this.all().find(pred);
+  get(key: unknown): Out<T | undefined> {
+    return out(this.getG(key));
   }
 
-  where(pred: (row: T) => boolean): T[] {
-    return this.all().filter(pred);
+  find(pred: (row: T) => boolean): Out<T | undefined> {
+    const self = this;
+    return out(
+      (function* () {
+        return (yield* self.allG()).find(pred);
+      })(),
+    );
   }
 
-  create(input: Creatable<T, D>): T | undefined {
+  where(pred: (row: T) => boolean): Out<T[]> {
+    const self = this;
+    return out(
+      (function* () {
+        return (yield* self.allG()).filter(pred);
+      })(),
+    );
+  }
+
+  *createG(input: Creatable<T, D>): Flow<T | undefined> {
     const bin = this.model.trashField;
     if (bin !== null && (this.trashed || ((input as Record<string, unknown>)[bin] ?? null) !== null)) {
       throw new Error(`${this.model.name}: rows are created live; \`${bin}\` is set by delete()`);
@@ -422,33 +514,48 @@ export class ScopedModel<T, D extends keyof T = never> {
       throw new Error(`${this.model.name}: rows need a \`${this.model.key}\``);
     }
     const files = this.addedFiles(row, undefined);
-    this.model.driver.insert(row);
+    yield* wait(this.driver.insert(row));
     for (const id of files) takeFile(id);
+    this.remember([row]);
     this.model.publish("create", k, undefined, row);
-    this.model.wrote("create", this.actor, k, undefined, row);
+    yield* wait(this.model.wrote("create", this.actor, k, undefined, row));
     this.audited("create", k);
     return this.handOut(this.view(copy(row)), k);
   }
 
-  update(pred: (row: T) => boolean, patch: Partial<T>): number {
-    return this.updateRows(
-      this.forWrite("update", (w) => this.load(w).filter((r) => pred(this.view(r)))),
-      patch,
+  create(input: Creatable<T, D>): Out<T | undefined> {
+    return out(this.createG(input));
+  }
+
+  private matching(pred: (row: T) => boolean): (write: boolean) => Flow<T[]> {
+    const self = this;
+    return function* (w: boolean) {
+      return (yield* self.loadG(w)).filter((r) => pred(self.view(r)));
+    };
+  }
+
+  update(pred: (row: T) => boolean, patch: Partial<T>): Out<number> {
+    const self = this;
+    return out(
+      (function* () {
+        return yield* self.updateRowsG(yield* self.forWriteG("update", self.matching(pred)), patch);
+      })(),
     );
   }
 
-  updateLocked(lock: FieldLock, pred: (row: T) => boolean, patch: Partial<T>): number {
+  updateLocked(lock: FieldLock, pred: (row: T) => boolean, patch: Partial<T>): Out<number> {
     if (!(lock instanceof FieldLock) || this.model.locks.get(lock.field) !== lock) {
       throw new Error(`${this.model.name}: not a lock on this model`);
     }
-    return this.updateRows(
-      this.forWrite("update", (w) => this.load(w).filter((r) => pred(this.view(r)))),
-      patch,
-      lock,
+    const self = this;
+    return out(
+      (function* () {
+        return yield* self.updateRowsG(yield* self.forWriteG("update", self.matching(pred)), patch, lock);
+      })(),
     );
   }
 
-  updateRows(rows: T[], patch: Partial<T>, lock?: FieldLock): number {
+  *updateRowsG(rows: T[], patch: Partial<T>, lock?: FieldLock): Flow<number> {
     if (Object.hasOwn(patch, this.model.key)) {
       throw new Error(`${this.model.name}: \`${this.model.key}\` cannot be updated`);
     }
@@ -476,28 +583,43 @@ export class ScopedModel<T, D extends keyof T = never> {
         continue;
       }
       const files = this.addedFiles(next, row);
-      this.model.driver.update(this.keyOf(row), next);
+      yield* wait(this.driver.update(this.keyOf(row), next));
       for (const id of files) takeFile(id);
       releaseFiles(this.droppedFiles(row, next));
+      this.remember([next]);
       this.model.publish("update", this.keyOf(row), row, next);
-      this.model.wrote("update", this.actor, this.keyOf(row), row, next);
+      yield* wait(this.model.wrote("update", this.actor, this.keyOf(row), row, next));
       this.audited("update", this.keyOf(row));
       changed += 1;
     }
     return changed;
   }
 
-  delete(pred: (row: T) => boolean): number {
-    return this.deleteRows(this.forWrite("delete", (w) => this.load(w).filter((r) => pred(this.view(r)))));
+  updateRows(rows: T[], patch: Partial<T>, lock?: FieldLock): Out<number> {
+    return out(this.updateRowsG(rows, patch, lock));
   }
 
-  restore(pred: (row: T) => boolean): number {
+  delete(pred: (row: T) => boolean): Out<number> {
+    const self = this;
+    return out(
+      (function* () {
+        return yield* self.deleteRowsG(yield* self.forWriteG("delete", self.matching(pred)));
+      })(),
+    );
+  }
+
+  restore(pred: (row: T) => boolean): Out<number> {
     const bin = this.model.trashField;
     if (bin === null || !this.trashed) throw new Error(`${this.model.name}: restore() is on the trash: Model.as(actor).trash()`);
-    return this.moveRows(this.forWrite("update", (w) => this.load(w).filter((r) => pred(this.view(r)))), bin, null, "restore");
+    const self = this;
+    return out(
+      (function* () {
+        return yield* self.moveRowsG(yield* self.forWriteG("update", self.matching(pred)), bin, null, "restore");
+      })(),
+    );
   }
 
-  private moveRows(rows: T[], bin: string, value: number | null, action: "trash" | "restore"): number {
+  private *moveRowsG(rows: T[], bin: string, value: number | null, action: "trash" | "restore"): Flow<number> {
     let changed = 0;
     for (const row of rows) {
       const next = { ...row, [bin]: value };
@@ -505,26 +627,32 @@ export class ScopedModel<T, D extends keyof T = never> {
         if (auditing()) this.audit(action, "denied", [this.keyOf(row)], "write rule (as changed)");
         continue;
       }
-      this.model.driver.update(this.keyOf(row), next);
+      yield* wait(this.driver.update(this.keyOf(row), next));
+      this.seen.delete(this.keyOf(row));
       this.model.publish("update", this.keyOf(row), row, next);
-      this.model.wrote(action, this.actor, this.keyOf(row), row, next);
+      yield* wait(this.model.wrote(action, this.actor, this.keyOf(row), row, next));
       this.audited(action, this.keyOf(row));
       changed += 1;
     }
     return changed;
   }
 
-  deleteRows(rows: T[]): number {
+  *deleteRowsG(rows: T[]): Flow<number> {
     const bin = this.model.trashField;
-    if (bin !== null && !this.trashed) return this.moveRows(rows, bin, Date.now(), "trash");
+    if (bin !== null && !this.trashed) return yield* this.moveRowsG(rows, bin, Date.now(), "trash");
     for (const row of rows) {
-      this.model.driver.delete(this.keyOf(row));
+      yield* wait(this.driver.delete(this.keyOf(row)));
+      this.seen.delete(this.keyOf(row));
       releaseFiles(this.droppedFiles(row, undefined));
       this.model.publish("delete", this.keyOf(row), row, undefined);
-      this.model.wrote("delete", this.actor, this.keyOf(row), row, undefined);
+      yield* wait(this.model.wrote("delete", this.actor, this.keyOf(row), row, undefined));
       this.audited("delete", this.keyOf(row));
     }
     return rows.length;
+  }
+
+  deleteRows(rows: T[]): Out<number> {
+    return out(this.deleteRowsG(rows));
   }
 }
 
@@ -585,12 +713,12 @@ export class Model<T, D extends keyof T = never> {
   readonly retention: { field: string; ms: number } | null;
   readonly fieldReads: ReadonlyArray<readonly [string, Policy<T>]>;
   readonly residency: string | ((row: T) => string | null | undefined) | null;
-  private store: Driver<T>;
+  private store: AnyDriver<T>;
   private changeFeed: ChangeFeed = changes;
-  private readonly writeHooks = new Set<(w: WriteEvent<T>) => void>();
+  private readonly writeHooks = new Set<(w: WriteEvent<T>) => void | Promise<void>>();
   readonly locks = new Map<string, FieldLock>();
 
-  constructor(name: string, config: ModelConfig<T>, driver?: Driver<T>) {
+  constructor(name: string, config: ModelConfig<T>, driver?: AnyDriver<T>) {
     this.name = name;
     this.config = config;
     const ids = Object.entries(config.attrs ?? {}).filter(([, a]) => a.id === true);
@@ -683,11 +811,36 @@ export class Model<T, D extends keyof T = never> {
     return out as T;
   }
 
-  get driver(): Driver<T> {
+  get driver(): FlowDriver<T> {
     return this.store;
   }
 
-  use(driver: Driver<T>): this {
+  /** The attached driver as given to `use` (sync `Driver` or `AsyncDriver`). */
+  get attached(): AnyDriver<T> {
+    return this.store;
+  }
+
+  /** True when the attached driver is asynchronous: terminals then return Promises. */
+  get isAsync(): boolean {
+    return isAsyncDriver(this.store);
+  }
+
+  /** The synchronous driver (or the async driver's replica), or null when there is none. */
+  syncDriverOrNull(): Driver<T> | null {
+    const d = this.store;
+    return isAsyncDriver(d) ? (d.local ?? null) : d;
+  }
+
+  /** The synchronous driver (or the async driver's replica); throws when the model has none. */
+  syncDriver(): Driver<T> {
+    const d = this.syncDriverOrNull();
+    if (d === null) {
+      throw new Error(`${this.name}: uses an async driver without a local replica; await its terminals instead of reading synchronously`);
+    }
+    return d;
+  }
+
+  use(driver: AnyDriver<T>): this {
     this.store = driver;
     return this;
   }
@@ -719,23 +872,30 @@ export class Model<T, D extends keyof T = never> {
     return [...this.locks.keys()];
   }
 
-  onWrite(fn: (w: WriteEvent<T>) => void): () => void {
+  /**
+   * Run `fn` after each write through `Model.as(actor)`. On async databases a hook may return a
+   * Promise; the write waits for it (so a cascade joins the same transaction).
+   */
+  onWrite(fn: (w: WriteEvent<T>) => void | Promise<void>): () => void {
     this.writeHooks.add(fn);
     return () => {
       this.writeHooks.delete(fn);
     };
   }
 
-  wrote(action: WriteEvent<T>["action"], actor: Actor, key: unknown, before: T | undefined, after: T | undefined): void {
+  wrote(action: WriteEvent<T>["action"], actor: Actor, key: unknown, before: T | undefined, after: T | undefined): Maybe<void> {
+    let pending: Promise<void>[] | null = null;
     for (const fn of this.writeHooks) {
-      fn({
+      const r = fn({
         action,
         actor,
         key,
         ...(before === undefined ? {} : { before: copy(before) }),
         ...(after === undefined ? {} : { after: copy(after) }),
       });
+      if (isThenable(r)) (pending ??= []).push(r as Promise<void>);
     }
+    return pending ? Promise.all(pending).then(() => {}) : undefined;
   }
 
   regionsOf(before: T | undefined, after: T | undefined): string[] {
@@ -785,45 +945,62 @@ export class Model<T, D extends keyof T = never> {
     return new ScopedModel<T, D>(this, actor);
   }
 
-  purgeTrash(before: number): number {
+  purgeTrash(before: number): Out<number> {
     const bin = this.trashField;
     if (bin === null) throw new Error(`${this.name}: no @softDelete field, so no trash`);
     if (typeof before !== "number" || !Number.isFinite(before)) throw new TypeError(`${this.name}.purgeTrash: \`before\` is a time in ms`);
     return this.purgeWhere(bin, before, "trash purged");
   }
 
-  purgeExpired(now: number = Date.now()): number {
+  purgeExpired(now: number = Date.now()): Out<number> {
     const r = this.retention;
     if (r === null) throw new Error(`${this.name}: no @retain field`);
     if (typeof now !== "number" || !Number.isFinite(now)) throw new TypeError(`${this.name}.purgeExpired: \`now\` is a time in ms`);
     return this.purgeWhere(r.field, now - r.ms, "retention");
   }
 
-  private purgeWhere(field: string, before: number, reason: string): number {
-    const old = this.store.select([]).filter((r) => {
-      const v = (r as Record<string, unknown>)[field];
-      return typeof v === "number" && v < before;
-    });
-    return this.removeRows(old, reason);
+  private purgeWhere(field: string, before: number, reason: string): Out<number> {
+    const self = this;
+    return out(
+      (function* () {
+        const all = yield* wait(self.driver.select([]));
+        const old = all.filter((r) => {
+          const v = (r as Record<string, unknown>)[field];
+          return typeof v === "number" && v < before;
+        });
+        return yield* self.removeRowsG(old, reason);
+      })(),
+    );
   }
 
-  removeUnscoped(keys: readonly unknown[], reason: string): number {
-    return this.removeRows(keys.flatMap((k) => this.store.select([], k)), reason);
+  removeUnscoped(keys: readonly unknown[], reason: string): Out<number> {
+    const self = this;
+    return out(
+      (function* () {
+        const rows: T[] = [];
+        for (const k of keys) rows.push(...(yield* wait(self.driver.select([], k))));
+        return yield* self.removeRowsG(rows, reason);
+      })(),
+    );
   }
 
-  unlinkUnscoped(keys: readonly unknown[], field: string, reason: string): number {
+  unlinkUnscoped(keys: readonly unknown[], field: string, reason: string): Out<number> {
     const spec = this.fields.find((f) => f.name === field);
     if (!spec || !spec.nullable || field === this.key || field === this.tenant) {
       throw new Error(`${this.name}: \`${field}\` is not a nullable field that can be cleared`);
     }
+    return out(this.unlinkG(keys, field, reason));
+  }
+
+  private *unlinkG(keys: readonly unknown[], field: string, reason: string): Flow<number> {
     const changed: unknown[] = [];
     for (const k of keys) {
-      for (const before of this.store.select([], k)) {
+      for (const before of yield* wait(this.driver.select([], k))) {
         if ((before as Record<string, unknown>)[field] === null) continue;
         const after = { ...before, [field]: null } as T;
-        this.store.update(k, after);
+        yield* wait(this.driver.update(k, after));
         this.publish("update", k, before, after);
-        this.wrote("update", null, k, before, after);
+        yield* wait(this.wrote("update", null, k, before, after));
         changed.push(k);
       }
     }
@@ -833,11 +1010,11 @@ export class Model<T, D extends keyof T = never> {
     return changed.length;
   }
 
-  private removeRows(old: T[], reason: string): number {
+  private *removeRowsG(old: T[], reason: string): Flow<number> {
     const files = this.fileFields;
     for (const row of old) {
       const key = (row as Record<string, unknown>)[this.key];
-      this.store.delete(key);
+      yield* wait(this.driver.delete(key));
       releaseFiles(files.map((f) => (row as Record<string, unknown>)[f]).filter((v): v is string => typeof v === "string" && v !== ""));
       this.publish("delete", key, row, undefined);
       this.wrote("delete", null, key, row, undefined);
@@ -849,12 +1026,17 @@ export class Model<T, D extends keyof T = never> {
     return old.length;
   }
 
-  publicUnscoped(): T[] {
+  publicUnscoped(): Out<T[]> {
     noteRead(this as Model<unknown>, UNSCOPED);
     const started = timingReads() ? performance.now() : null;
-    const rows = this.store.select([]);
-    if (started !== null) noteReadDone({ model: this.name, rows: rows.length, ms: performance.now() - started, scoped: false });
-    return rows;
+    const self = this;
+    return out(
+      (function* () {
+        const rows = yield* wait(self.driver.select([]));
+        if (started !== null) noteReadDone({ model: self.name, rows: rows.length, ms: performance.now() - started, scoped: false });
+        return rows;
+      })(),
+    );
   }
 }
 
@@ -863,7 +1045,7 @@ export const REGION = /^[a-z][a-z0-9-]{0,31}$/;
 export function defineModel<T, D extends keyof T = never>(
   name: string,
   config: ModelConfig<T>,
-  driver?: Driver<T>,
+  driver?: AnyDriver<T>,
 ): Model<T, D> {
   return new Model<T, D>(name, config, driver);
 }

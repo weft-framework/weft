@@ -74,7 +74,7 @@ export function defineConsent(opts: ConsentOptions): Consents {
   });
   const has = (subject: string, purpose: string): boolean => {
     if (!purposes.includes(purpose) || typeof subject !== "string" || subject === "") return false;
-    const row = model.driver.select([], `${purpose}:${subject}`)[0];
+    const row = model.syncDriver().select([], `${purpose}:${subject}`)[0];
     return row !== undefined && row.subject === subject && row.agreed === true;
   };
   for (const p of purposes) checkers.set(p, (s) => has(s, p));

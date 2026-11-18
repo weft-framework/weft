@@ -1,4 +1,4 @@
-import { defineModel, transaction, type Model, type PolicyExpr } from "@weft-framework/data";
+import { andThen, atomic, defineModel, sub, type Flow, type Model, type Out, type PolicyExpr } from "@weft-framework/data";
 import { AccessError } from "./errors.ts";
 
 export type DeliveryMode = "off" | "instant" | "daily" | "weekly";
@@ -214,6 +214,8 @@ export class Notifications<T extends string = string, C extends string = string>
       NotificationPreference: defineModel<PreferenceRow>(`${prefix}Preference`, {
         fields: { id: "string", user: "string", type: "string", modes: "string", updated: "number" },
         attrs: { user: { index: true } },
+        // Read on every send; kept in memory on Postgres so `#modes` stays synchronous.
+        replica: true,
         ...rules,
       }),
     };
@@ -237,7 +239,7 @@ export class Notifications<T extends string = string, C extends string = string>
     const t = this.#type(type);
     const out = new Map<string, DeliveryMode>([[IN_APP, t.defaults.get(IN_APP) ?? "off"]]);
     for (const ch of this.#channels.keys()) out.set(ch, t.defaults.get(ch) ?? "off");
-    const row = this.models.NotificationPreference.as(new Inbox({ user })).get(prefId(user, type));
+    const row = this.models.NotificationPreference.as(new Inbox({ user })).local.get(prefId(user, type));
     if (row) {
       let chosen: Record<string, unknown> = {};
       try {
@@ -279,9 +281,11 @@ export class Notifications<T extends string = string, C extends string = string>
     if (!inbox && pending.length === 0) return null;
     const id = crypto.randomUUID();
     const me = this.models.Notification.as(new Inbox({ user }));
-    transaction(() => {
-      me.create({ id, user, tenant, type, title: n.title, body, url, data, created: this.#now(), read: null, inbox, pending });
-      if (inbox) this.#cap(user);
+    const created = this.#now();
+    const cap = (): Flow<void> => this.#capG(user);
+    await this.#atomic(function* () {
+      yield* sub(me.create({ id, user, tenant, type, title: n.title, body, url, data, created, read: null, inbox, pending }));
+      if (inbox) yield* cap();
     });
     for (const p of pending) {
       if (!p.endsWith(":instant")) continue;
@@ -299,35 +303,40 @@ export class Notifications<T extends string = string, C extends string = string>
     return id;
   }
 
-  #cap(user: string): void {
+  /** Sync on SQLite/memory, a Promise on Postgres. */
+  #atomic<V>(make: () => Flow<V>): Out<V> {
+    return atomic(this.models.Notification.isAsync, make);
+  }
+
+  *#capG(user: string): Flow<void> {
     const me = this.models.Notification.as(new Inbox({ user }));
-    const rows = me.where((r) => r.inbox);
+    const rows = yield* sub(me.where((r) => r.inbox));
     if (rows.length <= this.#max) return;
     const order = rows.sort((a, b) => (a.read === null ? 1 : 0) - (b.read === null ? 1 : 0) || a.created - b.created || (a.id < b.id ? -1 : 1));
     const drop = new Set(order.slice(0, rows.length - this.#max).map((r) => r.id));
-    me.delete((r) => drop.has(r.id));
+    yield* sub(me.delete((r) => drop.has(r.id)));
   }
 
   async deliver(id: string, channel: string): Promise<boolean> {
     const ch = this.#channels.get(channel);
     if (!ch) throw invalid(`no channel ${JSON.stringify(channel)}`);
     const all = this.models.Notification.as(SYSTEM);
-    const row = typeof id === "string" ? all.get(id) : undefined;
+    const row = typeof id === "string" ? await all.get(id) : undefined;
     const mark = `${channel}:instant`;
     if (!row || !row.pending.includes(mark)) return false;
     await ch.send({ user: row.user, channel, notification: view(row) });
-    this.#settle(row.id, [mark]);
+    await this.#settle(row.id, [mark]);
     return true;
   }
 
-  #settle(id: string, marks: string[]): void {
+  #settle(id: string, marks: string[]): Out<void> {
     const all = this.models.Notification.as(SYSTEM);
-    transaction(() => {
-      const now = all.get(id);
+    return this.#atomic(function* () {
+      const now = yield* sub(all.get(id));
       if (!now) return;
       const pending = now.pending.filter((p) => !marks.includes(p));
-      if (!now.inbox && pending.length === 0) all.delete((r) => r.id === id);
-      else all.update((r) => r.id === id, { pending });
+      if (!now.inbox && pending.length === 0) yield* sub(all.delete((r) => r.id === id));
+      else yield* sub(all.update((r) => r.id === id, { pending }));
     });
   }
 
@@ -340,7 +349,7 @@ export class Notifications<T extends string = string, C extends string = string>
       if (!ch.digest) continue;
       const mark = `${channel}:${period}`;
       const byUser = new Map<string, NotificationRow[]>();
-      for (const r of all.where((r) => r.pending.includes(mark))) {
+      for (const r of await all.where((r) => r.pending.includes(mark))) {
         const list = byUser.get(r.user) ?? [];
         list.push(r);
         byUser.set(r.user, list);
@@ -356,7 +365,7 @@ export class Notifications<T extends string = string, C extends string = string>
           }
           (mode === "off" ? dropped : due).push(r);
         }
-        for (const r of dropped) this.#settle(r.id, [mark]);
+        for (const r of dropped) await this.#settle(r.id, [mark]);
         if (due.length === 0) continue;
         due.sort((a, b) => a.created - b.created || (a.id < b.id ? -1 : 1));
         try {
@@ -365,7 +374,7 @@ export class Notifications<T extends string = string, C extends string = string>
           failures.push(err);
           continue;
         }
-        for (const r of due) this.#settle(r.id, [mark]);
+        for (const r of due) await this.#settle(r.id, [mark]);
         sent++;
       }
     }
@@ -374,24 +383,26 @@ export class Notifications<T extends string = string, C extends string = string>
     return sent;
   }
 
-  inbox(user: string, opts: { limit?: number; before?: string; unread?: boolean } = {}): NotificationView[] {
+  inbox(user: string, opts: { limit?: number; before?: string; unread?: boolean } = {}): Out<NotificationView[]> {
     checkUser(user);
     const limit = Math.min(Math.max(1, Math.trunc(opts.limit ?? 50)), 200);
-    let rows = this.models.Notification.as(new Inbox({ user })).where((r) => r.inbox && (!opts.unread || r.read === null));
-    rows.sort((a, b) => b.created - a.created || (a.id < b.id ? 1 : -1));
-    if (opts.before !== undefined) {
-      const at = rows.findIndex((r) => r.id === opts.before);
-      rows = at < 0 ? [] : rows.slice(at + 1);
-    }
-    return rows.slice(0, limit).map(view);
+    const found = this.models.Notification.as(new Inbox({ user })).where((r) => r.inbox && (!opts.unread || r.read === null));
+    return andThen(found, (list) => {
+      let rows = [...list].sort((a, b) => b.created - a.created || (a.id < b.id ? 1 : -1));
+      if (opts.before !== undefined) {
+        const at = rows.findIndex((r) => r.id === opts.before);
+        rows = at < 0 ? [] : rows.slice(at + 1);
+      }
+      return rows.slice(0, limit).map(view);
+    }) as Out<NotificationView[]>;
   }
 
-  unread(user: string): number {
+  unread(user: string): Out<number> {
     checkUser(user);
-    return this.models.Notification.as(new Inbox({ user })).where((r) => r.inbox && r.read === null).length;
+    return andThen(this.models.Notification.as(new Inbox({ user })).where((r) => r.inbox && r.read === null), (rows) => rows.length) as Out<number>;
   }
 
-  markRead(user: string, ids: readonly string[] | "all"): number {
+  markRead(user: string, ids: readonly string[] | "all"): Out<number> {
     checkUser(user);
     const pick = ids === "all" ? null : new Set(ids);
     return this.models.Notification.as(new Inbox({ user })).update(
@@ -400,13 +411,13 @@ export class Notifications<T extends string = string, C extends string = string>
     );
   }
 
-  markUnread(user: string, ids: readonly string[]): number {
+  markUnread(user: string, ids: readonly string[]): Out<number> {
     checkUser(user);
     const pick = new Set(ids);
     return this.models.Notification.as(new Inbox({ user })).update((r) => r.inbox && r.read !== null && pick.has(r.id), { read: null });
   }
 
-  remove(user: string, ids: readonly string[] | "all"): number {
+  remove(user: string, ids: readonly string[] | "all"): Out<number> {
     checkUser(user);
     const pick = ids === "all" ? null : new Set(ids);
     return this.models.Notification.as(new Inbox({ user })).delete((r) => r.inbox && (pick === null || pick.has(r.id)));
@@ -435,7 +446,7 @@ export class Notifications<T extends string = string, C extends string = string>
     return out;
   }
 
-  setPreference(user: string, type: T, channel: "inApp" | C, mode: DeliveryMode): void {
+  setPreference(user: string, type: T, channel: "inApp" | C, mode: DeliveryMode): Out<void> {
     checkUser(user);
     const t = this.#type(type);
     if (typeof channel !== "string" || (channel !== IN_APP && !this.#channels.has(channel))) throw invalid(`no channel ${JSON.stringify(channel)}`);
@@ -443,8 +454,9 @@ export class Notifications<T extends string = string, C extends string = string>
     if (t.locked.has(channel) && mode === "off") throw invalid(`${type} notifications cannot be turned off for ${channel}`);
     const me = this.models.NotificationPreference.as(new Inbox({ user }));
     const id = prefId(user, type);
-    transaction(() => {
-      const row = me.get(id);
+    const updated = this.#now();
+    return atomic(this.models.NotificationPreference.isAsync, function* () {
+      const row = yield* sub(me.get(id));
       let chosen: Record<string, unknown> = {};
       try {
         chosen = row ? (JSON.parse(row.modes) as Record<string, unknown>) : {};
@@ -452,21 +464,24 @@ export class Notifications<T extends string = string, C extends string = string>
         chosen = {};
       }
       const next = JSON.stringify({ ...chosen, [channel]: mode });
-      if (row) me.update((r) => r.id === id, { modes: next, updated: this.#now() });
-      else me.create({ id, user, type, modes: next, updated: this.#now() });
+      if (row) yield* sub(me.update((r) => r.id === id, { modes: next, updated }));
+      else yield* sub(me.create({ id, user, type, modes: next, updated }));
     });
   }
 
-  prune(): number {
+  prune(): Out<number> {
     const before = this.#now() - this.#keepReadMs;
     return this.models.Notification.as(SYSTEM).delete((r) => r.read !== null && r.read < before && r.pending.length === 0);
   }
 
-  forget(user: string): number {
+  forget(user: string): Out<number> {
     checkUser(user);
-    const n = this.models.Notification.as(new Inbox({ user })).delete(() => true);
-    this.models.NotificationPreference.as(new Inbox({ user })).delete(() => true);
-    return n;
+    const models = this.models;
+    return this.#atomic(function* () {
+      const n = yield* sub(models.Notification.as(new Inbox({ user })).delete(() => true));
+      yield* sub(models.NotificationPreference.as(new Inbox({ user })).delete(() => true));
+      return n;
+    });
   }
 }
 

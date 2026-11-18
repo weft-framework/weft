@@ -1,5 +1,7 @@
-export { defineModel, FieldLock, isReadOnlyActor, Model, readOnlyActor, REGION, ScopedModel, MemoryDriver, tenantOf } from "./model.ts";
-export type { Actor, Register, Policy, ModelConfig, Driver, Scope, Creatable, Grant, WriteEvent } from "./model.ts";
+export { defineModel, FieldLock, isAsyncDriver, isReadOnlyActor, Model, readOnlyActor, REGION, ScopedModel, MemoryDriver, tenantOf } from "./model.ts";
+export { andThen, flow, isThenable, out, sub, wait } from "./flow.ts";
+export type { Flow, Maybe, Out } from "./flow.ts";
+export type { Actor, Register, Policy, ModelConfig, Driver, AsyncDriver, AnyDriver, Scope, Creatable, Grant, WriteEvent } from "./model.ts";
 export { policyToSql, actorValue } from "./policy.ts";
 export type { PolicyExpr, Operand, Sql, SqlValue, ColumnResolver } from "./policy.ts";
 export { fieldSpec, fieldSpecs, isIdentifier } from "./schema.ts";
@@ -8,7 +10,10 @@ export { SqlTable, migrate, planMigrations, useDatabase, quoteIdent } from "./sq
 export type { MigrateOptions, MigrationPlan, SqlDatabase, SqlStatement, UseDatabaseOptions } from "./sql.ts";
 export { ChangeFeed, changes, onRead, noteRead, onReadDone, canSee, UNSCOPED, type ReadDone } from "./changes.ts";
 export type { Change, ChangeOp, ChangeListener, ReadObserver } from "./changes.ts";
-export { transaction, inTransaction } from "./tx.ts";
+export { asyncTransaction, atomic, enlistAsync, transaction, inTransaction, afterCommit } from "./tx.ts";
+export type { TxClient, TxPool } from "./tx.ts";
+export { replicate } from "./replica.ts";
+export type { Replica } from "./replica.ts";
 export { HOLD_MS, holdFile, holdsFile, onFileRelease, sweepHeldFiles } from "./files.ts";
 export type { FileRef } from "./files.ts";
 export { audit, auditing, defaultActorId, MAX_KEYS, SqlAuditLog, viaOf } from "./audit.ts";

@@ -1,6 +1,6 @@
 {
   "name": "@weft-framework/data",
-  "version": "0.0.1",
+  "version": "0.0.4",
   "description": "Weft data layer: typed models whose @read/@write rules are enforced at the source of every query (and pushed into SQL), so authorization bypass (IDOR) is not expressible.",
   "keywords": [
     "weft",
@@ -30,10 +30,14 @@
   "exports": {
     ".": "./src/index.ts",
     "./sqlite": "./src/sqlite.ts",
+    "./postgres": "./src/postgres.ts",
     "./redis": "./src/redis.ts",
     "./xlsx": "./src/xlsx.ts"
   },
   "scripts": {
     "test": "node --test --experimental-strip-types test/*.test.ts"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.16"
   }
 }

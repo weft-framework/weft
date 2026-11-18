@@ -1,4 +1,6 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { defaultActorId } from "./audit.ts";
+import { andThen, isThenable, type Maybe, type Out } from "./flow.ts";
 import { defineModel, Model, type Actor } from "./model.ts";
 
 type Key = string | number;
@@ -19,9 +21,19 @@ export function keyValue(text: string): Key | undefined {
   }
 }
 
+interface KnownParents {
+  actor: Actor;
+  rows: Map<string, unknown>;
+}
+const known = new AsyncLocalStorage<KnownParents>();
+
 function parentRow(parent: Model<any, any>, actor: Actor, text: string): unknown {
   const k = keyValue(text);
   if (k === undefined || actor === ACCESS) return undefined;
+  if (parent.isAsync) {
+    const store = known.getStore();
+    return store !== undefined && store.actor === actor ? store.rows.get(text) : undefined;
+  }
   try {
     return parent.as(actor).get(k);
   } catch {
@@ -36,6 +48,33 @@ function mayRead(parent: Model<any, any>, actor: Actor, text: string): boolean {
 function mayWrite(parent: Model<any, any>, actor: Actor, text: string): boolean {
   const row = parentRow(parent, actor, text);
   return row !== undefined && parent.as(actor).writable(row);
+}
+
+/** Run `fn` with the parent rows behind `texts` known to the add-on policies (async parents only). */
+function withParents<R>(parent: Model<any, any>, actor: Actor, texts: Iterable<string>, fn: () => Maybe<R>): Maybe<R> {
+  if (!parent.isAsync) return fn();
+  return (async () => {
+    const rows = new Map<string, unknown>();
+    for (const text of new Set(texts)) {
+      const k = keyValue(text);
+      if (k === undefined || actor === ACCESS) continue;
+      try {
+        rows.set(text, await parent.as(actor).get(k));
+      } catch {
+        rows.set(text, undefined);
+      }
+    }
+    return await known.run({ actor, rows }, fn);
+  })();
+}
+
+/** The key of add-on row `id` (read past the policies), for `withParents` before an edit/remove. */
+function keyOfRow<R extends { id: string; key: string }>(addon: Model<R, any>, id: string): Maybe<string[]> {
+  return andThen(addon.as(ACCESS).get(id), (r) => (r ? [r.key] : []));
+}
+
+function then<V, R>(v: Maybe<V>, f: (value: V) => Maybe<R>): Out<R> {
+  return (isThenable(v) ? Promise.resolve(v).then(f) : f(v)) as Out<R>;
 }
 
 class AddonAccess {}
@@ -55,7 +94,8 @@ function forgetWith<R extends { key: string }>(parent: Model<any, any>, addon: M
   parent.onWrite((w) => {
     if (w.action !== "delete") return;
     const text = JSON.stringify(w.key);
-    addon.as(ACCESS).delete((r) => r.key === text);
+    const done = addon.as(ACCESS).delete((r) => r.key === text);
+    return isThenable(done) ? Promise.resolve(done).then(() => {}) : undefined;
   });
 }
 
@@ -84,11 +124,13 @@ export interface CommentsOptions extends Common {
 
 export class Comments {
   readonly model: Model<CommentRow>;
+  readonly #parent: Model<any, any>;
   readonly #id: (a: Actor) => string | null;
   readonly #now: () => number;
 
   constructor(parent: Model<any, any>, o: CommentsOptions = {}) {
     needModel(parent, "defineComments");
+    this.#parent = parent;
     const max = o.maxLength ?? 10_000;
     if (!Number.isInteger(max) || max < 1 || max > 1_000_000) throw new Error("defineComments: maxLength is 1 to 1 000 000");
     if (o.comment !== undefined && o.comment !== "read" && o.comment !== "write") throw new Error('defineComments: comment is "read" or "write"');
@@ -106,23 +148,33 @@ export class Comments {
     forgetWith(parent, this.model);
   }
 
-  add(actor: Actor, key: Key, body: string): CommentRow | undefined {
+  add(actor: Actor, key: Key, body: string): Out<CommentRow | undefined> {
     const author = this.#id(actor);
-    if (author === null || typeof body !== "string") return undefined;
-    return this.model.as(actor).create({ id: uuid(), key: keyText(key), author, body, at: this.#now(), edited: null });
+    if (author === null || typeof body !== "string") return then(undefined, (v) => v);
+    const k = keyText(key);
+    return withParents(this.#parent, actor, [k], () =>
+      this.model.as(actor).create({ id: uuid(), key: k, author, body, at: this.#now(), edited: null }),
+    ) as Out<CommentRow | undefined>;
   }
 
-  list(actor: Actor, key: Key): CommentRow[] {
-    return this.model.as(actor).query().where({ key: keyText(key) }).orderBy("at").orderBy("id").all() as CommentRow[];
+  list(actor: Actor, key: Key): Out<CommentRow[]> {
+    const k = keyText(key);
+    return withParents(this.#parent, actor, [k], () => this.model.as(actor).query().where({ key: k }).orderBy("at").orderBy("id").all()) as Out<
+      CommentRow[]
+    >;
   }
 
-  edit(actor: Actor, id: string, body: string): boolean {
-    if (typeof body !== "string") return false;
-    return this.model.as(actor).update((r) => r.id === id, { body, edited: this.#now() }) === 1;
+  edit(actor: Actor, id: string, body: string): Out<boolean> {
+    if (typeof body !== "string") return then(false, (v) => v);
+    return then(keyOfRow(this.model, id), (keys) =>
+      withParents(this.#parent, actor, keys, () => andThen(this.model.as(actor).update((r) => r.id === id, { body, edited: this.#now() }), (n) => n === 1)),
+    );
   }
 
-  remove(actor: Actor, id: string): boolean {
-    return this.model.as(actor).delete((r) => r.id === id) === 1;
+  remove(actor: Actor, id: string): Out<boolean> {
+    return then(keyOfRow(this.model, id), (keys) =>
+      withParents(this.#parent, actor, keys, () => andThen(this.model.as(actor).delete((r) => r.id === id), (n) => n === 1)),
+    );
   }
 }
 
@@ -175,41 +227,67 @@ export class Tags {
     return typeof t === "string" && t !== "" ? t : null;
   }
 
-  add(actor: Actor, key: Key, tag: string): boolean {
+  add(actor: Actor, key: Key, tag: string): Out<boolean> {
     const t = this.#tag(tag);
-    if (t === null) return false;
+    if (t === null) return then(false, (v) => v);
     const k = keyText(key);
     const id = JSON.stringify([k, t]);
-    const scoped = this.model.as(actor);
-    if (scoped.get(id) !== undefined) return mayWrite(this.#parent, actor, k);
-    try {
-      return scoped.create({ id, key: k, tag: t, by: this.#id(actor), at: this.#now() }) !== undefined;
-    } catch {
-      return false;
-    }
+    return withParents(this.#parent, actor, [k], () => {
+      const scoped = this.model.as(actor);
+      return andThen(scoped.get(id), (have) => {
+        if (have !== undefined) return mayWrite(this.#parent, actor, k);
+        try {
+          const made = scoped.create({ id, key: k, tag: t, by: this.#id(actor), at: this.#now() });
+          return isThenable(made)
+            ? Promise.resolve(made).then(
+                (r) => r !== undefined,
+                () => false,
+              )
+            : made !== undefined;
+        } catch {
+          return false;
+        }
+      });
+    }) as Out<boolean>;
   }
 
-  remove(actor: Actor, key: Key, tag: string): boolean {
+  remove(actor: Actor, key: Key, tag: string): Out<boolean> {
     const t = this.#tag(tag);
-    if (t === null) return false;
-    const id = JSON.stringify([keyText(key), t]);
-    return this.model.as(actor).delete((r) => r.id === id) === 1;
+    if (t === null) return then(false, (v) => v);
+    const k = keyText(key);
+    const id = JSON.stringify([k, t]);
+    return withParents(this.#parent, actor, [k], () => andThen(this.model.as(actor).delete((r) => r.id === id), (n) => n === 1)) as Out<boolean>;
   }
 
-  of(actor: Actor, key: Key): string[] {
-    return (this.model.as(actor).query().where({ key: keyText(key) }).all() as TagRow[]).map((r) => r.tag).sort();
+  of(actor: Actor, key: Key): Out<string[]> {
+    const k = keyText(key);
+    return withParents(this.#parent, actor, [k], () =>
+      andThen(this.model.as(actor).query().where({ key: k }).all(), (rows) => (rows as TagRow[]).map((r) => r.tag).sort()),
+    ) as Out<string[]>;
   }
 
-  keysWith(actor: Actor, tag: string): Key[] {
+  keysWith(actor: Actor, tag: string): Out<Key[]> {
     const t = this.#tag(tag);
-    if (t === null) return [];
-    return (this.model.as(actor).query().where({ tag: t }).all() as TagRow[]).map((r) => keyValue(r.key)!).filter((k) => k !== undefined);
+    if (t === null) return then([] as Key[], (v) => v);
+    const read = (): Maybe<Key[]> =>
+      andThen(this.model.as(actor).query().where({ tag: t }).all(), (rows) =>
+        (rows as TagRow[]).map((r) => keyValue(r.key)!).filter((k) => k !== undefined),
+      );
+    if (!this.#parent.isAsync) return read() as Out<Key[]>;
+    return then(this.model.as(ACCESS).query().where({ tag: t }).all(), (rows) =>
+      withParents(this.#parent, actor, (rows as TagRow[]).map((r) => r.key), read),
+    );
   }
 
-  counts(actor: Actor): Record<string, number> {
-    const out: Record<string, number> = {};
-    for (const r of this.model.as(actor).all()) out[r.tag] = (out[r.tag] ?? 0) + 1;
-    return out;
+  counts(actor: Actor): Out<Record<string, number>> {
+    const read = (): Maybe<Record<string, number>> =>
+      andThen(this.model.as(actor).all(), (rows) => {
+        const out: Record<string, number> = {};
+        for (const r of rows) out[r.tag] = (out[r.tag] ?? 0) + 1;
+        return out;
+      });
+    if (!this.#parent.isAsync) return read() as Out<Record<string, number>>;
+    return then(this.model.as(ACCESS).all(), (rows) => withParents(this.#parent, actor, rows.map((r) => r.key), read));
   }
 }
 
@@ -233,12 +311,14 @@ export interface AttachmentsOptions extends Common {
 
 export class Attachments {
   readonly model: Model<AttachmentRow>;
+  readonly #parent: Model<any, any>;
   readonly #id: (a: Actor) => string | null;
   readonly #now: () => number;
   readonly #max: number;
 
   constructor(parent: Model<any, any>, o: AttachmentsOptions = {}) {
     needModel(parent, "defineAttachments");
+    this.#parent = parent;
     if (o.attach !== undefined && o.attach !== "read" && o.attach !== "write") throw new Error('defineAttachments: attach is "read" or "write"');
     const max = o.maxPerRow ?? 100;
     if (!Number.isInteger(max) || max < 1 || max > 10_000) throw new Error("defineAttachments: maxPerRow is 1 to 10 000");
@@ -257,20 +337,28 @@ export class Attachments {
     forgetWith(parent, this.model);
   }
 
-  add(actor: Actor, key: Key, file: string, name: string): AttachmentRow | undefined {
+  add(actor: Actor, key: Key, file: string, name: string): Out<AttachmentRow | undefined> {
     const by = this.#id(actor);
-    if (by === null || typeof name !== "string") return undefined;
+    if (by === null || typeof name !== "string") return then(undefined, (v) => v);
     const k = keyText(key);
-    if (this.model.as(actor).query().where({ key: k }).count() >= this.#max) return undefined;
-    return this.model.as(actor).create({ id: uuid(), key: k, file, name: name.trim(), by, at: this.#now() });
+    return withParents(this.#parent, actor, [k], () =>
+      andThen(this.model.as(actor).query().where({ key: k }).count(), (n) =>
+        n >= this.#max ? undefined : this.model.as(actor).create({ id: uuid(), key: k, file, name: name.trim(), by, at: this.#now() }),
+      ),
+    ) as Out<AttachmentRow | undefined>;
   }
 
-  list(actor: Actor, key: Key): AttachmentRow[] {
-    return this.model.as(actor).query().where({ key: keyText(key) }).orderBy("at").orderBy("id").all() as AttachmentRow[];
+  list(actor: Actor, key: Key): Out<AttachmentRow[]> {
+    const k = keyText(key);
+    return withParents(this.#parent, actor, [k], () => this.model.as(actor).query().where({ key: k }).orderBy("at").orderBy("id").all()) as Out<
+      AttachmentRow[]
+    >;
   }
 
-  remove(actor: Actor, id: string): boolean {
-    return this.model.as(actor).delete((r) => r.id === id) === 1;
+  remove(actor: Actor, id: string): Out<boolean> {
+    return then(keyOfRow(this.model, id), (keys) =>
+      withParents(this.#parent, actor, keys, () => andThen(this.model.as(actor).delete((r) => r.id === id), (n) => n === 1)),
+    );
   }
 }
 

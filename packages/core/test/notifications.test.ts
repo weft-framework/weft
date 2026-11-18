@@ -255,6 +255,26 @@ test("on SQLite: the same inbox, flags and pending lists survive the round trip"
   assert.equal(notify.unread("ada"), 0);
 });
 
+test("on Postgres: the same round trip, with Promise-returning reads and writes", async () => {
+  const { PGlite } = await import("@electric-sql/pglite");
+  const { pgliteAsPool, usePostgres } = await import("@weft-framework/data/postgres");
+  const { notify, sent, tick } = setup();
+  await usePostgres(pgliteAsPool(new PGlite()), Object.values(notify.models) as never, { onWarning: () => {} });
+  await notify.send("ada", "comment", { title: "c", data: { n: 1 } });
+  tick(1);
+  await notify.send("ada", "billing", { title: "b" });
+  await notify.send("eve", "comment", { title: "e" });
+  assert.equal(await notify.unread("ada"), 2);
+  assert.deepEqual((await notify.inbox("ada")).map((n) => n.title), ["b", "c"]);
+  assert.equal(sent.length, 1, "billing email sent at once");
+  await notify.setPreference("ada", "comment", "email", "weekly");
+  assert.equal(notify.preferences("ada").find((p) => p.type === "comment")!.channels.find((c) => c.channel === "email")!.mode, "weekly");
+  assert.equal(await notify.digest("daily"), 2);
+  assert.equal(await notify.markRead("ada", "all"), 2);
+  assert.equal(await notify.unread("ada"), 0);
+  assert.equal(await notify.forget("eve"), 1);
+});
+
 test("a channel locked later wins over a stored choice; prune keeps recently read ones", async () => {
   const { useDatabase } = await import("@weft-framework/data");
   const { openSqlite } = await import("@weft-framework/data/sqlite");

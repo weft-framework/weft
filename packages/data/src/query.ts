@@ -1,5 +1,6 @@
 import { compareValues, parseFilter, type Filter, type FilterNode } from "./filter.ts";
 import type { Model, ScopedModel } from "./model.ts";
+import { out, type Flow, type Out } from "./flow.ts";
 
 export interface Order {
   field: string;
@@ -153,17 +154,21 @@ export class Query<T, D extends keyof T = never, K extends keyof T = keyof T, X 
     return this.next<K, X & { [P in N]: Selected<U, KU, XU>[] }>({}, this.pick, [...this.rels, { kind: "many", name, model, by, sub }]);
   }
 
-  rows(write = false, plan: QueryPlan = this.plan): T[] {
-    return this.scoped.selectPlan(plan, write);
+  *rowsG(write = false, plan: QueryPlan = this.plan): Flow<T[]> {
+    return yield* this.scoped.selectPlanG(plan, write);
   }
 
-  decorate(rows: T[]): Selected<T, K, X>[] {
+  rows(write = false, plan: QueryPlan = this.plan): Out<T[]> {
+    return out(this.rowsG(write, plan));
+  }
+
+  *decorateG(rows: T[]): Flow<Selected<T, K, X>[]> {
     const extra = rows.map(() => ({}) as Record<string, unknown>);
     for (const rel of this.rels) {
       if (rel.kind === "one") {
-        this.attachOne(rel, rows, extra);
+        yield* this.attachOne(rel, rows, extra);
       } else {
-        this.attachMany(rel, rows, extra);
+        yield* this.attachMany(rel, rows, extra);
       }
     }
     return rows.map((row, i) => {
@@ -178,13 +183,17 @@ export class Query<T, D extends keyof T = never, K extends keyof T = keyof T, X 
     });
   }
 
-  private attachOne(rel: Extract<Relation, { kind: "one" }>, rows: T[], extra: Record<string, unknown>[]): void {
+  decorate(rows: T[]): Out<Selected<T, K, X>[]> {
+    return out(this.decorateG(rows));
+  }
+
+  private *attachOne(rel: Extract<Relation, { kind: "one" }>, rows: T[], extra: Record<string, unknown>[]): Flow<void> {
     const keys = distinct(rows.map((r) => (r as Record<string, unknown>)[rel.on]));
     const handle = rel.model.as(this.scoped.actor);
     const found = new Map<unknown, unknown>();
     for (let i = 0; i < keys.length; i += IN_BATCH) {
       const batch = keys.slice(i, i + IN_BATCH);
-      for (const target of handle.query().where({ [rel.model.key]: { in: batch } }).rows()) {
+      for (const target of yield* handle.query().where({ [rel.model.key]: { in: batch } }).rowsG()) {
         found.set(keyId((target as Record<string, unknown>)[rel.model.key]), target);
       }
     }
@@ -195,7 +204,7 @@ export class Query<T, D extends keyof T = never, K extends keyof T = keyof T, X 
     });
   }
 
-  private attachMany(rel: Extract<Relation, { kind: "many" }>, rows: T[], extra: Record<string, unknown>[]): void {
+  private *attachMany(rel: Extract<Relation, { kind: "many" }>, rows: T[], extra: Record<string, unknown>[]): Flow<void> {
     const own = this.model.key;
     const keys = distinct(rows.map((r) => (r as Record<string, unknown>)[own]));
     const sub = rel.sub ?? rel.model.as(this.scoped.actor).query();
@@ -208,7 +217,7 @@ export class Query<T, D extends keyof T = never, K extends keyof T = keyof T, X 
         limit: undefined,
         offset: 0,
       };
-      for (const child of sub.rows(false, plan)) {
+      for (const child of yield* sub.rowsG(false, plan)) {
         const id = keyId((child as Record<string, unknown>)[rel.by]);
         let g = groups.get(id);
         if (!g) groups.set(id, (g = []));
@@ -220,7 +229,7 @@ export class Query<T, D extends keyof T = never, K extends keyof T = keyof T, X 
       const all = groups.get(keyId((r as Record<string, unknown>)[own])) ?? [];
       return all.slice(offset, limit === undefined ? undefined : offset + limit);
     });
-    const flat = sub.decorate(lists.flat() as never[]) as unknown[];
+    const flat = (yield* sub.decorateG(lists.flat() as never[])) as unknown[];
     let at = 0;
     rows.forEach((_r, i) => {
       const n = lists[i].length;
@@ -229,28 +238,58 @@ export class Query<T, D extends keyof T = never, K extends keyof T = keyof T, X 
     });
   }
 
-  all(): Selected<T, K, X>[] {
-    return this.decorate(this.rows());
+  *allG(): Flow<Selected<T, K, X>[]> {
+    return yield* this.decorateG(yield* this.rowsG());
   }
 
-  first(): Selected<T, K, X> | undefined {
+  all(): Out<Selected<T, K, X>[]> {
+    return out(this.allG());
+  }
+
+  *firstG(): Flow<Selected<T, K, X> | undefined> {
     const n = this.plan.limit === undefined ? 1 : Math.min(1, this.plan.limit);
-    return this.decorate(this.rows(false, { ...this.plan, limit: n }))[0];
+    return (yield* this.decorateG(yield* this.rowsG(false, { ...this.plan, limit: n })))[0];
   }
 
-  count(): number {
-    return this.rows().length;
+  first(): Out<Selected<T, K, X> | undefined> {
+    return out(this.firstG());
   }
 
-  exists(): boolean {
-    return this.first() !== undefined;
+  count(): Out<number> {
+    const self = this;
+    return out(
+      (function* () {
+        return (yield* self.rowsG()).length;
+      })(),
+    );
   }
 
-  update(patch: Partial<T>): number {
-    return this.scoped.updateRows(this.scoped.forWrite("update", (w) => this.rows(w)), patch);
+  exists(): Out<boolean> {
+    const self = this;
+    return out(
+      (function* () {
+        return (yield* self.firstG()) !== undefined;
+      })(),
+    );
   }
 
-  delete(): number {
-    return this.scoped.deleteRows(this.scoped.forWrite("delete", (w) => this.rows(w)));
+  update(patch: Partial<T>): Out<number> {
+    const self = this;
+    return out(
+      (function* () {
+        const rows = yield* self.scoped.forWriteG("update", (w) => self.rowsG(w));
+        return yield* self.scoped.updateRowsG(rows, patch);
+      })(),
+    );
+  }
+
+  delete(): Out<number> {
+    const self = this;
+    return out(
+      (function* () {
+        const rows = yield* self.scoped.forWriteG("delete", (w) => self.rowsG(w));
+        return yield* self.scoped.deleteRowsG(rows);
+      })(),
+    );
   }
 }

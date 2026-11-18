@@ -1,6 +1,7 @@
 import type { Filter } from "./filter.ts";
 import type { Model, ScopedModel } from "./model.ts";
 import { Query } from "./query.ts";
+import { out, type Flow, type Out } from "./flow.ts";
 
 export type ColumnFilter = "text" | "number" | "date" | "boolean" | { options: readonly string[] };
 
@@ -142,7 +143,7 @@ export class Table<T> {
     return this.#columns.find(([n]) => n === name)?.[1];
   }
 
-  view(source: ScopedModel<T, any> | Query<T, any, any, any>, url: URL | URLSearchParams): TableView<Partial<T>> {
+  view(source: ScopedModel<T, any> | Query<T, any, any, any>, url: URL | URLSearchParams): Out<TableView<Partial<T>>> {
     const base = source instanceof Query ? source : source.query();
     if ((base.model as unknown) !== this.model) {
       throw new Error(`table of ${this.model.name}: the query is for another model`);
@@ -242,30 +243,35 @@ export class Table<T> {
 
     const requested = Number(get("size"));
     const size = this.#sizes.includes(requested) ? requested : this.#spec.pageSize;
-    const matching = query.rows();
-    const total = matching.length;
-    const pages = Math.max(1, Math.ceil(total / size));
-    const askedPage = Number(get("page"));
-    const page = Number.isSafeInteger(askedPage) && askedPage >= 1 ? Math.min(askedPage, pages) : 1;
-    const rows = query.decorate(matching.slice((page - 1) * size, page * size)) as Partial<T>[];
+    const self = this;
+    return out(
+      (function* (): Flow<TableView<Partial<T>>> {
+        const matching = yield* query.rowsG();
+        const total = matching.length;
+        const pages = Math.max(1, Math.ceil(total / size));
+        const askedPage = Number(get("page"));
+        const page = Number.isSafeInteger(askedPage) && askedPage >= 1 ? Math.min(askedPage, pages) : 1;
+        const rows = (yield* query.decorateG(matching.slice((page - 1) * size, page * size))) as Partial<T>[];
 
-    const state = { page, size, sort, dir, q, filters, shown };
-    const link = (change: TableChange) => this.#link(params, state, change);
-    return {
-      rows,
-      total,
-      page,
-      pages,
-      size,
-      sort,
-      dir,
-      q,
-      filters,
-      columns: shown,
-      link,
-      sortLink: (column) => link({ sort: column, dir: sort === column && dir === "asc" ? "desc" : "asc" }),
-      ariaSort: (column) => (sort !== column ? "none" : dir === "asc" ? "ascending" : "descending"),
-    };
+        const state = { page, size, sort, dir, q, filters, shown };
+        const link = (change: TableChange) => self.#link(params, state, change);
+        return {
+          rows,
+          total,
+          page,
+          pages,
+          size,
+          sort,
+          dir,
+          q,
+          filters,
+          columns: shown,
+          link,
+          sortLink: (column: string) => link({ sort: column, dir: sort === column && dir === "asc" ? "desc" : "asc" }),
+          ariaSort: (column: string) => (sort !== column ? "none" : dir === "asc" ? "ascending" : "descending"),
+        };
+      })(),
+    );
   }
 
   #link(

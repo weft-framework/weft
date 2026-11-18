@@ -16,6 +16,17 @@ export interface MigrateCommandOptions {
 
 export class MigrateError extends Error {}
 
+/** Hide the password of a database URL before printing it. */
+export function redactUrl(database: string): string {
+  try {
+    const u = new URL(database);
+    if (u.password) u.password = "***";
+    return u.toString();
+  } catch {
+    return database;
+  }
+}
+
 export async function migrateProject(root: string, opts: MigrateCommandOptions): Promise<MigrationPlan & { database: string }> {
   root = resolve(root);
   const outDir = join(root, ".weft", "migrate", randomUUID());
@@ -25,6 +36,26 @@ export async function migrateProject(root: string, opts: MigrateCommandOptions):
       throw new MigrateError("no `database` in weft.config.ts; models are kept in memory");
     }
     const models = Object.values(project.models) as Model<unknown>[];
+    const pg = await import("@weft-framework/data/postgres");
+    if (pg.isPostgresUrl(project.database)) {
+      const pool = await pg.openPostgres(project.database);
+      try {
+        let plan: MigrationPlan;
+        if (opts.dryRun) {
+          const client = await pool.connect();
+          try {
+            plan = await pg.planPgMigrations(client, models, { destructive: opts.destructive });
+          } finally {
+            client.release();
+          }
+        } else {
+          plan = await pg.migratePg(pool, models, { destructive: opts.destructive });
+        }
+        return { ...plan, database: redactUrl(project.database) };
+      } finally {
+        await pool.end();
+      }
+    }
     const { openSqlite } = await import("@weft-framework/data/sqlite");
     if (project.database !== ":memory:") {
       mkdirSync(dirname(project.database), { recursive: true });

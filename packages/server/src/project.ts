@@ -547,7 +547,13 @@ export async function loadProject(root: string, opts: ProjectOptions): Promise<P
     models,
     emails,
     database:
-      config.database === undefined || config.database === ":memory:" ? config.database : resolve(root, config.database),
+      config.database === undefined || config.database === ":memory:" || /^postgres(ql)?:\/\//i.test(config.database)
+        ? config.database
+        : config.database.startsWith("pglite:")
+          ? config.database === "pglite:" || config.database === "pglite:memory"
+            ? config.database
+            : `pglite:${resolve(root, config.database.slice("pglite:".length))}`
+          : resolve(root, config.database),
     middleware,
     ...(ready ? { ready } : {}),
     ...(sharedFields ? { sharedFields } : {}),

@@ -19,6 +19,8 @@ export interface Sql {
 
 export type ColumnResolver = (path: string[]) => string | null;
 
+export type SqlDialect = "sqlite" | "pg";
+
 const UNSAFE_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
 export function actorValue(actor: unknown, path: string[]): unknown {
@@ -50,7 +52,10 @@ function bindable(v: unknown): SqlValue | undefined {
 
 type Side = { sql: string; params: SqlValue[] } | { constant: unknown };
 
-export function policyToSql(expr: PolicyExpr, actor: unknown, column: ColumnResolver): Sql | null {
+export function policyToSql(expr: PolicyExpr, actor: unknown, column: ColumnResolver, dialect: SqlDialect = "sqlite"): Sql | null {
+  const pg = dialect === "pg";
+  const TRUE = pg ? "TRUE" : "1";
+  const FALSE = pg ? "FALSE" : "0";
   const out = go(expr);
   return out && { sql: out.sql, params: out.params };
 
@@ -80,7 +85,10 @@ export function policyToSql(expr: PolicyExpr, actor: unknown, column: ColumnReso
         return null;
       }
       if ("constant" in s) {
-        return { sql: s.constant ? "1" : "0", params: [], exact: true };
+        return { sql: s.constant ? TRUE : FALSE, params: [], exact: true };
+      }
+      if (pg) {
+        return null;
       }
       const x = s.sql;
       return {
@@ -97,7 +105,7 @@ export function policyToSql(expr: PolicyExpr, actor: unknown, column: ColumnReso
       return null;
     }
     if ("constant" in l && "constant" in r) {
-      return { sql: constCompare(e.cmp, l.constant, r.constant) ? "1" : "0", params: [], exact: true };
+      return { sql: constCompare(e.cmp, l.constant, r.constant) ? TRUE : FALSE, params: [], exact: true };
     }
     const ls = toSql(l);
     const rs = toSql(r);
@@ -108,10 +116,10 @@ export function policyToSql(expr: PolicyExpr, actor: unknown, column: ColumnReso
     let op: string;
     switch (e.cmp) {
       case "==":
-        op = "IS";
+        op = pg ? "IS NOT DISTINCT FROM" : "IS";
         break;
       case "!=":
-        op = "IS NOT";
+        op = pg ? "IS DISTINCT FROM" : "IS NOT";
         break;
       default:
         if (isNull) {

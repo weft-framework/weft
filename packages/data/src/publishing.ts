@@ -1,8 +1,9 @@
 import { defaultActorId } from "./audit.ts";
 import { keyText, keyValue } from "./addons.ts";
+import { isThenable, out, sub, type Flow, type Out } from "./flow.ts";
 import { defineModel, FieldLock, Model, ScopedModel, type Actor } from "./model.ts";
 import type { FieldSpec } from "./schema.ts";
-import { transaction } from "./tx.ts";
+import { atomic } from "./tx.ts";
 
 type Key = string | number;
 
@@ -118,6 +119,9 @@ export class Publishing<T> {
     const editable = (a: Actor, text: string): boolean => {
       const k = keyValue(text);
       if (k === undefined || a === WRITER) return false;
+      // A policy cannot wait on Postgres: direct reads of the drafts model are refused there;
+      // the methods below check the source row first and read as the drafts writer.
+      if (source.isAsync) return false;
       try {
         const scoped = source.as(a);
         const row = scoped.get(k as never);
@@ -143,8 +147,13 @@ export class Publishing<T> {
     source.onWrite((w) => {
       if (w.action !== "delete") return;
       const text = JSON.stringify(w.key);
-      this.model.as(WRITER).delete((r) => r.id === text);
+      const done = this.model.as(WRITER).delete((r) => r.id === text);
+      return isThenable(done) ? Promise.resolve(done).then(() => {}) : undefined;
     });
+  }
+
+  get #async(): boolean {
+    return this.#source.isAsync || this.model.isAsync;
   }
 
   #handle(scoped: ScopedModel<T, any>): void {
@@ -153,15 +162,15 @@ export class Publishing<T> {
     }
   }
 
-  #editable(scoped: ScopedModel<T, any>, key: Key): T | undefined {
+  *#editable(scoped: ScopedModel<T, any>, key: Key): Flow<T | undefined> {
     this.#handle(scoped);
     keyText(key);
-    const row = scoped.get(key as never);
+    const row = yield* sub(scoped.get(key as never));
     return row !== undefined && scoped.writable(row) ? row : undefined;
   }
 
-  #stored(key: Key): DraftRow | undefined {
-    return this.model.as(WRITER).get(keyText(key));
+  *#stored(key: Key): Flow<DraftRow | undefined> {
+    return yield* sub(this.model.as(WRITER).get(keyText(key)));
   }
 
   #values(d: DraftRow): Partial<T> {
@@ -173,7 +182,7 @@ export class Publishing<T> {
     return out as Partial<T>;
   }
 
-  saveDraft(scoped: ScopedModel<T, any>, key: Key, patch: Partial<T>): boolean {
+  saveDraft(scoped: ScopedModel<T, any>, key: Key, patch: Partial<T>): Out<boolean> {
     if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new TypeError("publishing: a draft patch is an object");
     const add: Record<string, unknown> = {};
     for (const [f, v] of Object.entries(patch)) {
@@ -182,94 +191,114 @@ export class Publishing<T> {
       if (!fits(spec, v)) throw new Error(`publishing: \`${f}\` does not fit \`${spec.type}\``);
       add[f] = encode(spec, v);
     }
-    return transaction(() => {
-      if (this.#editable(scoped, key) === undefined) return false;
-      const by = this.#id(scoped.actor);
-      const old = this.#stored(key);
-      const w = this.model.as(WRITER);
+    const self = this;
+    return atomic(this.#async, function* () {
+      if ((yield* self.#editable(scoped, key)) === undefined) return false;
+      const by = self.#id(scoped.actor);
+      const old = yield* self.#stored(key);
+      const w = self.model.as(WRITER);
       if (old) {
-        w.update((r) => r.id === old.id, { data: { ...old.data, ...add }, by, at: this.#now(), publishAt: null, scheduledBy: null });
+        yield* sub(w.update((r) => r.id === old.id, { data: { ...old.data, ...add }, by, at: self.#now(), publishAt: null, scheduledBy: null }));
       } else {
-        w.create({ id: keyText(key), data: add, by, at: this.#now(), publishAt: null, scheduledBy: null });
+        yield* sub(w.create({ id: keyText(key), data: add, by, at: self.#now(), publishAt: null, scheduledBy: null }));
       }
       return true;
     });
   }
 
-  draft(scoped: ScopedModel<T, any>, key: Key): { values: Partial<T>; by: string | null; at: number; publishAt: number | null } | undefined {
-    if (this.#editable(scoped, key) === undefined) return undefined;
-    const d = this.#stored(key);
-    return d ? { values: this.#values(d), by: d.by, at: d.at, publishAt: d.publishAt } : undefined;
+  draft(scoped: ScopedModel<T, any>, key: Key): Out<{ values: Partial<T>; by: string | null; at: number; publishAt: number | null } | undefined> {
+    const self = this;
+    return out(
+      (function* () {
+        if ((yield* self.#editable(scoped, key)) === undefined) return undefined;
+        const d = yield* self.#stored(key);
+        return d ? { values: self.#values(d), by: d.by, at: d.at, publishAt: d.publishAt } : undefined;
+      })(),
+    );
   }
 
-  preview(scoped: ScopedModel<T, any>, key: Key): T | undefined {
-    const row = this.#editable(scoped, key);
-    if (row === undefined) return undefined;
-    const d = this.#stored(key);
-    return d ? { ...row, ...this.#values(d) } : row;
+  preview(scoped: ScopedModel<T, any>, key: Key): Out<T | undefined> {
+    const self = this;
+    return out(
+      (function* () {
+        const row = yield* self.#editable(scoped, key);
+        if (row === undefined) return undefined;
+        const d = yield* self.#stored(key);
+        return d ? { ...row, ...self.#values(d) } : row;
+      })(),
+    );
   }
 
-  discard(scoped: ScopedModel<T, any>, key: Key): boolean {
-    return transaction(() => {
-      if (this.#editable(scoped, key) === undefined) return false;
-      return this.model.as(WRITER).delete((r) => r.id === keyText(key)) === 1;
+  discard(scoped: ScopedModel<T, any>, key: Key): Out<boolean> {
+    const self = this;
+    return atomic(this.#async, function* () {
+      if ((yield* self.#editable(scoped, key)) === undefined) return false;
+      return (yield* sub(self.model.as(WRITER).delete((r) => r.id === keyText(key)))) === 1;
     });
   }
 
-  publish(scoped: ScopedModel<T, any>, key: Key): boolean {
-    return transaction(() => {
-      const row = this.#editable(scoped, key);
-      if (row === undefined) return false;
-      const d = this.#stored(key);
-      const patch: Record<string, unknown> = d ? { ...this.#values(d) } : {};
-      const pf = this.#lock?.field;
-      const first = pf !== undefined && (row as Record<string, unknown>)[pf] === null;
-      if (first) patch[pf!] = this.#now();
-      if (Object.keys(patch).length === 0) return false;
-      const k = this.#source.key;
-      const pred = (r: T) => (r as Record<string, unknown>)[k] === (row as Record<string, unknown>)[k];
-      const n = first ? scoped.updateLocked(this.#lock!, pred, patch as Partial<T>) : scoped.update(pred, patch as Partial<T>);
-      if (n !== 1) return false;
-      if (d) this.model.as(WRITER).delete((r) => r.id === d.id);
-      return true;
-    });
+  publish(scoped: ScopedModel<T, any>, key: Key): Out<boolean> {
+    return atomic(this.#async, () => this.#publishG(scoped, key));
   }
 
-  schedule(scoped: ScopedModel<T, any>, key: Key, at: number): boolean {
+  *#publishG(scoped: ScopedModel<T, any>, key: Key): Flow<boolean> {
+    const row = yield* this.#editable(scoped, key);
+    if (row === undefined) return false;
+    const d = yield* this.#stored(key);
+    const patch: Record<string, unknown> = d ? { ...this.#values(d) } : {};
+    const pf = this.#lock?.field;
+    const first = pf !== undefined && (row as Record<string, unknown>)[pf] === null;
+    if (first) patch[pf!] = this.#now();
+    if (Object.keys(patch).length === 0) return false;
+    const k = this.#source.key;
+    const pred = (r: T) => (r as Record<string, unknown>)[k] === (row as Record<string, unknown>)[k];
+    const n = yield* sub(first ? scoped.updateLocked(this.#lock!, pred, patch as Partial<T>) : scoped.update(pred, patch as Partial<T>));
+    if (n !== 1) return false;
+    if (d) yield* sub(this.model.as(WRITER).delete((r) => r.id === d.id));
+    return true;
+  }
+
+  schedule(scoped: ScopedModel<T, any>, key: Key, at: number): Out<boolean> {
     if (this.#actor === null) throw new Error("publishing: scheduling needs the `actor` option");
     if (!Number.isFinite(at)) throw new TypeError("publishing: schedule at a time in ms");
-    return transaction(() => {
-      if (this.#editable(scoped, key) === undefined) return false;
-      const by = this.#id(scoped.actor);
+    const self = this;
+    return atomic(this.#async, function* () {
+      if ((yield* self.#editable(scoped, key)) === undefined) return false;
+      const by = self.#id(scoped.actor);
       if (by === null) return false;
-      const w = this.model.as(WRITER);
-      const d = this.#stored(key);
-      if (d) return w.update((r) => r.id === d.id, { publishAt: at, scheduledBy: by }) === 1;
-      if (this.#lock === null) return false;
-      w.create({ id: keyText(key), data: {}, by, at: this.#now(), publishAt: at, scheduledBy: by });
+      const w = self.model.as(WRITER);
+      const d = yield* self.#stored(key);
+      if (d) return (yield* sub(w.update((r) => r.id === d.id, { publishAt: at, scheduledBy: by }))) === 1;
+      if (self.#lock === null) return false;
+      yield* sub(w.create({ id: keyText(key), data: {}, by, at: self.#now(), publishAt: at, scheduledBy: by }));
       return true;
     });
   }
 
-  unschedule(scoped: ScopedModel<T, any>, key: Key): boolean {
-    return transaction(() => {
-      if (this.#editable(scoped, key) === undefined) return false;
-      return this.model.as(WRITER).update((r) => r.id === keyText(key) && r.publishAt !== null, { publishAt: null, scheduledBy: null }) === 1;
+  unschedule(scoped: ScopedModel<T, any>, key: Key): Out<boolean> {
+    const self = this;
+    return atomic(this.#async, function* () {
+      if ((yield* self.#editable(scoped, key)) === undefined) return false;
+      return (yield* sub(self.model.as(WRITER).update((r) => r.id === keyText(key) && r.publishAt !== null, { publishAt: null, scheduledBy: null }))) === 1;
     });
   }
 
-  publishDue(now: number = this.#now()): PublishDueResult {
-    const out: PublishDueResult = { published: 0, dropped: [] };
-    if (this.#actor === null) return out;
-    const due = (this.model.as(WRITER).all() as DraftRow[])
+  publishDue(now: number = this.#now()): Out<PublishDueResult> {
+    return out(this.#publishDueG(now));
+  }
+
+  *#publishDueG(now: number): Flow<PublishDueResult> {
+    const result: PublishDueResult = { published: 0, dropped: [] };
+    if (this.#actor === null) return result;
+    const due = ((yield* sub(this.model.as(WRITER).all())) as DraftRow[])
       .filter((d) => d.publishAt !== null && d.publishAt <= now)
       .sort((a, b) => a.publishAt! - b.publishAt! || (a.id < b.id ? -1 : 1));
     for (const d of due) {
       const key = keyValue(d.id);
       if (key === undefined) continue;
-      const drop = (reason: PublishDueResult["dropped"][number]["reason"]) => {
-        this.model.as(WRITER).update((r) => r.id === d.id, { publishAt: null, scheduledBy: null });
-        out.dropped.push({ key, reason });
+      const drop = function* (self: Publishing<T>, reason: PublishDueResult["dropped"][number]["reason"]): Flow<void> {
+        yield* sub(self.model.as(WRITER).update((r) => r.id === d.id, { publishAt: null, scheduledBy: null }));
+        result.dropped.push({ key, reason });
       };
       let actor: Actor | undefined;
       try {
@@ -278,13 +307,13 @@ export class Publishing<T> {
         actor = undefined;
       }
       if (actor === undefined || actor === null) {
-        drop("no such user");
+        yield* drop(this, "no such user");
         continue;
       }
-      if (this.publish(this.#source.as(actor), key)) out.published += 1;
-      else drop("not allowed");
+      if (yield* sub(this.publish(this.#source.as(actor), key))) result.published += 1;
+      else yield* drop(this, "not allowed");
     }
-    return out;
+    return result;
   }
 }
 

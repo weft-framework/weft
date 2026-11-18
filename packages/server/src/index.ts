@@ -32,6 +32,7 @@ export {
   sameOrigin,
   securityHeaders,
   checkCspSources,
+  mergeCspSources,
   type CspSources,
   sessionCookie,
   signSession,

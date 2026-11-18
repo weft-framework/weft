@@ -1,5 +1,6 @@
 import type { Model, ScopedModel } from "./model.ts";
 import { Query } from "./query.ts";
+import { flow, out, type Flow, type Out } from "./flow.ts";
 import { quoteIdent, SqlTable, type SqlDatabase } from "./sql.ts";
 import { changes } from "./changes.ts";
 
@@ -142,7 +143,7 @@ export class Search<T> {
     return out;
   }
 
-  search(source: ScopedModel<T, any> | Query<T, any, any, any>, q: string, o: SearchOptions = {}): SearchResult<T> {
+  search(source: ScopedModel<T, any> | Query<T, any, any, any>, q: string, o: SearchOptions = {}): Out<SearchResult<T>> {
     const base = source instanceof Query ? source : source.query();
     if ((base.model as unknown) !== this.model) throw new Error(`search of ${this.model.name}: the query is for another model`);
     const limit = o.limit ?? 20;
@@ -150,12 +151,17 @@ export class Search<T> {
     if (!Number.isSafeInteger(limit) || limit < 0) throw new Error("search: limit is a non-negative integer");
     if (!Number.isSafeInteger(offset) || offset < 0) throw new Error("search: offset is a non-negative integer");
     const terms = this.terms(q);
-    if (terms.length === 0) return { hits: [], total: 0, terms, truncated: false };
-    if (this.#db && this.model.driver instanceof SqlTable) {
-      const keys = this.#candidates(terms);
-      return this.#rank(base, this.#load(base, keys), terms, keys.length > this.#maxMatches, limit, offset);
-    }
-    return this.#rank(base, base.rows() as T[], terms, false, limit, offset);
+    const self = this;
+    return out(
+      (function* (): Flow<SearchResult<T>> {
+        if (terms.length === 0) return { hits: [], total: 0, terms, truncated: false };
+        if (self.#db && self.model.driver instanceof SqlTable) {
+          const keys = self.#candidates(terms);
+          return yield* self.#rank(base, yield* self.#load(base, keys), terms, keys.length > self.#maxMatches, limit, offset);
+        }
+        return yield* self.#rank(base, (yield* base.rowsG()) as T[], terms, false, limit, offset);
+      })(),
+    );
   }
 
   async searchAsync(source: ScopedModel<T, any> | Query<T, any, any, any>, q: string, o: SearchOptions = {}): Promise<SearchResult<T>> {
@@ -169,7 +175,12 @@ export class Search<T> {
     const terms = this.terms(q);
     if (terms.length === 0) return { hits: [], total: 0, terms, truncated: false };
     const keys = await this.#pg.candidates(terms, this.#maxMatches + 1);
-    return this.#rank(base, this.#load(base, keys), terms, keys.length > this.#maxMatches, limit, offset);
+    const self = this;
+    return await flow(
+      (function* (): Flow<SearchResult<T>> {
+        return yield* self.#rank(base, yield* self.#load(base, keys), terms, keys.length > self.#maxMatches, limit, offset);
+      })(),
+    );
   }
 
   async usePg(pool: PgQueryable, o: { table?: string } = {}): Promise<this> {
@@ -206,17 +217,17 @@ export class Search<T> {
       .join(" ");
   }
 
-  #load(base: Query<T, any, any, any>, keys: unknown[]): T[] {
+  *#load(base: Query<T, any, any, any>, keys: unknown[]): Flow<T[]> {
     const key = this.model.key as keyof T & string;
     const rows: T[] = [];
     for (let i = 0; i < Math.min(keys.length, this.#maxMatches); i += IN_CHUNK) {
       const chunk = keys.slice(i, Math.min(i + IN_CHUNK, this.#maxMatches));
-      rows.push(...(base.where({ [key]: { in: chunk } } as never).rows() as T[]));
+      rows.push(...((yield* base.where({ [key]: { in: chunk } } as never).rowsG()) as T[]));
     }
     return rows;
   }
 
-  #rank(base: Query<T, any, any, any>, rows: T[], terms: string[], truncated: boolean, limit: number, offset: number): SearchResult<T> {
+  *#rank(base: Query<T, any, any, any>, rows: T[], terms: string[], truncated: boolean, limit: number, offset: number): Flow<SearchResult<T>> {
     const prefix = terms[terms.length - 1]!.length >= 2;
     const docs: { row: T; words: string[][] }[] = [];
     for (const row of rows) {
@@ -247,8 +258,9 @@ export class Search<T> {
     const keyOf = (r: T) => (r as Record<string, unknown>)[this.model.key];
     scored.sort((a, b) => b.score - a.score || compareKeys(keyOf(a.row), keyOf(b.row)));
     const page = scored.slice(offset, offset + limit);
+    const shown = yield* base.decorateG(page.map((h) => h.row));
     return {
-      hits: base.decorate(page.map((h) => h.row)).map((row, i) => ({ row: row as T, score: page[i]!.score })),
+      hits: shown.map((row, i) => ({ row: row as T, score: page[i]!.score })),
       total: scored.length,
       terms,
       truncated,
@@ -345,7 +357,7 @@ class PgIndex {
 
   rebuild(): Promise<void> {
     return this.#enqueue(async () => {
-      const rows = this.#model.driver.select([]) as Record<string, unknown>[];
+      const rows = (await this.#model.driver.select([])) as Record<string, unknown>[];
       const pool = this.#pool as PgQueryable & { connect?(): Promise<PgQueryable & { release(): void }> };
       const client = typeof pool.connect === "function" ? await pool.connect() : null;
       const db = client ?? this.#pool;

@@ -1,6 +1,6 @@
 {
   "name": "@weft-framework/create",
-  "version": "0.0.1",
+  "version": "0.0.4",
   "description": "Start a new Weft project: `npm create @weft-framework my-app`",
   "keywords": [
     "weft",

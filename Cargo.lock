@@ -93,7 +93,7 @@ checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
 
 [[package]]
 name = "weft-cli"
-version = "0.0.1"
+version = "0.0.4"
 dependencies = [
  "serde_json",
  "weft-compiler",
@@ -103,21 +103,21 @@ dependencies = [
 
 [[package]]
 name = "weft-compiler"
-version = "0.0.1"
+version = "0.0.4"
 dependencies = [
  "unicode-ident",
 ]
 
 [[package]]
 name = "weft-fmt"
-version = "0.0.1"
+version = "0.0.4"
 dependencies = [
  "weft-compiler",
 ]
 
 [[package]]
 name = "weft-lsp"
-version = "0.0.1"
+version = "0.0.4"
 dependencies = [
  "serde_json",
  "weft-compiler",

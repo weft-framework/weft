@@ -1,6 +1,6 @@
 {
   "name": "@weft-framework/runtime",
-  "version": "0.0.1",
+  "version": "0.0.4",
   "description": "Weft runtime: output encoding, signals, the live-fragment protocol, in-place DOM morphing, the live connection (WebSocket with SSE fallback) and the browser client.",
   "keywords": [
     "weft",

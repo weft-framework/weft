@@ -132,7 +132,8 @@ export class MemoryJobStore implements JobStore {
   }
 }
 
-function jobFromRow(r: Record<string, unknown> | undefined): JobRecord | null {
+/** @internal Shared by `SqlJobStore` and `PgJobStore`. */
+export function jobFromRow(r: Record<string, unknown> | undefined): JobRecord | null {
   if (!r) return null;
   return {
     id: String(r.id),

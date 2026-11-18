@@ -95,7 +95,8 @@ export class MemorySessionStore implements SessionStore {
   }
 }
 
-interface SessionRow {
+/** @internal */
+export interface SessionRow {
   user: string;
   created: number | bigint;
   seen: number | bigint;
@@ -149,7 +150,8 @@ export class SqlSessionStore implements SessionStore {
     return rows.map((row) => ({ sid: String(row.sid), record: SqlSessionStore.record(row) }));
   }
 
-  private static record(row: SessionRow): SessionRecord {
+  /** @internal Shared with `PgSessionStore`. */
+  static record(row: SessionRow): SessionRecord {
     const rec: SessionRecord = { user: String(row.user), created: Number(row.created), seen: Number(row.seen) };
     if (row.tenant !== null) {
       rec.tenant = String(row.tenant);

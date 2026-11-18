@@ -1,6 +1,6 @@
 {
   "name": "@weft-framework/core",
-  "version": "0.0.1",
+  "version": "0.0.4",
   "description": "Weft core: permissions and tenancy for any app. Scoped roles over a tenant's tree of scopes, typed permissions, per-tenant custom roles and permissions, invites, with privilege escalation and owner lockout refused.",
   "keywords": [
     "weft",
@@ -42,6 +42,6 @@
     "test": "node --test --experimental-strip-types test/*.test.ts"
   },
   "dependencies": {
-    "@weft-framework/data": "0.0.1"
+    "@weft-framework/data": "0.0.4"
   }
 }

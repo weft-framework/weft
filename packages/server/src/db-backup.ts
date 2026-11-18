@@ -29,6 +29,9 @@ export async function backupProject(root: string, compiler: Compiler, cmd: Backu
     if (database === undefined || database === ":memory:") {
       throw new BackupCommandError("no `database` file in weft.config.ts; there is nothing to back up");
     }
+    if (/^postgres(ql)?:\/\//i.test(database) || database.startsWith("pglite:")) {
+      throw new BackupCommandError("`weft db` backs up SQLite files; for Postgres use definePgBackups (pg_dump) from @weft-framework/server/backup");
+    }
     const file = ["backup.ts", "backup.js"].map((name) => join(outDir, name)).find((f) => existsSync(f));
     if (!file) {
       throw new BackupCommandError("no src/backup.ts; export `target` from it (dirBackups(...) or s3Backups(...))");

@@ -1,4 +1,4 @@
-import { inTransaction, noteRead, transaction, type ChangeFeed, type Model } from "@weft-framework/data";
+import { asyncTransaction, flow, inTransaction, noteRead, sub, transaction, type ChangeFeed, type Flow, type Model, type Out } from "@weft-framework/data";
 import {
   BUILTIN_PERMISSIONS,
   isPermissionName,
@@ -254,15 +254,17 @@ export class AccessControl<P extends string, R extends string, S extends string,
     }
   }
 
+  // Access data is read synchronously: from the model's own driver on SQLite/memory, from the
+  // in-memory replica on Postgres (`replica: true` models; see docs/design/async-data.md §5).
   #read<T, V>(model: Model<T>, reader: Reader, cache: Map<string, V>, key: string, build: (rows: T[]) => V): V {
-    if (inTransaction()) return build(model.as(reader).all());
+    if (inTransaction()) return build(model.as(reader).local.all());
     this.#fresh();
     const hit = cache.get(key);
     if (hit !== undefined) {
       noteRead(model as Model<unknown>, reader);
       return hit;
     }
-    const value = build(model.as(reader).all());
+    const value = build(model.as(reader).local.all());
     cache.set(key, value);
     return value;
   }
@@ -379,7 +381,7 @@ export class AccessControl<P extends string, R extends string, S extends string,
 
   seatUse(tenant: string): { used: number; setting: string | null; limit: number | null } {
     if (tenantOfId(tenant) !== tenant || this.#chain(tenant).length !== 1) throw new AccessError("not-found", "no such tenant");
-    const used = new Set(this.models.Member.as(new Writer(APP, tenant)).all().map((m) => m.user)).size;
+    const used = new Set(this.models.Member.as(new Writer(APP, tenant)).local.all().map((m) => m.user)).size;
     const key = this.#cfg.seats;
     return { used, setting: key, limit: key === null ? null : (this.#values(tenant)[key] as number) };
   }
@@ -430,7 +432,21 @@ export class AccessControl<P extends string, R extends string, S extends string,
     this.#gen += 1;
   }
 
-  createTenant(owner: ActingUser, opts: { name: string; type?: S }): ScopeInfo {
+  /**
+   * Run a write atomically: `transaction` on sync databases (result returned directly),
+   * `asyncTransaction` on Postgres (Promise). Reads inside go through the database, so they see
+   * the transaction's own writes. The cache is invalidated after commit.
+   */
+  #atomic<V>(make: () => Flow<V>): Out<V> {
+    const done = (v: V): V => {
+      this.#changed();
+      return v;
+    };
+    if (!this.models.Member.isAsync) return done(transaction(() => flow(make()) as V)) as Out<V>;
+    return asyncTransaction(() => flow(make())).then(done) as Out<V>;
+  }
+
+  createTenant(owner: ActingUser, opts: { name: string; type?: S }): Out<ScopeInfo> {
     const user = userIdOf(owner);
     options(opts, "createTenant");
     if (!this.#cfg.canCreateTenant(user)) forbidden("create a tenant");
@@ -442,23 +458,26 @@ export class AccessControl<P extends string, R extends string, S extends string,
     const now = this.#cfg.now();
     const row: ScopeRow = { id, tenant: id, type, parent: null, name, created: now };
     const w = new Writer(user, id);
-    transaction(() => {
-      this.models.Scope.as(w).create(row);
-      this.models.Member.as(w).create({
-        id: memberKey(id, user, this.#cfg.owner),
-        tenant: id,
-        scope: id,
-        user,
-        role: this.#cfg.owner,
-        by: user,
-        created: now,
-      });
+    const models = this.models;
+    const ownerRole = this.#cfg.owner;
+    return this.#atomic(function* () {
+      yield* sub(models.Scope.as(w).create(row));
+      yield* sub(
+        models.Member.as(w).create({
+          id: memberKey(id, user, ownerRole),
+          tenant: id,
+          scope: id,
+          user,
+          role: ownerRole,
+          by: user,
+          created: now,
+        }),
+      );
+      return scopeInfo(row);
     });
-    this.#changed();
-    return scopeInfo(row);
   }
 
-  createScope(by: ActingUser, opts: { type: S; parent: string; name: string }): ScopeInfo {
+  createScope(by: ActingUser, opts: { type: S; parent: string; name: string }): Out<ScopeInfo> {
     const user = userIdOf(by);
     options(opts, "createScope");
     const parent = this.#require(user, "access.scopes.manage", opts.parent, "create scopes here");
@@ -474,18 +493,22 @@ export class AccessControl<P extends string, R extends string, S extends string,
       name: text(opts.name, "name", MAX_NAME),
       created: this.#cfg.now(),
     };
-    this.models.Scope.as(new Writer(user, parent.tenant)).create(row);
-    this.#changed();
-    return scopeInfo(row);
+    const Scope = this.models.Scope.as(new Writer(user, parent.tenant));
+    return this.#atomic(function* () {
+      yield* sub(Scope.create(row));
+      return scopeInfo(row);
+    });
   }
 
-  renameScope(by: ActingUser, scope: string, name: string): ScopeInfo {
+  renameScope(by: ActingUser, scope: string, name: string): Out<ScopeInfo> {
     const user = userIdOf(by);
     const row = this.#managed(user, scope, "rename");
     const next = text(name, "name", MAX_NAME);
-    this.models.Scope.as(new Writer(user, row.tenant)).update((s) => s.id === row.id, { name: next });
-    this.#changed();
-    return scopeInfo({ ...row, name: next });
+    const Scope = this.models.Scope.as(new Writer(user, row.tenant));
+    return this.#atomic(function* () {
+      yield* sub(Scope.update((s) => s.id === row.id, { name: next }));
+      return scopeInfo({ ...row, name: next });
+    });
   }
 
   #managed(user: string, scope: string, verb: string): ScopeRow {
@@ -496,13 +519,14 @@ export class AccessControl<P extends string, R extends string, S extends string,
     return row;
   }
 
-  deleteScope(by: ActingUser, scope: string): void {
+  deleteScope(by: ActingUser, scope: string): Out<void> {
     const user = userIdOf(by);
     const row = this.#managed(user, scope, "delete");
     const root = row.parent === null;
     const w = new Writer(user, row.tenant);
-    transaction(() => {
-      const scopes = this.models.Scope.as(w).all();
+    const models = this.models;
+    return this.#atomic(function* () {
+      const scopes = yield* sub(models.Scope.as(w).all());
       const doomed = new Set<string>([row.id]);
       for (let grew = true; grew; ) {
         grew = false;
@@ -513,16 +537,15 @@ export class AccessControl<P extends string, R extends string, S extends string,
           }
         }
       }
-      this.models.Member.as(w).delete((m) => doomed.has(m.scope));
-      this.models.Invite.as(w).delete((i) => doomed.has(i.scope));
+      yield* sub(models.Member.as(w).delete((m) => doomed.has(m.scope)));
+      yield* sub(models.Invite.as(w).delete((i) => doomed.has(i.scope)));
       if (root) {
-        this.models.Role.as(w).delete(() => true);
-        this.models.Permission.as(w).delete(() => true);
-        this.models.Setting.as(w).delete(() => true);
+        yield* sub(models.Role.as(w).delete(() => true));
+        yield* sub(models.Permission.as(w).delete(() => true));
+        yield* sub(models.Setting.as(w).delete(() => true));
       }
-      this.models.Scope.as(w).delete((s) => doomed.has(s.id));
+      yield* sub(models.Scope.as(w).delete((s) => doomed.has(s.id)));
     });
-    this.#changed();
   }
 
   scope(by: ActingUser, scope: string): ScopeInfo | null {
@@ -554,35 +577,31 @@ export class AccessControl<P extends string, R extends string, S extends string,
     return out;
   }
 
-  assign(by: ActingUser, opts: { user: string; role: RoleName<R>; scope: string }): MemberInfo {
+  assign(by: ActingUser, opts: { user: string; role: RoleName<R>; scope: string }): Out<MemberInfo> {
     const actor = userIdOf(by);
     options(opts, "assign");
     const target = userIdOf(opts.user);
     const on = this.#require(actor, "access.members.manage", opts.scope, "manage members here");
     const role = this.#role(opts.role, on);
     this.#noEscalation(actor, role, on, "give this role");
-    return this.#give(actor, actor, target, role, on);
+    return this.#atomic(() => this.#giveG(actor, actor, target, role, on));
   }
 
-  #give(writer: string, by: string, user: string, role: string, on: ScopeRow): MemberInfo {
+  *#giveG(writer: string, by: string, user: string, role: string, on: ScopeRow): Flow<MemberInfo> {
     const key = memberKey(on.id, user, role);
     const w = new Writer(writer, on.tenant);
-    const row = transaction(() => {
-      const existing = this.models.Member.as(w).get(key);
-      if (existing) return existing;
-      this.#seatFor(w, user);
-      const fresh: MemberRow = { id: key, tenant: on.tenant, scope: on.id, user, role, by, created: this.#cfg.now() };
-      this.models.Member.as(w).create(fresh);
-      return fresh;
-    });
-    this.#changed();
-    return this.#memberInfo(row, false);
+    const existing = yield* sub(this.models.Member.as(w).get(key));
+    if (existing) return this.#memberInfo(existing, false);
+    yield* this.#seatForG(w, user);
+    const fresh: MemberRow = { id: key, tenant: on.tenant, scope: on.id, user, role, by, created: this.#cfg.now() };
+    yield* sub(this.models.Member.as(w).create(fresh));
+    return this.#memberInfo(fresh, false);
   }
 
-  #seatFor(w: Writer, user: string | null): void {
+  *#seatForG(w: Writer, user: string | null): Flow<void> {
     const key = this.#cfg.seats;
     if (key === null) return;
-    const members = this.models.Member.as(w).all();
+    const members = yield* sub(this.models.Member.as(w).all());
     if (user !== null && members.some((m) => m.user === user)) return;
     const taken = new Set(members.map((m) => m.user)).size;
     if (taken >= (this.#values(w.tenant)[key] as number)) throw new AccessError("limit", "the tenant has no free seat");
@@ -595,7 +614,7 @@ export class AccessControl<P extends string, R extends string, S extends string,
     return { user: m.user, role: m.role, label, scope: m.scope, inherited, by: m.by, created: m.created };
   }
 
-  revoke(by: ActingUser, opts: { user: string; role: string; scope: string }): void {
+  revoke(by: ActingUser, opts: { user: string; role: string; scope: string }): Out<void> {
     const actor = userIdOf(by);
     options(opts, "revoke");
     const target = userIdOf(opts.user);
@@ -605,23 +624,24 @@ export class AccessControl<P extends string, R extends string, S extends string,
         : this.#require(actor, "access.members.manage", opts.scope, "manage members here");
     const key = memberKey(on.id, target, String(opts.role));
     const w = new Writer(actor, on.tenant);
-    transaction(() => {
-      const row = this.models.Member.as(w).get(key);
-      if (!row) throw new AccessError("not-found", "no such member");
-      if (actor !== target) this.#noEscalation(actor, row.role, on, "take this role away");
-      if (row.role === this.#cfg.owner && on.parent === null && this.#owners(w).filter((m) => m.user !== target).length === 0) {
-        throw new AccessError("last-owner", "a tenant needs at least one owner");
-      }
-      this.models.Member.as(w).delete((m) => m.id === key);
-    });
-    this.#changed();
+    return this.#atomic(() => this.#revokeG(w, actor, target, key, on));
   }
 
-  #owners(w: Writer): MemberRow[] {
-    return this.models.Member.as(w).where((m) => m.scope === w.tenant && m.role === this.#cfg.owner);
+  *#revokeG(w: Writer, actor: string, target: string, key: string, on: ScopeRow): Flow<void> {
+    const row = yield* sub(this.models.Member.as(w).get(key));
+    if (!row) throw new AccessError("not-found", "no such member");
+    if (actor !== target) this.#noEscalation(actor, row.role, on, "take this role away");
+    if (row.role === this.#cfg.owner && on.parent === null && (yield* this.#ownersG(w)).filter((m) => m.user !== target).length === 0) {
+      throw new AccessError("last-owner", "a tenant needs at least one owner");
+    }
+    yield* sub(this.models.Member.as(w).delete((m) => m.id === key));
   }
 
-  removeFromTenant(by: ActingUser, opts: { user: string; tenant: string }): void {
+  *#ownersG(w: Writer): Flow<MemberRow[]> {
+    return yield* sub(this.models.Member.as(w).where((m) => m.scope === w.tenant && m.role === this.#cfg.owner));
+  }
+
+  removeFromTenant(by: ActingUser, opts: { user: string; tenant: string }): Out<void> {
     const actor = userIdOf(by);
     options(opts, "removeFromTenant");
     const target = userIdOf(opts.user);
@@ -631,20 +651,21 @@ export class AccessControl<P extends string, R extends string, S extends string,
         : this.#require(actor, "access.members.manage", opts.tenant, "manage members here");
     if (root.parent !== null) throw new AccessError("invalid", "not a tenant");
     const w = new Writer(actor, root.tenant);
-    transaction(() => {
-      const held = this.models.Member.as(w).where((m) => m.user === target);
-      if (held.length === 0) throw new AccessError("not-found", "no such member");
-      if (actor !== target) {
-        for (const m of held) this.#noEscalation(actor, m.role, this.#scope(m.scope), "remove this member");
+    return this.#atomic(() => this.#removeG(w, actor, target, root));
+  }
+
+  *#removeG(w: Writer, actor: string, target: string, root: ScopeRow): Flow<void> {
+    const held = yield* sub(this.models.Member.as(w).where((m) => m.user === target));
+    if (held.length === 0) throw new AccessError("not-found", "no such member");
+    if (actor !== target) {
+      for (const m of held) this.#noEscalation(actor, m.role, this.#scope(m.scope), "remove this member");
+    }
+    if (held.some((m) => m.scope === root.id && m.role === this.#cfg.owner)) {
+      if ((yield* this.#ownersG(w)).filter((m) => m.user !== target).length === 0) {
+        throw new AccessError("last-owner", "a tenant needs at least one owner");
       }
-      if (held.some((m) => m.scope === root.id && m.role === this.#cfg.owner)) {
-        if (this.#owners(w).filter((m) => m.user !== target).length === 0) {
-          throw new AccessError("last-owner", "a tenant needs at least one owner");
-        }
-      }
-      this.models.Member.as(w).delete((m) => m.user === target);
-    });
-    this.#changed();
+    }
+    yield* sub(this.models.Member.as(w).delete((m) => m.user === target));
   }
 
   members(by: ActingUser, scope: string, opts: { inherited?: boolean } = {}): MemberInfo[] {
@@ -652,7 +673,7 @@ export class AccessControl<P extends string, R extends string, S extends string,
     const on = this.#require(actor, "access.members.read", scope, "see members here");
     const ids = new Set(opts.inherited ? this.#chain(on.id).map((s) => s.id) : [on.id]);
     return this.models.Member.as(new Reader({ tenant: on.tenant }))
-      .where((m) => ids.has(m.scope))
+      .local.where((m) => ids.has(m.scope))
       .map((m) => this.#memberInfo(m, m.scope !== on.id))
       .sort((a, b) => a.created - b.created || a.user.localeCompare(b.user) || a.role.localeCompare(b.role));
   }
@@ -705,7 +726,7 @@ export class AccessControl<P extends string, R extends string, S extends string,
     return root;
   }
 
-  definePermission(by: ActingUser, opts: { tenant: string; name: string; label: string; description?: string }): PermissionDescription {
+  definePermission(by: ActingUser, opts: { tenant: string; name: string; label: string; description?: string }): Out<PermissionDescription> {
     const actor = userIdOf(by);
     options(opts, "definePermission");
     if (this.#cfg.customPermissions === 0) throw new AccessError("invalid", "custom permissions are not enabled");
@@ -714,25 +735,19 @@ export class AccessControl<P extends string, R extends string, S extends string,
     if (!isPermissionName(key)) throw new AccessError("invalid", "a permission name is lowercase letters, digits, `-`, `_` and dots");
     const label = text(opts.label, "label", MAX_LABEL);
     const description = text(opts.description ?? "", "description", MAX_LABEL, true);
-    const w = new Writer(actor, root.tenant);
-    transaction(() => {
-      const existing = this.models.Permission.as(w).all();
+    const Permission = this.models.Permission.as(new Writer(actor, root.tenant));
+    const max = this.#cfg.customPermissions;
+    const created = this.#cfg.now();
+    return this.#atomic(function* () {
+      const existing = yield* sub(Permission.all());
       if (existing.some((p) => p.key === key)) throw new AccessError("conflict", `\`${key}\` already exists`);
-      if (existing.length >= this.#cfg.customPermissions) throw new AccessError("limit", "too many custom permissions");
-      this.models.Permission.as(w).create({
-        id: JSON.stringify([root.tenant, key]),
-        tenant: root.tenant,
-        key,
-        label,
-        description,
-        created: this.#cfg.now(),
-      });
+      if (existing.length >= max) throw new AccessError("limit", "too many custom permissions");
+      yield* sub(Permission.create({ id: JSON.stringify([root.tenant, key]), tenant: root.tenant, key, label, description, created }));
+      return { name: key, label, ...(description ? { description } : {}), custom: true, builtin: false };
     });
-    this.#changed();
-    return { name: key, label, ...(description ? { description } : {}), custom: true, builtin: false };
   }
 
-  deletePermission(by: ActingUser, opts: { tenant: string; name: string }): void {
+  deletePermission(by: ActingUser, opts: { tenant: string; name: string }): Out<void> {
     const actor = userIdOf(by);
     options(opts, "deletePermission");
     const root = this.#tenantRoot(actor, opts.tenant, "access.permissions.manage", "manage permissions");
@@ -741,16 +756,14 @@ export class AccessControl<P extends string, R extends string, S extends string,
     if (!this.#customPerms(root.tenant).has(key)) throw new AccessError("not-found", "no such permission");
     if (!this.effective(actor, root.id).has(key)) forbidden(`delete \`${key}\`, which you do not hold`);
     const w = new Writer(actor, root.tenant);
-    transaction(() => {
-      for (const role of this.models.Role.as(w).where((r) => r.permissions.includes(key))) {
-        this.models.Role.as(w).update((r) => r.id === role.id, {
-          permissions: role.permissions.filter((p) => p !== key),
-          updated: this.#cfg.now(),
-        });
+    const models = this.models;
+    const now = this.#cfg.now();
+    return this.#atomic(function* () {
+      for (const role of yield* sub(models.Role.as(w).where((r) => r.permissions.includes(key)))) {
+        yield* sub(models.Role.as(w).update((r) => r.id === role.id, { permissions: role.permissions.filter((p) => p !== key), updated: now }));
       }
-      this.models.Permission.as(w).delete((p) => p.key === key);
+      yield* sub(models.Permission.as(w).delete((p) => p.key === key));
     });
-    this.#changed();
   }
 
   #roleShape(root: ScopeRow, actor: string, scopes: readonly unknown[], permissions: readonly unknown[]): { scopes: string[]; permissions: string[] } {
@@ -773,7 +786,7 @@ export class AccessControl<P extends string, R extends string, S extends string,
   createRole(
     by: ActingUser,
     opts: { tenant: string; name: string; description?: string; scopes: readonly S[]; permissions: readonly Permission<P>[] },
-  ): CustomRoleInfo {
+  ): Out<CustomRoleInfo> {
     const actor = userIdOf(by);
     options(opts, "createRole");
     if (this.#cfg.customRoles === 0) throw new AccessError("invalid", "custom roles are not enabled");
@@ -783,14 +796,15 @@ export class AccessControl<P extends string, R extends string, S extends string,
     const description = text(opts.description ?? "", "description", MAX_LABEL, true);
     const now = this.#cfg.now();
     const row: RoleRow = { id: `${root.tenant}/${crypto.randomUUID()}`, tenant: root.tenant, name, description, ...shape, created: now, updated: now };
-    const w = new Writer(actor, root.tenant);
-    transaction(() => {
-      const roles = this.models.Role.as(w).all();
-      if (roles.length >= this.#cfg.customRoles) throw new AccessError("limit", "too many custom roles");
-      this.#uniqueName(roles, name, null);
-      this.models.Role.as(w).create(row);
-    });
-    this.#changed();
+    const Role = this.models.Role.as(new Writer(actor, root.tenant));
+    return this.#atomic(() => this.#createRoleG(Role, row, name));
+  }
+
+  *#createRoleG(Role: ReturnType<Models["Role"]["as"]>, row: RoleRow, name: string): Flow<CustomRoleInfo> {
+    const roles = yield* sub(Role.all());
+    if (roles.length >= this.#cfg.customRoles) throw new AccessError("limit", "too many custom roles");
+    this.#uniqueName(roles, name, null);
+    yield* sub(Role.create(row));
     return this.#roleInfo(row);
   }
 
@@ -805,7 +819,7 @@ export class AccessControl<P extends string, R extends string, S extends string,
     by: ActingUser,
     role: string,
     opts: { name?: string; description?: string; scopes?: readonly S[]; permissions?: readonly Permission<P>[] },
-  ): CustomRoleInfo {
+  ): Out<CustomRoleInfo> {
     const actor = userIdOf(by);
     options(opts, "updateRole");
     const { row, root } = this.#customRole(actor, role, "change");
@@ -813,32 +827,36 @@ export class AccessControl<P extends string, R extends string, S extends string,
     const name = opts.name === undefined ? row.name : text(opts.name, "name", MAX_NAME);
     const description = opts.description === undefined ? row.description : text(opts.description, "description", MAX_LABEL, true);
     const next: RoleRow = { ...row, name, description, ...shape, updated: this.#cfg.now() };
-    const w = new Writer(actor, root.tenant);
-    transaction(() => {
-      this.#uniqueName(this.models.Role.as(w).all(), name, row.id);
-      this.models.Role.as(w).update((r) => r.id === row.id, {
-        name,
-        description,
-        scopes: shape.scopes,
-        permissions: shape.permissions,
-        updated: next.updated,
-      });
-    });
-    this.#changed();
+    const Role = this.models.Role.as(new Writer(actor, root.tenant));
+    return this.#atomic(() => this.#updateRoleG(Role, row, next, name, description, shape));
+  }
+
+  *#updateRoleG(
+    Role: ReturnType<Models["Role"]["as"]>,
+    row: RoleRow,
+    next: RoleRow,
+    name: string,
+    description: string,
+    shape: { scopes: string[]; permissions: string[] },
+  ): Flow<CustomRoleInfo> {
+    this.#uniqueName(yield* sub(Role.all()), name, row.id);
+    yield* sub(
+      Role.update((r) => r.id === row.id, { name, description, scopes: shape.scopes, permissions: shape.permissions, updated: next.updated }),
+    );
     return this.#roleInfo(next);
   }
 
-  deleteRole(by: ActingUser, role: string): void {
+  deleteRole(by: ActingUser, role: string): Out<void> {
     const actor = userIdOf(by);
     const { row, root } = this.#customRole(actor, role, "delete");
     const name = CUSTOM_ROLE + row.id;
     const w = new Writer(actor, root.tenant);
-    transaction(() => {
-      this.models.Member.as(w).delete((m) => m.role === name);
-      this.models.Invite.as(w).delete((i) => i.role === name);
-      this.models.Role.as(w).delete((r) => r.id === row.id);
+    const models = this.models;
+    return this.#atomic(function* () {
+      yield* sub(models.Member.as(w).delete((m) => m.role === name));
+      yield* sub(models.Invite.as(w).delete((i) => i.role === name));
+      yield* sub(models.Role.as(w).delete((r) => r.id === row.id));
     });
-    this.#changed();
   }
 
   #customRole(actor: string, role: string, verb: string): { row: RoleRow; root: ScopeRow } {
@@ -862,17 +880,15 @@ export class AccessControl<P extends string, R extends string, S extends string,
     return this.#values(tenant) as SettingValues<T>;
   }
 
-  updateSettings(by: ActingUser, tenant: string, patch: Partial<SettingValues<T>>): SettingValues<T> {
+  updateSettings(by: ActingUser, tenant: string, patch: Partial<SettingValues<T>>): Out<SettingValues<T>> {
     const actor = userIdOf(by);
     const root = this.#tenantRoot(actor, tenant, "access.settings.manage", "change settings");
-    this.#writeSettings(new Writer(actor, root.tenant), this.#settingPatch(patch, true));
-    return this.#values(root.tenant) as SettingValues<T>;
+    return this.#writeSettings(new Writer(actor, root.tenant), this.#settingPatch(patch, true));
   }
 
-  configureTenant(tenant: string, patch: Partial<SettingValues<T>>): SettingValues<T> {
+  configureTenant(tenant: string, patch: Partial<SettingValues<T>>): Out<SettingValues<T>> {
     if (tenantOfId(tenant) !== tenant || this.#chain(tenant).length !== 1) throw new AccessError("not-found", "no such tenant");
-    this.#writeSettings(new Writer(APP, tenant), this.#settingPatch(patch, false));
-    return this.#values(tenant) as SettingValues<T>;
+    return this.#writeSettings(new Writer(APP, tenant), this.#settingPatch(patch, false));
   }
 
   settingsForm<C>(o: { user(ctx: C): ActingUser | null | undefined; tenant(ctx: C): string | null | undefined }): {
@@ -928,19 +944,21 @@ export class AccessControl<P extends string, R extends string, S extends string,
     return out;
   }
 
-  #writeSettings(w: Writer, changes: [string, unknown][]): void {
-    if (changes.length === 0) return;
+  #writeSettings(w: Writer, changes: [string, unknown][]): Out<SettingValues<T>> {
+    const values = () => this.#values(w.tenant) as SettingValues<T>;
+    if (changes.length === 0) return (this.models.Member.isAsync ? Promise.resolve(values()) : values()) as Out<SettingValues<T>>;
     const now = this.#cfg.now();
     const Setting = this.models.Setting.as(w);
-    transaction(() => {
+    const written = this.#atomic(function* () {
       for (const [key, value] of changes) {
         const id = JSON.stringify([w.tenant, key]);
         const encoded = JSON.stringify(value);
-        if (Setting.get(id)) Setting.update((r) => r.id === id, { value: encoded, by: w.id, updated: now });
-        else Setting.create({ id, tenant: w.tenant, key, value: encoded, by: w.id, updated: now });
+        if (yield* sub(Setting.get(id))) yield* sub(Setting.update((r) => r.id === id, { value: encoded, by: w.id, updated: now }));
+        else yield* sub(Setting.create({ id, tenant: w.tenant, key, value: encoded, by: w.id, updated: now }));
       }
     });
-    this.#changed();
+    const pending = written as unknown;
+    return (pending instanceof Promise ? pending.then(values) : values()) as Out<SettingValues<T>>;
   }
 
   async createInvite(
@@ -978,15 +996,17 @@ export class AccessControl<P extends string, R extends string, S extends string,
       usedBy: null,
     };
     const w = new Writer(actor, on.tenant);
-    transaction(() => {
-      this.models.Invite.as(w).delete((i) => i.expires <= now);
-      const pending = this.models.Invite.as(w).where((i) => i.used === null).length;
-      if (pending >= this.#cfg.inviteMax) throw new AccessError("limit", "too many pending invites");
-      this.#seatFor(w, null);
-      this.models.Invite.as(w).create(row);
-    });
-    this.#changed();
+    await this.#atomic(() => this.#createInviteG(w, row, now));
     return { token, invite: inviteInfo(row) };
+  }
+
+  *#createInviteG(w: Writer, row: InviteRow, now: number): Flow<void> {
+    const Invite = this.models.Invite.as(w);
+    yield* sub(Invite.delete((i) => i.expires <= now));
+    const pending = (yield* sub(Invite.where((i) => i.used === null))).length;
+    if (pending >= this.#cfg.inviteMax) throw new AccessError("limit", "too many pending invites");
+    yield* this.#seatForG(w, null);
+    yield* sub(Invite.create(row));
   }
 
   async inspectInvite(token: string): Promise<{ tenant: string; scope: string; role: string; email: string | null; expires: number } | null> {
@@ -1006,16 +1026,19 @@ export class AccessControl<P extends string, R extends string, S extends string,
   async #invite(token: string): Promise<InviteRow | undefined> {
     if (!isToken(token)) return undefined;
     const hash = await hashToken(token);
-    return this.models.Invite.as(new Reader({ hash })).all()[0];
+    return this.models.Invite.as(new Reader({ hash })).local.all()[0];
   }
 
   async acceptInvite(token: string, user: ActingUser, opts: { email?: string } = {}): Promise<MemberInfo> {
     const target = userIdOf(user);
     if (!isToken(token)) throw new AccessError("not-found", "no such invite");
     const hash = await hashToken(token);
-    let result: MemberInfo | undefined;
-    transaction(() => {
-      const row = this.models.Invite.as(new Reader({ hash })).all()[0];
+    return await this.#atomic(() => this.#acceptG(hash, target, opts));
+  }
+
+  *#acceptG(hash: string, target: string, opts: { email?: string }): Flow<MemberInfo> {
+    {
+      const row = (yield* sub(this.models.Invite.as(new Reader({ hash })).all()))[0];
       if (!row || row.used !== null) throw new AccessError("not-found", "no such invite");
       const now = this.#cfg.now();
       if (row.expires <= now) throw new AccessError("expired", "the invite expired");
@@ -1033,12 +1056,10 @@ export class AccessControl<P extends string, R extends string, S extends string,
         throw e;
       }
       const w = new Writer(target, on.tenant);
-      const marked = this.models.Invite.as(w).update((i) => i.id === row.id && i.used === null, { used: now, usedBy: target });
+      const marked = yield* sub(this.models.Invite.as(w).update((i) => i.id === row.id && i.used === null, { used: now, usedBy: target }));
       if (marked !== 1) throw new AccessError("not-found", "no such invite");
-      result = this.#give(target, row.by, target, row.role, on);
-    });
-    this.#changed();
-    return result!;
+      return yield* this.#giveG(target, row.by, target, row.role, on);
+    }
   }
 
   invites(by: ActingUser, scope: string): InviteInfo[] {
@@ -1046,23 +1067,25 @@ export class AccessControl<P extends string, R extends string, S extends string,
     const on = this.#require(actor, "access.members.manage", scope, "see invites here");
     const now = this.#cfg.now();
     return this.models.Invite.as(new Reader({ tenant: on.tenant }))
-      .where((i) => i.scope === on.id && i.used === null && i.expires > now)
+      .local.where((i) => i.scope === on.id && i.used === null && i.expires > now)
       .map(inviteInfo)
       .sort((a, b) => a.created - b.created || a.id.localeCompare(b.id));
   }
 
-  revokeInvite(by: ActingUser, id: string): void {
+  revokeInvite(by: ActingUser, id: string): Out<void> {
     const actor = userIdOf(by);
     const tenant = tenantOfId(id);
     if (tenant === null || tenant === id) throw new AccessError("not-found", "no such invite");
-    const row = this.models.Invite.as(new Reader({ tenant })).get(id);
+    const row = this.models.Invite.as(new Reader({ tenant })).local.get(id);
     if (!row || row.used !== null) {
       if (this.memberOf(actor, tenant)) throw new AccessError("not-found", "no such invite");
       forbidden("withdraw this invite");
     }
     if (row.by !== actor) this.#require(actor, "access.members.manage", row.scope, "withdraw this invite");
-    this.models.Invite.as(new Writer(actor, tenant)).delete((i) => i.id === id);
-    this.#changed();
+    const Invite = this.models.Invite.as(new Writer(actor, tenant));
+    return this.#atomic(function* () {
+      yield* sub(Invite.delete((i) => i.id === id));
+    });
   }
 
   explain(tenant?: string): AccessReport {
