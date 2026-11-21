@@ -147,26 +147,6 @@ Serve a single component with live reload, no project needed:
 npm run dev -- examples/todo/TodoApp.wx --port 3000
 ```
 
-## Repository layout
-
-| Path | Contents |
-|------|----------|
-| `crates/weft-compiler/` | Lexer, parser, type checker and lowering for `.wx` |
-| `crates/weft-cli/` | The `weft` command, the `weft new` starters and the `weft add` component registry |
-| `crates/weft-fmt/` | The `.wx` formatter behind `weft fmt` |
-| `crates/weft-lsp/` | The language server: diagnostics, hover types, completion, go-to-definition, rename |
-| `editors/vscode/` | VS Code extension: `.wx` highlighting, runs `weft lsp` |
-| `packages/runtime/` | Signals, components, the live protocol, DOM morphing |
-| `packages/server/` | Routing, layouts, metadata, API routes, middleware, sessions, CSRF, CSP |
-| `packages/data/` | Models with `@read`/`@write` on every query; SQLite driver and migrations |
-| `packages/core/` | Tenancy, roles, invitations and SCIM |
-| `packages/ui/`, `packages/theme/`, `packages/i18n/` | Component primitives, theming and localization |
-| `packages/create-weft/` | `npm create @weft-framework` scaffolding |
-| `packages/cli/` | `@weft-framework/cli`: the prebuilt `weft` binary on npm, one package per platform |
-| `site/` | The project website on GitHub Pages, itself a Weft app built to static HTML |
-| `examples/` | Small single-file examples, roughly one per language feature |
-| `bench/` | Served-page benchmarks: TTFB, throughput, JavaScript shipped, memory per live page |
-
 ## Status
 
 | Area | State |
@@ -176,7 +156,7 @@ npm run dev -- examples/todo/TodoApp.wx --port 3000
 | Server: sessions, CSRF, CSP, rate limiting | Working |
 | Data layer, authorization and migrations (SQLite) | Working |
 | Multi-tenant core: roles, invites, SCIM | Working |
-| Postgres driver | Planned |
+| Postgres driver | Working |
 | API stability | Pre-1.0, expect changes |
 
 ## Contributing

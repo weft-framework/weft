@@ -328,8 +328,8 @@ export function isSafePath(to: string): boolean {
   if (typeof to !== "string" || to.length === 0) return false;
   if (!/^\/(?![/\\])/.test(to)) return false;
   if (/[\u0000-\u001f\u007f]/.test(to)) return false;
-  if (/%2f|%5c/i.test(to)) return false;
   const path = to.replace(/[?#][\s\S]*$/, "");
+  if (/%2f|%5c/i.test(path)) return false;
   return !/(?:^|\/)\.\.(?:\/|$)/.test(path);
 }
 
