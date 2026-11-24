@@ -32,7 +32,7 @@ async function compile(example: string): Promise<Record<string, unknown>> {
 }
 
 test("compiled Counter.wx counts on the server", { skip: !hasCargo() }, async () => {
-  const mod = await compile("examples/counter/Counter.wx");
+  const mod = await compile("packages/server/test/fixtures/StyledCounter.wx");
   const Counter = mod.Counter as Component<Record<string, never>>;
 
   const page = new LivePage(Counter, {});

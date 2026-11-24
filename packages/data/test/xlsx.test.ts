@@ -201,3 +201,27 @@ test("limits on rows, columns and cells name the cell", () => {
   assert.throws(() => readXlsx(book(row(1, inl("A2", "x")))), /a cell named "A2"/);
   assert.throws(() => readXlsx(book(row(1, '<c r="A1" t="s"><v>0</v></c>'))), /A1: no shared string 0/);
 });
+
+test("writeXlsx round-trips through readXlsx: text, numbers, escaping, blanks, sheet name", async () => {
+  const { writeXlsx, readXlsx, xlsxSheets } = await import("../src/xlsx.ts");
+  const bytes = writeXlsx(
+    [["number", "total", "note"], ["INV-1", 1250, "a & <b> \"q\""], ["INV-2", -3.5, null], ["=SUM(A1)", 0, "ctl\u0001x"]],
+    { sheet: "inv/2026:Q1" },
+  );
+  assert.deepEqual(xlsxSheets(bytes), ["inv 2026 Q1"]);
+  const sheet = readXlsx(bytes);
+  assert.deepEqual(sheet.rows[0], ["number", "total", "note"]);
+  assert.deepEqual(sheet.rows[1], ["INV-1", "1250", "a & <b> \"q\""]);
+  assert.equal(sheet.rows[2]![1], "-3.5");
+  assert.equal(sheet.rows[3]![0], "=SUM(A1)", "text stays text, never a formula");
+  assert.equal(sheet.rows[3]![2], "ctlx");
+});
+
+test("writeXlsx keeps the old string form and can skip the header style", async () => {
+  const { writeXlsx, xlsxSheets } = await import("../src/xlsx.ts");
+  assert.deepEqual(xlsxSheets(writeXlsx([["a"]], "export")), ["export"]);
+  const plain = Buffer.from(writeXlsx([["a"], ["b"]], { header: false }));
+  assert.ok(plain.length > 0);
+  assert.deepEqual(xlsxSheets(writeXlsx([])), ["Sheet1"]);
+  assert.throws(() => writeXlsx("x" as never), /rows is an array/);
+});

@@ -710,7 +710,7 @@ impl<'a> Parser<'a> {
                 kw = self.read_ident();
                 if !matches!(
                     kw.as_str(),
-                    "signal" | "derived" | "function" | "onMount" | "onDestroy"
+                    "signal" | "derived" | "function" | "async" | "onMount" | "onDestroy"
                 ) {
                     self.error(format!(
                         "expected `signal`, `derived`, `function`, `onMount` or \
@@ -718,6 +718,14 @@ impl<'a> Parser<'a> {
                     ));
                     return None;
                 }
+            }
+            if kw == "async" {
+                self.skip_trivia();
+                if self.read_ident() != "function" {
+                    self.error("expected `function` after `async`");
+                    return None;
+                }
+                kw = String::from("function");
             }
             match kw.as_str() {
                 "onMount" | "onDestroy" => {

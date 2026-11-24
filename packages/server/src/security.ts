@@ -190,6 +190,35 @@ export class RateLimiter {
   }
 }
 
+export interface RateRule {
+  capacity: number;
+  refillPerSecond: number;
+}
+
+export interface RateLimitStore {
+  take(key: string, rule: RateRule, now: number): boolean | Promise<boolean>;
+}
+
+export class RateLimit {
+  readonly #name: string;
+  readonly #rule: RateRule;
+  readonly #store: RateLimitStore | null;
+  readonly #local: RateLimiter;
+
+  constructor(name: string, rule: RateRule, store?: RateLimitStore | null) {
+    if (!/^[a-z][a-z0-9.-]{0,40}$/.test(name)) throw new Error("RateLimit: " + JSON.stringify(name) + " is not a limit name");
+    this.#name = name;
+    this.#rule = Object.freeze({ capacity: rule.capacity, refillPerSecond: rule.refillPerSecond });
+    this.#store = store ?? null;
+    this.#local = new RateLimiter(rule);
+  }
+
+  async take(key: string, now = Date.now()): Promise<boolean> {
+    if (this.#store === null) return this.#local.take(key, now);
+    return (await this.#store.take(this.#name + ":" + key, this.#rule, now)) === true;
+  }
+}
+
 export interface CspSources {
   connect?: readonly string[];
   img?: readonly string[];
@@ -199,9 +228,18 @@ export interface CspSources {
   style?: readonly string[];
   form?: readonly string[];
   worker?: readonly string[];
+  ancestors?: readonly string[];
+  captcha?: CaptchaProvider;
 }
 
-const CSP_DIRECTIVES: Record<keyof CspSources, string> = {
+export type CaptchaProvider = "turnstile" | "hcaptcha";
+
+export const CAPTCHA_ORIGINS: Readonly<Record<CaptchaProvider, readonly string[]>> = Object.freeze({
+  turnstile: Object.freeze(["https://challenges.cloudflare.com"]),
+  hcaptcha: Object.freeze(["https://hcaptcha.com", "https://*.hcaptcha.com"]),
+});
+
+const CSP_DIRECTIVES: Record<Exclude<keyof CspSources, "captcha">, string> = {
   connect: "connect-src",
   img: "img-src",
   media: "media-src",
@@ -210,6 +248,7 @@ const CSP_DIRECTIVES: Record<keyof CspSources, string> = {
   style: "style-src",
   form: "form-action",
   worker: "worker-src",
+  ancestors: "frame-ancestors",
 };
 const CSP_SCHEMES: Record<string, readonly (keyof CspSources)[]> = {
   "blob:": ["connect", "img", "media", "worker"],
@@ -222,10 +261,17 @@ export function checkCspSources(raw: unknown, where: string): CspSources {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     throw new TypeError(`${where}: csp is an object of origin lists, like { connect: ["https://api.example.com"] }`);
   }
-  const out: Record<string, string[]> = {};
+  const out: Record<string, string[] | CaptchaProvider> = {};
   for (const [key, list] of Object.entries(raw)) {
+    if (key === "captcha") {
+      if (typeof list !== "string" || !Object.hasOwn(CAPTCHA_ORIGINS, list)) {
+        throw new TypeError(`${where}: csp.captcha is one of ${Object.keys(CAPTCHA_ORIGINS).join(", ")}`);
+      }
+      out.captcha = list as CaptchaProvider;
+      continue;
+    }
     if (!(key in CSP_DIRECTIVES)) {
-      throw new TypeError(`${where}: csp.${key} is not one of ${Object.keys(CSP_DIRECTIVES).join(", ")}`);
+      throw new TypeError(`${where}: csp.${key} is not one of ${[...Object.keys(CSP_DIRECTIVES), "captcha"].join(", ")}`);
     }
     if (!Array.isArray(list) || list.length > 32) {
       throw new TypeError(`${where}: csp.${key} is a list of at most 32 origins`);
@@ -236,7 +282,11 @@ export function checkCspSources(raw: unknown, where: string): CspSources {
       const ok =
         typeof entry === "string" &&
         entry.length <= 256 &&
-        (scheme ? scheme.includes(key as keyof CspSources) : CSP_ORIGIN.test(entry));
+        (key === "ancestors" && entry === "'self'"
+          ? true
+          : scheme
+            ? scheme.includes(key as keyof CspSources)
+            : CSP_ORIGIN.test(entry));
       if (!ok) {
         throw new TypeError(
           `${where}: csp.${key} entry ${JSON.stringify(entry)} is not an origin this page may reach ` +
@@ -251,10 +301,15 @@ export function checkCspSources(raw: unknown, where: string): CspSources {
 }
 
 export function mergeCspSources(...sets: (CspSources | undefined)[]): CspSources {
-  const out: Record<string, string[]> = {};
+  const out: Record<string, string[] | CaptchaProvider> = {};
   for (const set of sets) {
     for (const [key, list] of Object.entries(set ?? {})) {
-      const into = (out[key] ??= []);
+      if (key === "captcha") {
+        if (out.captcha !== undefined && out.captcha !== list) throw new TypeError(`csp: a page uses one captcha provider, not ${out.captcha} and ${String(list)}`);
+        out.captcha = list as CaptchaProvider;
+        continue;
+      }
+      const into = (out[key] ??= []) as string[];
       for (const e of list as string[]) if (!into.includes(e)) into.push(e);
     }
   }
@@ -272,19 +327,22 @@ export interface HeaderOptions {
 export function securityHeaders(opts: HeaderOptions): Record<string, string> {
   const s = opts.sources ?? {};
   const add = (base: string, list: readonly string[] | undefined) => (list?.length ? `${base} ${list.join(" ")}` : base);
+  const captcha = s.captcha ? CAPTCHA_ORIGINS[s.captcha] : [];
+  const plus = (list: readonly string[] | undefined) => [...(list ?? []), ...captcha.filter((c) => !list?.includes(c))];
+  const frames = plus(s.frame);
   const directives = [
     "default-src 'self'",
-    opts.hashes ? add("script-src 'self'", opts.hashes.script) : `script-src 'nonce-${opts.nonce}' 'self'`,
-    add(opts.hashes ? add("style-src 'self'", opts.hashes.style) : `style-src 'self' 'nonce-${opts.nonce}'`, s.style),
+    add(opts.hashes ? add("script-src 'self'", opts.hashes.script) : `script-src 'nonce-${opts.nonce}' 'self'`, captcha),
+    add(opts.hashes ? add("style-src 'self'", opts.hashes.style) : `style-src 'self' 'nonce-${opts.nonce}'`, s.captcha === "hcaptcha" ? plus(s.style) : s.style),
     add("img-src 'self' data:", s.img?.filter((e) => e !== "data:")),
-    add("connect-src 'self'", s.connect),
+    add("connect-src 'self'", plus(s.connect)),
     ...(s.media?.length ? [add("media-src 'self'", s.media)] : []),
     ...(s.font?.length ? [add("font-src 'self'", s.font)] : []),
     ...(s.worker?.length ? [add("worker-src 'self'", s.worker)] : []),
-    s.frame?.length ? `frame-src ${s.frame.join(" ")}` : "frame-src 'none'",
+    frames.length ? `frame-src ${frames.join(" ")}` : "frame-src 'none'",
     "object-src 'none'",
     "base-uri 'none'",
-    "frame-ancestors 'none'",
+    s.ancestors?.length ? `frame-ancestors ${s.ancestors.join(" ")}` : "frame-ancestors 'none'",
     add("form-action 'self'", s.form),
   ];
   if (opts.report) directives.push(`report-uri ${opts.report}`, "report-to weft-csp");
@@ -292,9 +350,10 @@ export function securityHeaders(opts: HeaderOptions): Record<string, string> {
     "content-security-policy": directives.join("; "),
     "x-content-type-options": "nosniff",
     "referrer-policy": "strict-origin-when-cross-origin",
-    "x-frame-options": "DENY",
     "cross-origin-opener-policy": "same-origin",
   };
+  if (!s.ancestors?.length) h["x-frame-options"] = "DENY";
+  else if (s.ancestors.every((a) => a === "'self'")) h["x-frame-options"] = "SAMEORIGIN";
   if (opts.report) h["reporting-endpoints"] = `weft-csp="${opts.report}"`;
   if (opts.secure) {
     h["strict-transport-security"] = "max-age=63072000; includeSubDomains";

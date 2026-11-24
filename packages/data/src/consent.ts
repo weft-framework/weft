@@ -1,3 +1,4 @@
+import { out, wait, type Flow, type Out } from "./flow.ts";
 import { defineModel, type Model } from "./model.ts";
 
 const PURPOSE = /^[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*$/;
@@ -20,9 +21,9 @@ export interface Consents {
   readonly model: Model<ConsentRow>;
   readonly purposes: readonly string[];
   has(subject: string, purpose: string): boolean;
-  agree(actor: unknown, purpose: string): void;
-  withdraw(actor: unknown, purpose: string): void;
-  of(actor: unknown): Record<string, boolean>;
+  agree(actor: unknown, purpose: string): Out<void>;
+  withdraw(actor: unknown, purpose: string): Out<void>;
+  of(actor: unknown): Out<Record<string, boolean>>;
 }
 
 export type FieldConsent = string | { purpose: string; subject?: string };
@@ -69,6 +70,7 @@ export function defineConsent(opts: ConsentOptions): Consents {
   const model = defineModel<ConsentRow>(opts.name ?? "Consent", {
     fields: { id: "string", subject: "string", purpose: "string", agreed: "boolean", at: "number" },
     attrs: { subject: { index: true } },
+    replica: true,
     read: self,
     write: (a, r) => self(a, r) && purposes.includes(r.purpose) && r.id === `${r.purpose}:${r.subject}`,
   });
@@ -79,17 +81,20 @@ export function defineConsent(opts: ConsentOptions): Consents {
   };
   for (const p of purposes) checkers.set(p, (s) => has(s, p));
 
-  const answer = (actor: unknown, purpose: string, agreed: boolean): void => {
+  const answer = (actor: unknown, purpose: string, agreed: boolean): Out<void> => {
     if (!purposes.includes(purpose)) throw new Error(`consent: \`${purpose}\` is not one of ${purposes.join(", ")}`);
     const subject = idOf(actor);
     if (subject === null) throw new Error("consent: only a signed-in person can answer");
+    return out(write(actor, subject, purpose, agreed));
+  };
+  function* write(actor: unknown, subject: string, purpose: string, agreed: boolean): Flow<void> {
     const id = `${purpose}:${subject}`;
     const handle = model.as(actor);
-    const was = handle.get(id);
+    const was = yield* wait<ConsentRow | undefined>(handle.get(id));
     if (was?.agreed === agreed) return;
     const ok = was
-      ? handle.update((r) => r.id === id, { agreed, at: now() }) === 1
-      : handle.create({ id, subject, purpose, agreed, at: now() }) !== undefined;
+      ? (yield* wait<number>(handle.update((r) => r.id === id, { agreed, at: now() }))) === 1
+      : (yield* wait<unknown>(handle.create({ id, subject, purpose, agreed, at: now() }))) !== undefined;
     if (!ok) throw new Error("consent: the answer was refused (a read-only view?)");
     const set = watching.get(purpose);
     for (const ref of set ?? []) {
@@ -97,16 +102,18 @@ export function defineConsent(opts: ConsentOptions): Consents {
       if (m) m.publishAll();
       else set!.delete(ref);
     }
-  };
+  }
+  function* mine(actor: unknown): Flow<Record<string, boolean>> {
+    const rows = yield* wait<ConsentRow[]>(model.as(actor).all());
+    const given = new Map(rows.map((r) => [r.purpose, r.agreed] as const));
+    return Object.fromEntries(purposes.map((p) => [p, given.get(p) === true]));
+  }
   return {
     model,
     purposes,
     has,
     agree: (actor, purpose) => answer(actor, purpose, true),
     withdraw: (actor, purpose) => answer(actor, purpose, false),
-    of(actor) {
-      const mine = new Map(model.as(actor).all().map((r) => [r.purpose, r.agreed] as const));
-      return Object.fromEntries(purposes.map((p) => [p, mine.get(p) === true]));
-    },
+    of: (actor) => out(mine(actor)),
   };
 }

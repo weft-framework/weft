@@ -169,3 +169,23 @@ test("search declarations and words", () => {
   assert.deepEqual(s.highlight("<b>x</b>", ""), [{ text: "<b>x</b>", match: false }]);
   assert.deepEqual(s.highlight(null, "x"), []);
 });
+
+test("match: any finds rows with some of the terms, ranks rows with more terms first, in memory and SQLite", () => {
+  const mem = docs();
+  fill(mem);
+  const db = openSqlite(":memory:");
+  const sql = docs();
+  useDatabase(db, [sql as never]);
+  fill(sql);
+  for (const [m, s] of [[mem, search(mem)], [sql, search(sql).use(db)]] as const) {
+    const ada = m.as("ada");
+    assert.equal(s.search(ada, "salad merger").total, 0, "all terms by default");
+    const any = s.search(ada, "salad merger", { match: "any" });
+    assert.deepEqual(any.hits.map((h) => h.row.id).sort(), ["d3", "d6"]);
+    assert.equal(any.total, 2, "Bob's merger report stays unreadable");
+    const both = s.search(ada, "lunch salad merger", { match: "any" });
+    assert.equal(both.hits[0]!.row.id, "d3", "two matching terms outrank one");
+    assert.deepEqual(s.search(ada, "salad", { match: "all" }).hits.map((h) => h.row.id), ["d3"]);
+    assert.throws(() => s.search(ada, "x", { match: "some" as never }), /match is "all" or "any"/);
+  }
+});

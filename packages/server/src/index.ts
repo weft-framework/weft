@@ -7,6 +7,11 @@ export type {
   CspViolation,
   Layout,
   LiveSocket,
+  AppSocket,
+  SocketRoute,
+  SocketAccept,
+  BoundSocket,
+  RawSocket,
   MetaSource,
   PageContext,
   Route,
@@ -24,6 +29,7 @@ export type { Action, ActionContext, Decoded, ParamSpec, ParamType } from "./act
 export type { LivePageOptions } from "./live.ts";
 export {
   MIN_SECRET_LENGTH,
+  RateLimit,
   RateLimiter,
   csrfToken,
   importSecret,
@@ -33,6 +39,8 @@ export {
   securityHeaders,
   checkCspSources,
   mergeCspSources,
+  CAPTCHA_ORIGINS,
+  type CaptchaProvider,
   type CspSources,
   sessionCookie,
   signSession,
@@ -40,7 +48,7 @@ export {
   verifyCsrf,
   verifySession,
 } from "./security.ts";
-export type { RateLimitOptions, HeaderOptions, CookieOptions } from "./security.ts";
+export type { RateLimitOptions, RateLimitStore, RateRule, HeaderOptions, CookieOptions } from "./security.ts";
 export { external } from "./api.ts";
 export type { ApiHandler, ApiHandlers, ApiMethod } from "./api.ts";
 export type { Middleware, MiddlewareContext, MiddlewareResult } from "./middleware.ts";
@@ -52,6 +60,8 @@ export { github, google, microsoft, oidc, SignInError } from "./oauth.ts";
 export { emailSignIn, EmailSignIn, EmailSignInError, MemoryEmailTokenStore, normalizeEmail, SqlEmailTokenStore } from "./email-signin.ts";
 export type { EmailPending } from "./email-signin.ts";
 export { fillPattern, robotsTxt, sitemapEntries, sitemapXml } from "./seo.ts";
+export { atomXml, defineFeed, feedXml, rssXml } from "./feed.ts";
+export type { Feed, FeedFormat, FeedItem, FeedOptions } from "./feed.ts";
 export type { ChangeFrequency, RobotsOptions, RobotsRule, RouteEntry, SitemapEntry, SitemapOptions } from "./seo.ts";
 export type { DrainOptions, ErrorReport } from "./app.ts";
 export { createLogger, redact, requestIdOf } from "./log.ts";
@@ -63,6 +73,7 @@ export { definePasskeys, MemoryPasskeyStore, PasskeyError, Passkeys, SqlPasskeyS
 export type { PasskeyChallenge, PasskeyCredential, PasskeyOptions, PasskeyStore } from "./passkey.ts";
 export type { GitHubOptions, Identity, MicrosoftOptions, OidcOptions, Provider, ProviderOptions } from "./oauth.ts";
 export { isSecret, parseEnv, Secret, secretEnv } from "./secret.ts";
+export { clientAddress, resolveClientAddress, type TrustedProxies } from "./client-address.ts";
 export { acceptGrant, grantToken, openWith, seal, sealWith, unseal } from "./seal.ts";
 export type { GrantOptions, SealOptions, UnsealOptions } from "./seal.ts";
 export { defineGrants, GrantError, Grants } from "./grants.ts";
@@ -116,7 +127,7 @@ export type {
   SentMail,
   SmtpOptions,
 } from "./mail.ts";
-export type { Cron, EnqueueOptions, Job, JobActor, JobContext, JobFilter, JobOptions, JobRecord, JobsOptions, JobStatus, JobStore, Schedule } from "./jobs.ts";
+export type { Cron, EnqueueOptions, Job, JobActor, JobContext, JobFilter, JobOptions, JobRecord, JobsOptions, JobStatus, JobStore, Schedule, ScheduleInfo } from "./jobs.ts";
 export {
   defineWebPush,
   encryptPushPayload,

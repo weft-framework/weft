@@ -83,3 +83,14 @@ test("the document covers actions, API routes and models", () => {
   assert.deepEqual(Object.keys(doc.components.securitySchemes).sort(), ["csrf", "session"]);
   assert.deepEqual(JSON.parse(JSON.stringify(doc)), doc);
 });
+
+test("actions with file parameters are documented as multipart uploads", () => {
+  const up = defineAction("upload", [{ name: "doc", type: "file" }, { name: "more", type: "file", list: true }, { name: "title", type: "string" }], () => 1);
+  assert.deepEqual(actionSchema(up.params).properties, {
+    doc: { type: "string", format: "binary" },
+    more: { type: "array", items: { type: "string", format: "binary" } },
+    title: { type: "string" },
+  });
+  const doc = openApi({ actions: { upload: up } }, { title: "t", version: "1" }) as { paths: Record<string, { post: { requestBody: { content: Record<string, unknown> } } }> };
+  assert.deepEqual(Object.keys(doc.paths["/_weft/action/upload"]!.post.requestBody.content), ["multipart/form-data"]);
+});

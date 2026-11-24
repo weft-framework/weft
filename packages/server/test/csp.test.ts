@@ -109,3 +109,56 @@ test("reports in the Reporting API format; other sites and junk are dropped", ()
   ]);
   assert.deepEqual(parseCspReports("not json", ORIGIN, at), []);
 });
+
+test("a route's csp() adds per-request origins from its data, validated, never edge-cached", async () => {
+  const app = createApp({
+    secret: "test-secret-test-secret-test-secret!",
+    csp: { img: ["https://img.example.com"] },
+    routes: {
+      "/nodes/[region]": {
+        component: Plain as never,
+        load: (ctx) => ({ probe: `https://${ctx.params.region}.nodes.example.com` }),
+        csp: { connect: ["https://api.example.com"] },
+        cspFor: (_ctx, data: { probe: string }) => ({ connect: [data.probe, "https://api.example.com"] }),
+      },
+      "/none": { component: Plain as never, cspFor: () => undefined },
+      "/bad": { component: Plain as never, load: () => ({}), cspFor: () => ({ script: ["https://evil.example"] }) as never },
+      "/wide": { component: Plain as never, load: () => ({}), cspFor: () => ({ connect: ["*"] }) },
+    },
+    onError: () => {},
+  });
+  const res = async (path: string) => (await app.fetch(new Request(`${ORIGIN}${path}`)))!;
+  const eu = (await res("/nodes/eu")).headers.get("content-security-policy")!;
+  assert.equal(directive(eu, "connect-src"), "connect-src 'self' https://api.example.com https://eu.nodes.example.com");
+  assert.equal(directive(eu, "img-src"), "img-src 'self' data: https://img.example.com");
+  const us = (await res("/nodes/us")).headers.get("content-security-policy")!;
+  assert.equal(directive(us, "connect-src"), "connect-src 'self' https://api.example.com https://us.nodes.example.com");
+  const none = await res("/none");
+  assert.equal(none.status, 200);
+  assert.equal(none.headers.get("cache-control"), "no-store");
+  assert.equal(directive(none.headers.get("content-security-policy")!, "connect-src"), "connect-src 'self'");
+  assert.equal((await res("/bad")).status, 500);
+  assert.equal((await res("/wide")).status, 500);
+});
+
+test("frame ancestors: denied by default, 'self' or listed origins when a route allows embedding", () => {
+  const base = securityHeaders({ nonce: "n", secure: true });
+  assert.match(base["content-security-policy"]!, /frame-ancestors 'none'/);
+  assert.equal(base["x-frame-options"], "DENY");
+
+  const self = securityHeaders({ nonce: "n", secure: true, sources: checkCspSources({ ancestors: ["'self'"] }, "t") });
+  assert.match(self["content-security-policy"]!, /frame-ancestors 'self'(;|$)/);
+  assert.equal(self["x-frame-options"], "SAMEORIGIN");
+
+  const partners = securityHeaders({
+    nonce: "n",
+    secure: true,
+    sources: checkCspSources({ ancestors: ["'self'", "https://*.partner.example"] }, "t"),
+  });
+  assert.match(partners["content-security-policy"]!, /frame-ancestors 'self' https:\/\/\*\.partner\.example/);
+  assert.equal(partners["x-frame-options"], undefined, "the CSP decides when other origins may embed");
+
+  assert.throws(() => checkCspSources({ frame: ["'self'"] }, "t"), /not an origin/);
+  assert.throws(() => checkCspSources({ ancestors: ["*"] }, "t"), /not an origin/);
+  assert.throws(() => checkCspSources({ ancestors: ["http://evil.example"] }, "t"), /not an origin/);
+});

@@ -39,15 +39,23 @@ export function secretEnv(
   name: string,
   opts: { minLength?: number; env?: Record<string, string | undefined> } = {},
 ): Secret {
-  const env = opts.env ?? (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
+  const processEnv = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env;
+  const env = opts.env ?? processEnv ?? {};
   const value = env[name];
   if (value === undefined || value === "") {
+    if (processEnv?.WEFT_PHASE === "build") return new Secret(name, buildPlaceholder(opts.minLength ?? 1));
     throw new Error(`environment variable ${name} is not set`);
   }
   if (value.length < (opts.minLength ?? 1)) {
     throw new Error(`environment variable ${name} must be at least ${opts.minLength} characters`);
   }
   return new Secret(name, value);
+}
+
+function buildPlaceholder(minLength: number): string {
+  const bytes = new Uint8Array(Math.max(32, Math.ceil(minLength / 2)));
+  crypto.getRandomValues(bytes);
+  return "weft-build-" + Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 function blankOrComment(s: string): boolean {

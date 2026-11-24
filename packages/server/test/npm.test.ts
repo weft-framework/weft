@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { islandAssets } from "../src/assets.ts";
-import { browserModules, NpmError } from "../src/npm.ts";
+import { browserModules, NpmError, rewriteSpecifiers } from "../src/npm.ts";
 
 function tree(files: Record<string, string>): string {
   const root = mkdtempSync(join(tmpdir(), "weft-npm-"));
@@ -151,4 +151,25 @@ test("islandAssets resolves client imports from each module's directory", () => 
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("only real import and export specifiers are rewritten, never text inside strings, comments, templates or regexes", () => {
+  const t = (code: string) => rewriteSpecifiers(code, (s) => `<${s}>`);
+  const cases: [string, string][] = [
+    [`import { a } from "x";`, `import { a } from "<x>";`],
+    [`import "side";`, `import "<side>";`],
+    [`const m = await import("dyn");`, `const m = await import("<dyn>");`],
+    [`export * from './star';`, `export * from '<./star>';`],
+    [`const words = ["from", "new"]; const w = "import"; f("x");`, `const words = ["from", "new"]; const w = "import"; f("x");`],
+    [`const s = "a from 'b'";`, `const s = "a from 'b'";`],
+    [`// import x from "c"\nimport y from "d"`, `// import x from "c"\nimport y from "d"`.replace(`"d"`, `"<d>"`)],
+    [`/* from "e" */ x`, `/* from "e" */ x`],
+    ["const t = `from \"f\" ${g(\"h\")} import(\"i\")`; import j from \"k\";", "const t = `from \"f\" ${g(\"h\")} import(\"i\")`; import j from \"<k>\";"],
+    [`const r = /from "l"/; import m from "n";`, `const r = /from "l"/; import m from "<n>";`],
+    [`const q = a / b; import o from "p";`, `const q = a / b; import o from "<p>";`],
+    [`x.from("q"); obj.import("r")`, `x.from("q"); obj.import("r")`],
+    ["const u = `${`${\"v\"}`}`; import w from \"z\";", "const u = `${`${\"v\"}`}`; import w from \"<z>\";"],
+    [`import.meta.url; import {a as b} from "aa"`, `import.meta.url; import {a as b} from "<aa>"`],
+  ];
+  for (const [src, want] of cases) assert.equal(t(src), want, src);
 });

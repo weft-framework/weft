@@ -40,6 +40,7 @@ function setup(o: { store?: SessionStore; revocations?: ReturnType<LocalBroadcas
     findUser: (email) => [...users].find(([, u]) => u.email === email)?.[0] ?? null,
     emailOf: (user) => users.get(user)?.email ?? null,
     setPassword: (user, hash) => void (users.get(user)!.password = hash),
+    passwordOf: (user) => users.get(user)?.password ?? null,
     setEmail: (user, email) => void (users.get(user)!.email = email),
     checkPassword: (pw) => (pw.includes("password") ? "Too easy to guess" : null),
     createUser: (email, hash) => {
@@ -73,6 +74,7 @@ function setup(o: { store?: SessionStore; revocations?: ReturnType<LocalBroadcas
     everywhere: defineAction("everywhere", [{ name: "keep", type: "boolean" }], (ctx, keep: boolean) => signOutEverywhere(ctx, { keepThis: keep })),
     forgot: defineAction("forgot", [str("email")], (ctx, e: string) => wrap(() => account.requestPasswordReset(ctx, e))),
     reset: defineAction("reset", [str("token"), str("password")], (ctx, t: string, p: string) => wrap(() => account.resetPassword(ctx, t, p))),
+    changePw: defineAction("changePw", [str("current"), str("next")], (ctx, c: string, n: string) => wrap(() => account.changePassword(ctx, c, n))),
     change: defineAction("change", [str("email")], (ctx, e: string) => wrap(() => account.requestEmailChange(ctx, e))),
     confirm: defineAction("confirm", [str("token")], (ctx, t: string) => wrap(() => account.confirmEmailChange(ctx, t))),
     form: defineAction("form", [], (ctx) => account.signUpForm(ctx)),
@@ -423,4 +425,35 @@ test("a signed-in user verifies their address", async () => {
   await v.call("askVerify");
   env.users.get("ada")!.email = "ada@other.example";
   assert.equal(await visitor(env.app).call("verify", { token: tokenOf(env.sent[1]) }), false, "not the address any more");
+});
+
+test("change password: needs the current one, keeps this session, signs out the others, tells the owner", async () => {
+  const env = setup();
+  const { hashPassword } = await import("../src/password.ts");
+  env.users.get("ada")!.password = await hashPassword("old horse battery staple", { ln: 10 });
+  const v = visitor(env.app);
+  const other = visitor(env.app);
+  const nobody = visitor(env.app);
+  assert.equal(await nobody.call("changePw", { current: "x", next: "new horse battery staple" }), "error:signed-out");
+  await v.call("as", { id: "ada" });
+  await other.call("as", { id: "ada" });
+  assert.equal(await v.call("changePw", { current: "wrong horse", next: "new horse battery staple" }), "error:refused");
+  assert.equal(await v.call("changePw", { current: "old horse battery staple", next: "short" }), "error:weak");
+  assert.equal(await v.call("changePw", { current: "old horse battery staple", next: "my password is long" }), "error:weak", "the app's own check");
+  assert.equal(await v.call("changePw", { current: "old horse battery staple", next: "old horse battery staple" }), "error:weak");
+  assert.equal(await v.call("changePw", { current: "old horse battery staple", next: "new horse battery staple" }), "done");
+  assert.ok(await verifyPassword("new horse battery staple", env.users.get("ada")!.password!));
+  assert.equal(await v.who(), "ada", "this session stays signed in");
+  assert.equal(await other.who(), "nobody", "other sessions are signed out");
+  assert.deepEqual(env.sent.at(-1), { kind: "password-changed", to: "ada@example.com" });
+  let limited = false;
+  for (let i = 0; i < 12 && !limited; i++) limited = (await v.call("changePw", { current: "wrong", next: "whatever long enough" })) === "error:limit";
+  assert.ok(limited, "attempts are rate limited");
+});
+
+test("change password needs passwordOf and setPassword", async () => {
+  const env = setup({ account: { passwordOf: undefined } });
+  const v = visitor(env.app);
+  await v.call("as", { id: "ada" });
+  await assert.rejects(v.call("changePw", { current: "a", next: "b" }), /changePw: Server error/, "a configuration error, never shown to the user");
 });

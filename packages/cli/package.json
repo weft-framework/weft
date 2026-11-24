@@ -1,6 +1,6 @@
 {
   "name": "@weft-framework/cli",
-  "version": "0.0.4",
+  "version": "0.0.6",
   "description": "The weft command: compiler, dev server, formatter and language server for Weft, as a prebuilt binary for your platform.",
   "keywords": [
     "weft",

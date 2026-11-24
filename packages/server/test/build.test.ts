@@ -111,3 +111,26 @@ test("a built project is served from dist alone", { skip: !hasCargo() }, async (
   await assert.rejects(build(root, { compiler: findCompiler(repo), out: join(root, "src", "out") }), BuildError);
   assert.ok(existsSync(join(root, "elsewhere", "keep.txt")));
 });
+
+test("a build needs neither the database nor runtime secrets", { skip: !hasCargo() }, async () => {
+  const root = join(work, "nodb");
+  rmSync(root, { recursive: true, force: true });
+  mkdirSync(work, { recursive: true });
+  execFileSync("cargo", ["run", "-q", "-p", "weft-cli", "--", "new", root, "--minimal"], { cwd: repo, stdio: "pipe" });
+  mkdirSync(join(root, "src", "lib"), { recursive: true });
+  writeFileSync(
+    join(root, "src", "lib", "db.ts"),
+    `import { defineModel } from "@weft-framework/data"\n` +
+      `import { openPostgres, usePostgres } from "@weft-framework/data/postgres"\n` +
+      `import { secretEnv } from "@weft-framework/server"\n` +
+      `export const key = secretEnv("NODB_TEST_SIGNING_KEY", { minLength: 32 })\n` +
+      `export const Note = defineModel<{ id: string }>("Note", { fields: { id: "string" }, read: () => true, write: () => true })\n` +
+      `export const pool = await openPostgres("pglite:./data/never/created")\n` +
+      `await usePostgres(pool, [Note as never])\n`,
+  );
+  writeFileSync(join(root, "src", "pages", "notes.wx"), `import { key } from "../lib/db.ts"\nexport function load() { return { n: key.name } }\ncomponent Page(n: string) { view { <p>{n}</p> } }\n`);
+  const m = await build(root, { compiler: findCompiler(repo) });
+  assert.ok(m.routes.includes("/notes"));
+  assert.equal(existsSync(join(root, "data", "never")), false);
+  assert.equal(process.env.WEFT_PHASE, undefined);
+});

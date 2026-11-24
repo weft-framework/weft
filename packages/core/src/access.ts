@@ -210,7 +210,7 @@ export class AccessControl<P extends string, R extends string, S extends string,
   #members = new Map<string, MemberRow[]>();
   #roles = new Map<string, Map<string, RoleRow>>();
   #perms = new Map<string, Map<string, PermissionRow>>();
-  #settings = new Map<string, Map<string, SettingRow>>();
+  #settings = new Map<string, StoredSettings>();
   #feeds = new Map<string, { feed: ChangeFeed; stop: () => void }>();
 
   constructor(config: AccessConfig<P, R, S, T>) {
@@ -287,31 +287,75 @@ export class AccessControl<P extends string, R extends string, S extends string,
     return this.#read(this.models.Permission, new Reader({ tenant }), this.#perms, tenant, (rows) => new Map(rows.map((r) => [r.key, r])));
   }
 
-  #storedSettings(tenant: string): Map<string, SettingRow> {
-    if (this.#cfg.settings.size === 0) return new Map();
-    return this.#read(this.models.Setting, new Reader({ tenant }), this.#settings, tenant, (rows) => new Map(rows.map((r) => [r.key, r])));
+  #storedSettings(tenant: string): StoredSettings {
+    if (this.#cfg.settings.size === 0) return { root: new Map(), scoped: new Map() };
+    return this.#read(this.models.Setting, new Reader({ tenant }), this.#settings, tenant, (rows) => {
+      const out: StoredSettings = { root: new Map(), scoped: new Map() };
+      for (const r of rows) {
+        let at: unknown;
+        try {
+          at = (JSON.parse(r.id) as unknown[])[0];
+        } catch {
+          continue;
+        }
+        if (at === tenant) out.root.set(r.key, r);
+        else if (typeof at === "string" && tenantOfId(at) === tenant) {
+          let m = out.scoped.get(at);
+          if (!m) out.scoped.set(at, (m = new Map()));
+          m.set(r.key, r);
+        }
+      }
+      return out;
+    });
+  }
+
+  #stored(key: string, row: SettingRow | undefined): { ok: true; value: unknown } | { ok: false } {
+    const spec = this.#cfg.settings.get(key);
+    if (!spec || !row) return { ok: false };
+    let value: unknown;
+    try {
+      value = JSON.parse(row.value);
+    } catch {
+      return { ok: false };
+    }
+    return settingProblem(spec, value) === null ? { ok: true, value } : { ok: false };
   }
 
   #values(tenant: string): Record<string, unknown> {
-    const stored = this.#storedSettings(tenant);
+    const stored = this.#storedSettings(tenant).root;
     const out: Record<string, unknown> = {};
     for (const [key, spec] of this.#cfg.settings) {
       out[key] = spec.default;
-      const row = stored.get(key);
-      if (!row) continue;
-      let value: unknown;
-      try {
-        value = JSON.parse(row.value);
-      } catch {
-        continue;
+      const v = this.#stored(key, stored.get(key));
+      if (v.ok) out[key] = v.value;
+    }
+    return out;
+  }
+
+  #scopeValues(scope: string): Record<string, unknown> | null {
+    const chain = this.#chain(scope);
+    if (chain.length === 0) return null;
+    const tenant = chain[chain.length - 1].id;
+    const out = this.#values(tenant);
+    const scoped = this.#storedSettings(tenant).scoped;
+    for (let i = chain.length - 2; i >= 0; i--) {
+      const rows = scoped.get(chain[i].id);
+      if (!rows) continue;
+      for (const [key, spec] of this.#cfg.settings) {
+        if (spec.scoped !== true) continue;
+        const v = this.#stored(key, rows.get(key));
+        if (v.ok) out[key] = v.value;
       }
-      if (settingProblem(spec, value) === null) out[key] = value;
     }
     return out;
   }
 
   settingValue(tenant: string, key: string): unknown {
     return this.#cfg.settings.has(key) ? this.#values(tenant)[key] : undefined;
+  }
+
+  scopeSettingValue(scope: string, key: string): unknown {
+    return this.#cfg.settings.has(key) ? this.#scopeValues(scope)?.[key] : undefined;
   }
 
   #chain(scope: string): ScopeRow[] {
@@ -886,6 +930,55 @@ export class AccessControl<P extends string, R extends string, S extends string,
     return this.#writeSettings(new Writer(actor, root.tenant), this.#settingPatch(patch, true));
   }
 
+  scopeSettings(by: ActingUser, scope: string): SettingValues<T> {
+    const actor = userIdOf(by);
+    const tenant = tenantOfId(scope);
+    if (tenant === null || !this.memberOf(actor, tenant) || this.effective(actor, scope).size === 0) forbidden("see this scope");
+    const values = this.#scopeValues(scope);
+    if (values === null) throw new AccessError("not-found", "no such scope");
+    return values as SettingValues<T>;
+  }
+
+  updateScopeSettings(by: ActingUser, scope: string, patch: Partial<SettingValues<T>>): Out<SettingValues<T>> {
+    const actor = userIdOf(by);
+    const row = this.#require(actor, "access.settings.manage", scope, "change settings");
+    if (row.parent === null) return this.updateSettings(actor, scope, patch);
+    return this.#writeSettings(new Writer(actor, row.tenant), this.#scopedPatch(patch, true), row.id);
+  }
+
+  configureScope(scope: string, patch: Partial<SettingValues<T>>): Out<SettingValues<T>> {
+    const row = this.#chain(scope)[0];
+    if (!row) throw new AccessError("not-found", "no such scope");
+    if (row.parent === null) return this.configureTenant(scope, patch);
+    return this.#writeSettings(new Writer(APP, row.tenant), this.#scopedPatch(patch, false), row.id);
+  }
+
+  resetScopeSettings(by: ActingUser | null, scope: string, keys: readonly string[]): Out<SettingValues<T>> {
+    const row = by === null ? this.#chain(scope)[0] : this.#require(userIdOf(by), "access.settings.manage", scope, "change settings");
+    if (!row) throw new AccessError("not-found", "no such scope");
+    if (row.parent === null) throw new AccessError("invalid", "a tenant's own settings are changed, not reset");
+    if (!Array.isArray(keys)) throw new AccessError("invalid", "keys is a list of setting names");
+    for (const key of keys) {
+      const spec = this.#cfg.settings.get(key);
+      if (!spec || spec.scoped !== true) throw new AccessError("invalid", `no scoped setting \`${String(key).slice(0, 64)}\``);
+      if (by !== null && !spec.editable) forbidden(`change \`${key}\``);
+    }
+    const w = new Writer(by === null ? APP : userIdOf(by), row.tenant);
+    const Setting = this.models.Setting.as(w);
+    const ids = new Set(keys.map((k) => JSON.stringify([row.id, k])));
+    const done = Setting.delete((r) => ids.has(r.id)) as unknown;
+    const values = () => this.#scopeValues(row.id) as SettingValues<T>;
+    return (done instanceof Promise ? done.then(values) : values()) as Out<SettingValues<T>>;
+  }
+
+  #scopedPatch(patch: unknown, editableOnly: boolean): [string, unknown][] {
+    const changes = this.#settingPatch(patch, editableOnly);
+    for (const [key] of changes) {
+      if (this.#cfg.settings.get(key)?.scoped !== true) throw new AccessError("invalid", `setting \`${key}\` is set per tenant, not per scope`);
+    }
+    return changes;
+  }
+
   configureTenant(tenant: string, patch: Partial<SettingValues<T>>): Out<SettingValues<T>> {
     if (tenantOfId(tenant) !== tenant || this.#chain(tenant).length !== 1) throw new AccessError("not-found", "no such tenant");
     return this.#writeSettings(new Writer(APP, tenant), this.#settingPatch(patch, false));
@@ -944,14 +1037,14 @@ export class AccessControl<P extends string, R extends string, S extends string,
     return out;
   }
 
-  #writeSettings(w: Writer, changes: [string, unknown][]): Out<SettingValues<T>> {
-    const values = () => this.#values(w.tenant) as SettingValues<T>;
+  #writeSettings(w: Writer, changes: [string, unknown][], at: string = w.tenant): Out<SettingValues<T>> {
+    const values = () => (at === w.tenant ? this.#values(w.tenant) : this.#scopeValues(at)) as SettingValues<T>;
     if (changes.length === 0) return (this.models.Member.isAsync ? Promise.resolve(values()) : values()) as Out<SettingValues<T>>;
     const now = this.#cfg.now();
     const Setting = this.models.Setting.as(w);
     const written = this.#atomic(function* () {
       for (const [key, value] of changes) {
-        const id = JSON.stringify([w.tenant, key]);
+        const id = JSON.stringify([at, key]);
         const encoded = JSON.stringify(value);
         if (yield* sub(Setting.get(id))) yield* sub(Setting.update((r) => r.id === id, { value: encoded, by: w.id, updated: now }));
         else yield* sub(Setting.create({ id, tenant: w.tenant, key, value: encoded, by: w.id, updated: now }));
@@ -1155,6 +1248,7 @@ export class AccessControl<P extends string, R extends string, S extends string,
       label: spec.label ?? key,
       default: spec.default,
       editable: spec.editable === true,
+      ...(spec.scoped === true ? { scoped: true } : {}),
       seats: key === this.#cfg.seats,
       ...(values ? { value: values[key] } : {}),
     }));
@@ -1190,12 +1284,18 @@ export interface ExplainedRole {
   canGive: string[];
 }
 
+interface StoredSettings {
+  root: Map<string, SettingRow>;
+  scoped: Map<string, Map<string, SettingRow>>;
+}
+
 export interface ExplainedSetting {
   key: string;
   type: "boolean" | "number" | "string";
   label: string;
   default: unknown;
   editable: boolean;
+  scoped?: boolean;
   seats: boolean;
   value?: unknown;
 }
@@ -1238,7 +1338,7 @@ export function explainText(report: AccessReport): string {
     lines.push("Settings:");
     const w = Math.max(...report.settings.map((s) => s.key.length));
     for (const s of report.settings) {
-      const tags = [s.editable ? "editable" : "set by the app", s.seats ? "seats" : ""].filter(Boolean);
+      const tags = [s.editable ? "editable" : "set by the app", s.scoped ? "per scope" : "", s.seats ? "seats" : ""].filter(Boolean);
       const now = "value" in s ? `, now ${JSON.stringify(s.value)}` : "";
       lines.push(`  ${s.key.padEnd(w)}  ${s.type}, default ${JSON.stringify(s.default)}${now} [${tags.join(", ")}]`);
     }

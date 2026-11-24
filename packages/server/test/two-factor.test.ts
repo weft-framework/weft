@@ -428,3 +428,23 @@ test("configuration is checked", () => {
   assert.throws(() => defineTwoFactor({ ...ok, lockMs: 10 }), /lockMs/);
   assert.throws(() => createApp({ secret: SECRET, routes: {}, auth: { twoFactor: { page: "//x", needed: () => false } } }), /twoFactor/);
 });
+
+test("an existing secret imported from another app signs in with its codes, once per user", async () => {
+  const env = setup();
+  const old = "JBSWY3DPEHPK3PXP";
+  assert.equal(await env.twoFactor.importSecret("ada", old.toLowerCase()), true);
+  assert.equal(await env.twoFactor.importSecret("ada", old), false, "already on");
+  await assert.rejects(env.twoFactor.importSecret("eve", "JBSWY3DP"), TwoFactorError, "too short");
+  await assert.rejects(env.twoFactor.importSecret("eve", "not base32!"), TwoFactorError);
+  assert.equal(await env.twoFactor.enabled("eve"), false);
+
+  const v = visitor(env.app);
+  assert.equal(await v.call("as", { id: "ada" }), "two-factor");
+  const code = await codeAt(env, old);
+  assert.equal(await v.call("verify", { code }), true);
+  assert.equal(await v.who(), "ada");
+  assert.deepEqual(await v.call("status"), { user: "ada", pending: false, enabled: true, required: true, mfa: true, recoveryLeft: 0 });
+  const w = visitor(env.app);
+  await w.call("as", { id: "ada" });
+  assert.equal(await w.call("verify", { code }), false, "replayed");
+});

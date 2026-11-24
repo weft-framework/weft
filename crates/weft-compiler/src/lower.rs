@@ -82,6 +82,58 @@ pub(crate) fn with_map(
     strip(&marked, src)
 }
 
+fn local_name(spec: &str) -> &str {
+    let spec = spec.trim();
+    let spec = spec.strip_prefix("type ").unwrap_or(spec).trim();
+    match spec.rsplit_once(" as ") {
+        Some((_, local)) => local.trim(),
+        None => spec,
+    }
+}
+
+pub(crate) fn is_async_derived(r: &crate::ast::Reactive) -> bool {
+    if r.kind != ReactiveKind::Derived {
+        return false;
+    }
+    let e = r.expr.trim_start();
+    e.strip_prefix("await")
+        .is_some_and(|rest| rest.starts_with(|c: char| c.is_whitespace() || c == '('))
+}
+
+fn runtime_imports(src: &str) -> std::collections::HashSet<String> {
+    let mut out = std::collections::HashSet::new();
+    for quote in ['"', '\''] {
+        let needle = format!("from {quote}@weft-framework/runtime{quote}");
+        let mut at = 0;
+        while let Some(i) = src[at..].find(&needle) {
+            let end = at + i;
+            at = end + needle.len();
+            let head = &src[..end];
+            let Some(close) = head.rfind('}') else {
+                continue;
+            };
+            let Some(open) = head[..close].rfind('{') else {
+                continue;
+            };
+            let before = head[..open].trim_end();
+            let before = before
+                .strip_suffix("type")
+                .map(str::trim_end)
+                .unwrap_or(before);
+            if !before.ends_with("import") || !head[close + 1..].trim().is_empty() {
+                continue;
+            }
+            for spec in head[open + 1..close].split(',') {
+                let name = local_name(spec);
+                if !name.is_empty() {
+                    out.insert(name.to_string());
+                }
+            }
+        }
+    }
+    out
+}
+
 fn lower_marked(src: &str, file: &SourceFile) -> String {
     let mut out = String::new();
 
@@ -143,6 +195,9 @@ fn lower_marked(src: &str, file: &SourceFile) -> String {
         if comps().any(|c| !c.reactives.is_empty()) {
             names.extend(["signal", "derived"]);
         }
+        if comps().any(|c| c.reactives.iter().any(|r| !r.client && is_async_derived(r))) {
+            names.push("asyncDerived");
+        }
         if comps().any(|c| {
             c.style.as_ref().is_some_and(|st| {
                 !crate::css::compile(&c.name, &st.css, st.offset)
@@ -159,12 +214,16 @@ fn lower_marked(src: &str, file: &SourceFile) -> String {
         if comps().any(|c| c.params.iter().any(|p| p.name == "children")) {
             names.push("type Html");
         }
-        out.push_str(&format!(
-            "import {{ {} }} from \"@weft-framework/runtime\";\n",
-            names.join(", ")
-        ));
+        let mine = runtime_imports(src);
+        names.retain(|n| !mine.contains(local_name(n)));
+        if !names.is_empty() {
+            out.push_str(&format!(
+                "import {{ {} }} from \"@weft-framework/runtime\";\n",
+                names.join(", ")
+            ));
+        }
     }
-    if has_store {
+    if has_store && !runtime_imports(src).contains("defineStore") {
         out.push_str("import { defineStore } from \"@weft-framework/runtime\";\n");
     }
     if has_model && has_file_field {
@@ -408,6 +467,8 @@ pub(crate) fn action_param_type(ty: &str) -> Option<(&'static str, bool)> {
         "string" => "string",
         "number" => "number",
         "boolean" => "boolean",
+        "File" => "file",
+        "Record<string,string>" if !list => "record",
         _ => return None,
     };
     Some((base, list))
@@ -915,6 +976,9 @@ fn lower_component(c: &Component, out: &mut String) {
         let at = mark_str(r.span.start);
         let decl = match r.kind {
             ReactiveKind::Signal => format!("{at}const {} = signal({init});", r.name),
+            ReactiveKind::Derived if is_async_derived(r) => {
+                format!("{at}const {} = asyncDerived(async () => {init});", r.name)
+            }
             ReactiveKind::Derived => format!("{at}const {} = derived(() => {init});", r.name),
         };
         members.push((r.span.start, &r.comments, decl));
@@ -1795,6 +1859,12 @@ fn lower_attr(attr: &Attr, scope: &Scope, out: &mut String) {
                     out.push_str("=\"");
                     out.push_str(&static_attr_value(&msg));
                     out.push('"');
+                } else if let Some(expr) = spec.confirm_expr() {
+                    out.push_str(" data-weft-confirm-");
+                    out.push_str(event);
+                    out.push_str("=\"${escapeAttr(String(");
+                    out.push_str(&rewrite_at(expr, scope, locate(attr.span, expr)));
+                    out.push_str("))}\"");
                 }
             }
             if let (Some(args), true) = (args, in_browser) {
@@ -2876,6 +2946,114 @@ mod tests {
         assert_eq!(split_handler("a(b)(c)"), None);
         assert_eq!(split_handler("() => x"), None);
         assert_eq!(split_handler("a.b"), None);
+    }
+
+    #[test]
+    fn runtime_names_the_file_imports_are_not_imported_twice() {
+        let src = "import { trustHtml, escapeHtml as esc, type Html } from \"@weft-framework/runtime\";\ncomponent Card(children: Html) {\n  view { <div>{children}</div> }\n}\ncomponent C(name: string) {\n  view { <Card><p>{trustHtml(esc(name))}</p></Card> }\n}";
+        let out = lower_src(src);
+        let generated = out
+            .lines()
+            .find(|l| l.starts_with("import { defineComponent"))
+            .unwrap_or_else(|| panic!("got:\n{out}"));
+        assert!(!generated.contains("trustHtml"), "got:\n{out}");
+        assert!(!generated.contains("type Html"), "got:\n{out}");
+        assert!(
+            generated.contains("escapeHtml"),
+            "a different local name is not the same binding:\n{out}"
+        );
+        assert!(out.contains("import { trustHtml, escapeHtml as esc, type Html } from \"@weft-framework/runtime\";"), "got:\n{out}");
+        assert_eq!(
+            runtime_imports(
+                "import type { Html } from '@weft-framework/runtime'\nimport { x } from \"./x\""
+            ),
+            ["Html".to_string()].into_iter().collect()
+        );
+    }
+
+    #[test]
+    fn derived_values_may_await() {
+        let src = "component Page() {\n  signal n = 1\n  derived row = await load(n)\n  derived awaited = awaitable(n)\n  client signal q = \"\"\n  client derived hits = await Promise.resolve(q.length)\n  view { <p>{row}{awaited}{hits}</p> }\n}\nasync function load(n: number) { return n }\nfunction awaitable(n: number) { return n }\n";
+        let out = lower_src(src);
+        assert!(
+            out.contains("const row = asyncDerived(async () => await load(n.value));"),
+            "{out}"
+        );
+        assert!(
+            out.contains("const awaited = derived(() => awaitable(n.value));"),
+            "{out}"
+        );
+        assert!(out.contains(", asyncDerived }"), "{out}");
+        let island = crate::island::lower_client(&parse(src).0).unwrap_or_default();
+        assert!(
+            island.contains("import { defineIsland, signal, derived, asyncDerived }"),
+            "{island}"
+        );
+        assert!(
+            island.contains(
+                "const hits = asyncDerived(async () => await Promise.resolve(q.value.length));"
+            ),
+            "{island}"
+        );
+        let plain = lower_src(
+            "component P() {\n  signal n = 1\n  derived d = n + 1\n  view { <p>{d}</p> }\n}\n",
+        );
+        assert!(!plain.contains("asyncDerived"), "{plain}");
+    }
+
+    #[test]
+    fn component_functions_may_be_async() {
+        let src = "component Page() {\n  signal status = \"\"\n  client signal open = false\n  async function save() {\n    const r = await fetch(\"/x\")\n    status = r.ok ? \"saved\" : \"failed\"\n  }\n  client async function toggle() {\n    await Promise.resolve()\n    open = !open\n  }\n  view { <div><button @click={save}>{status}</button><button @click={toggle}>{open}</button></div> }\n}\n";
+        let out = lower_src(src);
+        assert!(out.contains("async function save()"), "{out}");
+        assert!(out.contains("status.value = r.ok"), "{out}");
+        let island = crate::island::lower_client(&parse(src).0).unwrap_or_default();
+        assert!(island.contains("async function toggle()"), "{island}");
+    }
+
+    #[test]
+    fn record_action_params_lower_to_record_specs() {
+        let out = lower_src("action save(vars: Record<string, string>) {}\n");
+        assert!(
+            out.contains("{ name: \"vars\", type: \"record\" }"),
+            "{out}"
+        );
+        assert_eq!(action_param_type("Record<string, string>[]"), None);
+        assert_eq!(action_param_type("Record<string, number>"), None);
+    }
+
+    #[test]
+    fn file_action_params_lower_to_file_specs() {
+        let out = lower_src("action up(doc: File, more: File[]) {}\n");
+        assert!(out.contains("{ name: \"doc\", type: \"file\" }"), "{out}");
+        assert!(
+            out.contains("{ name: \"more\", type: \"file\", list: true }"),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn confirm_messages_may_be_expressions() {
+        let src = "component C(label: string, t: (k: string) => string) {
+  function drop() { }
+  view {
+    <button @click.confirm(t(\"items.delete\"))={drop}>x</button>
+    <button @click.confirm(label)={drop}>y</button>
+  }
+}";
+        let out = lower_src(src);
+        assert!(
+            out.contains(
+                "data-weft-confirm-click=\"${escapeAttr(String(props.t(\"items.delete\")))}\""
+            ),
+            "got:
+{out}"
+        );
+        assert!(
+            out.contains("data-weft-confirm-click=\"${escapeAttr(String(props.label))}\""),
+            "got:
+{out}"
+        );
     }
 
     #[test]

@@ -1,10 +1,10 @@
 import type { SqlDatabase } from "@weft-framework/data";
-import { authState, login, signOutUser, type LoginResult } from "./auth.ts";
+import { authState, login, signOutEverywhere, signOutUser, type LoginResult } from "./auth.ts";
 import type { PageContext } from "./context.ts";
 import { normalizeEmail } from "./email-signin.ts";
 
 import { seal, unseal } from "./seal.ts";
-import { base64url, RateLimiter } from "./security.ts";
+import { base64url, RateLimit, type RateLimitStore } from "./security.ts";
 
 type Maybe<T> = T | Promise<T>;
 
@@ -119,6 +119,7 @@ export interface AccountOptions {
   findUser(email: string): Maybe<string | null | undefined>;
   emailOf(user: string): Maybe<string | null | undefined>;
   setPassword?(user: string, hash: string): Maybe<void>;
+  passwordOf?(user: string): Maybe<string | null | undefined>;
   setEmail?(user: string, email: string): Maybe<void>;
   resetPage?: string;
   emailPage?: string;
@@ -133,6 +134,7 @@ export interface AccountOptions {
   allowSignUp?(email: string, ctx: PageContext): Maybe<boolean | string>;
   clientKey?(ctx: PageContext): string | null | undefined;
   perClient?: number;
+  limits?: RateLimitStore;
   minFormMs?: number;
   signUpPage?: string;
   verifyPage?: string;
@@ -165,9 +167,9 @@ export class Account {
   readonly #resetTtl: number;
   readonly #emailTtl: number;
   readonly #minLength: number;
-  readonly #byEmail: RateLimiter;
-  readonly #bySession: RateLimiter;
-  readonly #byClient: RateLimiter;
+  readonly #byEmail: RateLimit;
+  readonly #bySession: RateLimit;
+  readonly #byClient: RateLimit;
   readonly #minForm: number;
   readonly #signUpPage: string;
   readonly #verifyPage: string;
@@ -203,10 +205,10 @@ export class Account {
     this.#minLength = range("minPasswordLength", o.minPasswordLength ?? 10, 8, 128);
     const perEmail = range("perEmail", o.perEmail ?? 3, 1, 100);
     const perSession = range("perSession", o.perSession ?? 10, 1, 1000);
-    this.#byEmail = new RateLimiter({ capacity: perEmail, refillPerSecond: perEmail / 3600 });
-    this.#bySession = new RateLimiter({ capacity: perSession, refillPerSecond: perSession / 3600 });
+    this.#byEmail = new RateLimit("account.email", { capacity: perEmail, refillPerSecond: perEmail / 3600 }, o.limits);
+    this.#bySession = new RateLimit("account.session", { capacity: perSession, refillPerSecond: perSession / 3600 }, o.limits);
     const perClient = range("perClient", o.perClient ?? 20, 1, 10_000);
-    this.#byClient = new RateLimiter({ capacity: perClient, refillPerSecond: perClient / 3600 });
+    this.#byClient = new RateLimit("account.client", { capacity: perClient, refillPerSecond: perClient / 3600 }, o.limits);
     this.#minForm = range("minFormMs", o.minFormMs ?? 2000, 0, 60_000);
     this.#signUpPage = safePath(o.signUpPage ?? "/sign-up/confirm", "signUpPage");
     this.#verifyPage = safePath(o.verifyPage ?? "/verify-email", "verifyPage");
@@ -214,7 +216,7 @@ export class Account {
   }
 
   async requestPasswordReset(ctx: PageContext, email: string): Promise<void> {
-    const address = this.#limit(ctx, email);
+    const address = await this.#limit(ctx, email);
     const user = await this.#o.findUser(address);
     if (typeof user !== "string" || user === "") return;
     await this.#issue({ kind: "reset", user, email: address, ttl: this.#resetTtl, page: this.#resetPage, message: "password-reset" });
@@ -241,9 +243,32 @@ export class Account {
     return true;
   }
 
+  async changePassword(ctx: PageContext, current: string, next: string): Promise<void> {
+    if (typeof this.#o.setPassword !== "function" || typeof this.#o.passwordOf !== "function") {
+      throw new Error("defineAccount: changing passwords needs `setPassword` and `passwordOf`");
+    }
+    const me = await this.#signedIn(ctx);
+    const now = this.#now();
+    if (!(await this.#bySession.take(ctx.session, now)) || !(await this.#bySession.take(`password:${me}`, now))) {
+      throw new AccountError("limit", "Too many attempts; try again later");
+    }
+    const { hashPassword, verifyPassword } = await import("./password.ts");
+    const stored = await this.#o.passwordOf(me);
+    if (typeof current !== "string" || !(await verifyPassword(current, stored ?? null))) {
+      throw new AccountError("refused", "The current password is not correct");
+    }
+    await this.#checkPassword(next, me);
+    if (next === current) throw new AccountError("weak", "Choose a password you do not use already");
+    await this.#o.setPassword(me, await hashPassword(next));
+    await this.#store.clear(me, "reset");
+    await signOutEverywhere(ctx, { keepThis: true });
+    const to = normalizeEmail(await this.#o.emailOf(me));
+    if (to) await this.#o.send({ kind: "password-changed", to });
+  }
+
   async requestEmailChange(ctx: PageContext, email: string): Promise<void> {
     const me = await this.#signedIn(ctx);
-    const address = this.#limit(ctx, email);
+    const address = await this.#limit(ctx, email);
     if (normalizeEmail(await this.#o.emailOf(me)) === address) {
       throw new AccountError("invalid", "That is already the account's address");
     }
@@ -283,10 +308,10 @@ export class Account {
     const password = input.password ?? null;
     if (password !== null) await this.#checkPassword(password, "");
     const client = this.#o.clientKey?.(ctx);
-    if (typeof client === "string" && client !== "" && !this.#byClient.take(client, this.#now())) {
+    if (typeof client === "string" && client !== "" && !(await this.#byClient.take(client, this.#now()))) {
       throw new AccountError("limit", "Too many requests; try again later");
     }
-    const address = this.#limit(ctx, input.email);
+    const address = await this.#limit(ctx, input.email);
     if (this.#o.allowSignUp) {
       const ok = await this.#o.allowSignUp(address, ctx);
       if (ok !== true) throw new AccountError("refused", typeof ok === "string" && ok !== "" ? ok : "This address cannot sign up");
@@ -319,7 +344,7 @@ export class Account {
   async requestVerification(ctx: PageContext): Promise<void> {
     if (typeof this.#o.markVerified !== "function") throw new Error("defineAccount: verification needs `markVerified`");
     const me = await this.#signedIn(ctx);
-    const address = this.#limit(ctx, (await this.#o.emailOf(me)) ?? "");
+    const address = await this.#limit(ctx, (await this.#o.emailOf(me)) ?? "");
     await this.#issue({ kind: "verify", user: me, email: address, ttl: this.#signUpTtl, page: this.#verifyPage, message: "verify-email" });
   }
 
@@ -334,11 +359,11 @@ export class Account {
     return true;
   }
 
-  #limit(ctx: PageContext, email: string): string {
+  async #limit(ctx: PageContext, email: string): Promise<string> {
     const address = normalizeEmail(email);
     if (!address) throw new AccountError("invalid", "That is not an email address");
     const now = this.#now();
-    if (!this.#bySession.take(ctx.session, now) || !this.#byEmail.take(address, now)) {
+    if (!(await this.#bySession.take(ctx.session, now)) || !(await this.#byEmail.take(address, now))) {
       throw new AccountError("limit", "Too many requests; try again later");
     }
     return address;

@@ -7,4 +7,5 @@ export interface PageContext {
   query: URLSearchParams;
   session: string;
   user: unknown;
+  clientAddress?: string | null;
 }

@@ -533,6 +533,14 @@ export interface Schedule {
   as?: JobActor;
 }
 
+export interface ScheduleInfo {
+  name: string;
+  cron: string;
+  job: string;
+  next: number;
+  as: JobActor | null;
+}
+
 export interface JobProgressRow {
   id: string;
   user: string;
@@ -590,7 +598,7 @@ export class Jobs {
   readonly #now: () => number;
   readonly #random: () => number;
   readonly #worker = randomId();
-  readonly #schedules: { name: string; cron: Cron; job: Job<unknown[]>; args: unknown[]; as: JobActor | null; next: number }[] = [];
+  readonly #schedules: { name: string; expression: string; cron: Cron; job: Job<unknown[]>; args: unknown[]; as: JobActor | null; next: number }[] = [];
   readonly #running = new Set<Promise<void>>();
   #timer: ReturnType<typeof setTimeout> | null = null;
   #started = false;
@@ -638,7 +646,7 @@ export class Jobs {
       if (names.has(name)) throw new Error(`createJobs: two schedules are called ${name} (give one a name)`);
       names.add(name);
       const cron = parseCron(s.cron);
-      this.#schedules.push({ name, cron, job: s.job as Job<unknown[]>, args: this.#args(s.job as Job<unknown[]>, s.args ?? {}), as: s.as ?? null, next: cron.next(now) });
+      this.#schedules.push({ name, expression: s.cron.trim(), cron, job: s.job as Job<unknown[]>, args: this.#args(s.job as Job<unknown[]>, s.args ?? {}), as: s.as ?? null, next: cron.next(now) });
     }
   }
 
@@ -684,6 +692,17 @@ export class Jobs {
 
   names(): string[] {
     return [...this.#jobs.keys()];
+  }
+
+  schedules(): ScheduleInfo[] {
+    return this.#schedules.map((s) => ({ name: s.name, cron: s.expression, job: s.job.name, next: s.next, as: s.as }));
+  }
+
+  runSchedule(name: string): Promise<string | false> {
+    const s = this.#schedules.find((x) => x.name === name);
+    if (!s) return Promise.reject(new Error(`jobs: no schedule called ${String(name).slice(0, 64)}`));
+    const now = this.#now();
+    return this.#add(s.job, s.args, s.as, now, `cron:${s.name}:now:${now}`, true);
   }
 
   #track(id: string, patch: Partial<Pick<JobProgressRow, "status" | "progress">>): void {

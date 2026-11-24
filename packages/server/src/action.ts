@@ -3,7 +3,10 @@ import type { PageContext } from "./context.ts";
 export { Redirect, redirect } from "./live.ts";
 export type { PageContext };
 
-export type ParamType = "string" | "number" | "boolean";
+export type ParamType = "string" | "number" | "boolean" | "file" | "record";
+
+const RECORD_KEYS = 200;
+const RECORD_KEY = /^[^\[\]\u0000-\u001f]{1,200}$/;
 
 export interface ParamSpec {
   name: string;
@@ -54,6 +57,9 @@ export function defineAction<A extends unknown[], R>(
     seen.add(p.name);
   }
   const held = heldCount(params);
+  if (params.slice(0, held).some((p) => p.type === "file")) {
+    throw new Error(`@weft-framework/server: action ${name}: a held parameter cannot be a file`);
+  }
   if (params.slice(held).some((p) => p.held) || params.slice(0, held).some((p) => p.optional)) {
     throw new Error(`@weft-framework/server: action ${name}: held parameters come first and are never optional`);
   }
@@ -89,7 +95,28 @@ export type Decoded = { ok: true; args: unknown[] } | { ok: false; error: string
 export function decodeForm(params: readonly ParamSpec[], form: FormData | URLSearchParams): Decoded {
   const args: unknown[] = [];
   for (const p of params) {
+    if (p.type === "record") {
+      const rec = decodeRecord(p.name, form);
+      if (typeof rec === "string") return { ok: false, error: rec };
+      args.push(rec);
+      continue;
+    }
     const raw = form.getAll(p.name);
+    if (p.type === "file") {
+      if (raw.some((v) => typeof v === "string")) {
+        return { ok: false, error: `${p.name}: expected a file upload` };
+      }
+      const files = (raw as unknown as File[]).filter((f) => f.size > 0 || f.name !== "");
+      if (p.list) {
+        args.push(files);
+      } else if (files.length === 0) {
+        if (!p.optional) return { ok: false, error: `${p.name} is required` };
+        args.push(undefined);
+      } else {
+        args.push(files[0]);
+      }
+      continue;
+    }
     if (raw.some((v) => typeof v !== "string")) {
       return { ok: false, error: `${p.name}: files are not accepted` };
     }
@@ -129,8 +156,34 @@ export function decodeForm(params: readonly ParamSpec[], form: FormData | URLSea
 
 const INVALID = Symbol("invalid");
 
+function decodeRecord(name: string, form: FormData | URLSearchParams): Record<string, string> | string {
+  const out: Record<string, string> = {};
+  const seen = new Set<string>();
+  const prefix = `${name}[`;
+  for (const [field, value] of form.entries()) {
+    if (!field.startsWith(prefix) || !field.endsWith("]")) continue;
+    const key = field.slice(prefix.length, -1);
+    if (!RECORD_KEY.test(key)) return `${name}: invalid key`;
+    if (typeof value !== "string") return `${name}: files are not accepted`;
+    if (seen.has(key)) return `${name}[${key}] is given twice`;
+    seen.add(key);
+    if (seen.size > RECORD_KEYS) return `${name}: at most ${RECORD_KEYS} entries`;
+    Object.defineProperty(out, key, { value, enumerable: true, writable: true, configurable: true });
+  }
+  return out;
+}
+
+function isRecord(v: unknown): v is Record<string, string> {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return false;
+  const entries = Object.entries(v);
+  return entries.length <= RECORD_KEYS && entries.every(([k, x]) => RECORD_KEY.test(k) && typeof x === "string");
+}
+
 function fromString(p: ParamSpec, v: string): unknown {
   switch (p.type) {
+    case "file":
+    case "record":
+      return INVALID;
     case "string":
       return v;
     case "number": {
@@ -156,6 +209,9 @@ export function decodeJson(params: readonly ParamSpec[], body: unknown): Decoded
   const args: unknown[] = [];
   for (const p of params) {
     const v = Object.hasOwn(obj, p.name) ? obj[p.name] : undefined;
+    if (p.type === "file" && v !== undefined && v !== null) {
+      return { ok: false, error: `${p.name}: files are sent as a multipart form, not JSON` };
+    }
     if (v === undefined || v === null) {
       if (!p.optional) {
         return { ok: false, error: `${p.name} is required` };
@@ -173,5 +229,7 @@ export function decodeJson(params: readonly ParamSpec[], body: unknown): Decoded
 }
 
 function isType(t: ParamType, v: unknown): boolean {
+  if (t === "file") return false;
+  if (t === "record") return isRecord(v);
   return t === "number" ? typeof v === "number" && Number.isFinite(v) : typeof v === t;
 }

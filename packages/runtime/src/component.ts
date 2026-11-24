@@ -87,6 +87,10 @@ export interface RenderContext {
 let current: RenderContext | null = null;
 setHeldSealer((action, args) => (current?.sealArgs ? current.sealArgs(action, args) : null));
 
+export function renderAwaiting(): void {
+  current?.awaiting?.();
+}
+
 export function withRenderContext<T>(ctx: RenderContext | null, fn: () => T): T {
   const prev = current;
   current = ctx;

@@ -12,14 +12,21 @@ export interface ThemeConfig<N extends string> {
   cookie?: string;
 }
 
+export interface ThemeOverrides<N extends string = string> {
+  shared?: Record<string, string>;
+  themes?: Partial<Record<N, Record<string, string>>>;
+}
+
 export interface Theme<N extends string = string> {
   readonly names: readonly N[];
+  readonly tokens: readonly string[];
   readonly cookie: string;
   readonly default: N | "system";
   css(): string;
   tailwind(): string;
   fromRequest(req: Request): N | "system";
   htmlAttributes(req: Request): Record<string, string>;
+  overrides(o: ThemeOverrides<N> | null | undefined): string;
 }
 
 export class ThemeError extends Error {}
@@ -85,8 +92,17 @@ export function defineTheme<N extends string>(config: ThemeConfig<N>): Theme<N> 
   const tokenNames = [...new Set([...Object.keys(shared), ...names.flatMap((n) => Object.keys(config.themes[n].tokens))])];
   const darkNames = names.filter((n) => config.themes[n].scheme === "dark");
 
+  const known = new Set(tokenNames);
+  const checkKnown = (where: string, tokens: Record<string, string>) => {
+    checkTokens(where, tokens);
+    for (const name of Object.keys(tokens)) {
+      if (!known.has(name)) throw new ThemeError(`${where}: ${JSON.stringify(name)} is not a token of this theme`);
+    }
+  };
+
   return Object.freeze({
     names,
+    tokens: Object.freeze([...tokenNames]),
     cookie,
     default: fallback,
     css() {
@@ -132,6 +148,29 @@ export function defineTheme<N extends string>(config: ThemeConfig<N>): Theme<N> 
     },
     htmlAttributes(req: Request): Record<string, string> {
       return { "data-theme": this.fromRequest(req) };
+    },
+    overrides(o: ThemeOverrides<N> | null | undefined): string {
+      if (o === null || o === undefined) return "";
+      if (typeof o !== "object") throw new ThemeError("theme overrides: an object of shared and per-theme tokens");
+      const sharedOver = o.shared ?? {};
+      checkKnown("overrides.shared", sharedOver);
+      const per = (o.themes ?? {}) as Partial<Record<string, Record<string, string>>>;
+      for (const [n, tokens] of Object.entries(per)) {
+        if (!(names as string[]).includes(n)) throw new ThemeError(`overrides.themes: ${JSON.stringify(n)} is not a theme`);
+        checkKnown(`overrides.themes.${n}`, tokens ?? {});
+      }
+      const of = (n: N) => ({ ...sharedOver, ...(per[n] ?? {}) });
+      const blocks: string[] = [];
+      const add = (selector: string, tokens: Record<string, string>) => {
+        if (Object.keys(tokens).length > 0) blocks.push(block(selector, tokens));
+      };
+      add(":root:root", of(config.light));
+      for (const n of names) add(`:root:root[data-theme="${n}"]`, of(n));
+      const dark = of(config.dark);
+      if (Object.keys(dark).length > 0) {
+        blocks.push(`@media (prefers-color-scheme: dark) {\n${block(':root:root:not([data-theme]), :root:root[data-theme="system"]', dark)}}\n`);
+      }
+      return blocks.join("");
     },
   });
 }

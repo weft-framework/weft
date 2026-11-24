@@ -16,6 +16,7 @@ import { randomId, securityHeaders } from "./security.ts";
 import { ModelStorage } from "./storage.ts";
 import type { Model } from "@weft-framework/data";
 import { DEV_CLIENT_JS, DevEvents } from "./dev-events.ts";
+import { DEV_RESTART_CODE, linkedPackages, watchedChange } from "./workspace.ts";
 
 function pick(mod: Record<string, unknown>, name: string | undefined, file: string): Component<object> | null {
   const comps = Object.entries(mod).filter(
@@ -188,6 +189,11 @@ async function main(): Promise<void> {
       storage.close();
       events.close();
     },
+    socket: async (req) => (app?.socket ? app.socket(req) : new Response(null, { status: 503 })),
+    socketRoute: (sock, accepted) => {
+      if (!app?.socketRoute) throw new Error("[weft] no build");
+      return app.socketRoute(sock, accepted);
+    },
     websocket: {
       open: (ws) => (app ? app.websocket.open(ws) : ws.close(1013, "no build")),
       message: async (ws, data) => app?.websocket.message(ws, data),
@@ -243,6 +249,30 @@ async function main(): Promise<void> {
       if (statSync(file, { throwIfNoEntry: false })?.isFile()) {
         watch(file, () => schedule("build"));
       }
+    }
+    const linked = process.env.WEFT_DEV_RESTART === "1" ? linkedPackages(root) : [];
+    let restarting = false;
+    const restart = (name: string) => {
+      if (restarting) {
+        return;
+      }
+      restarting = true;
+      console.log(`[weft] ${name} changed; restarting`);
+      const stop = Promise.race([
+        server.close().then(() => devApp.close()),
+        new Promise((done) => setTimeout(done, 1500).unref()),
+      ]);
+      void stop.finally(() => process.exit(DEV_RESTART_CODE));
+    };
+    for (const pkg of linked) {
+      watch(pkg.dir, { recursive: true }, (_event, file) => {
+        if (watchedChange(file === null ? null : String(file))) {
+          restart(pkg.name);
+        }
+      });
+    }
+    if (linked.length > 0) {
+      console.log(`[weft] watching linked packages: ${linked.map((p) => p.name).join(", ")}`);
     }
   }
 }

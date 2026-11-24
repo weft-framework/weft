@@ -303,3 +303,22 @@ test("configuration is checked", () => {
   assert.throws(() => createJobs({ jobs: [j], schedule: [{ cron: "nope", job: j }] }), /cron/);
   assert.throws(() => createJobs({ jobs: [j], schedule: [{ cron: "* * * * *", job: j }, { cron: "0 * * * *", job: j }] }), /two schedules/);
 });
+
+test("schedules are listed with their next run and can be run now", async () => {
+  const h = harness();
+  const clock = T0;
+  const jobs = createJobs({
+    jobs: [h.report],
+    schedule: [{ name: "nightly", cron: " 0 3 * * * ", job: h.report }],
+    now: () => clock,
+    onError: (e) => h.errors.push(e),
+  });
+  assert.deepEqual(jobs.schedules(), [{ name: "nightly", cron: "0 3 * * *", job: "report", next: Date.UTC(2026, 10, 15, 3, 0, 0), as: null }]);
+  const id = await jobs.runSchedule("nightly");
+  assert.equal(typeof id, "string");
+  await jobs.drain();
+  assert.equal(h.runs.length, 1, "ran now, outside its slot");
+  assert.equal(jobs.schedules()[0]!.next, Date.UTC(2026, 10, 15, 3, 0, 0), "the next slot is unchanged");
+  await assert.rejects(jobs.runSchedule("weekly"), /no schedule called weekly/);
+  assert.equal(h.errors.length, 0);
+});

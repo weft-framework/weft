@@ -375,6 +375,19 @@ export class TwoFactor implements SecondFactor {
     return codes;
   }
 
+  async importSecret(user: string, secret: string, o: { created?: number } = {}): Promise<boolean> {
+    if (typeof user !== "string" || user === "") throw new TypeError("twoFactor.importSecret: needs a user id");
+    const bytes = typeof secret === "string" ? fromBase32(secret) : null;
+    if (!bytes || bytes.length < 10 || bytes.length > 64) {
+      throw new TwoFactorError("invalid", "Not a two-factor secret: base32 of 10 to 64 bytes");
+    }
+    const created = o.created ?? this.#now();
+    if (!Number.isSafeInteger(created) || created < 0) throw new TypeError("twoFactor.importSecret: `created` is a timestamp in ms");
+    return Boolean(
+      await this.#store.add({ user, secret: await this.#encrypt(user, bytes), lastStep: -1, failures: 0, lockedUntil: 0, created }),
+    );
+  }
+
   async verify(ctx: PageContext, code: string): Promise<boolean> {
     const s = await authState(ctx);
     if (!s || !s.pending) throw new TwoFactorError("signed-out", "No sign-in is waiting for a code");

@@ -1,4 +1,6 @@
+import { mkdirSync } from "node:fs";
 import type { Broadcast } from "./bridge.ts";
+import { isBuildPhase } from "./phase.ts";
 import type { FilterNode } from "./filter.ts";
 import type { AsyncDriver, Model, Scope } from "./model.ts";
 import { policyToSql, type SqlValue } from "./policy.ts";
@@ -476,6 +478,7 @@ export interface UsePostgresOptions extends MigrateOptions {
 
 export async function usePostgres(pool: PgPool, models: Model<never>[], opts: UsePostgresOptions = {}): Promise<MigrationPlan> {
   const list = models as unknown as Model<unknown>[];
+  if (isBuildPhase()) return { steps: [], warnings: [], rebuilt: [] };
   let plan: MigrationPlan;
   if (opts.migrate === false) {
     const client = await pool.connect();
@@ -527,7 +530,15 @@ function isMemory(database: string): boolean {
   return database === "pglite:" || database === "pglite:memory";
 }
 
+const BUILD_REFUSAL = "the database is not opened during `weft build`; query it from load(), actions or startup hooks, not at module top level";
+
+function buildPool(): ClosablePgPool {
+  const refuse = () => Promise.reject(new Error(BUILD_REFUSAL));
+  return { query: refuse, connect: refuse, end: () => Promise.resolve() } as unknown as ClosablePgPool;
+}
+
 export async function openPostgres(database: string): Promise<ClosablePgPool> {
+  if (isBuildPhase()) return buildPool();
   if (isMemory(database)) return openPool(database);
   const pools = sharedPools();
   let shared = pools.get(database);
@@ -571,6 +582,7 @@ async function openPool(database: string): Promise<ClosablePgPool> {
     const dir = database.slice("pglite:".length);
     const mod = await optional("@electric-sql/pglite", "a pglite: database");
     const PGlite = mod.PGlite as new (dataDir?: string) => PgliteLike & { close(): Promise<void> };
+    if (dir !== "" && dir !== "memory" && !dir.includes("://")) mkdirSync(dir, { recursive: true });
     const db = new PGlite(dir === "" || dir === "memory" ? undefined : dir);
     return Object.assign(pgliteAsPool(db), { end: () => db.close() });
   }

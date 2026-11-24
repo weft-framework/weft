@@ -95,3 +95,33 @@ test("consent is checked when the model is defined, and fails closed", () => {
   assert.equal(M.as({ id: "ada" }).get("1")!.x, null, "a purpose nobody defined hides the field");
   assert.throws(() => defineSearch(M, { fields: { x: 1 } }), /own read rule/);
 });
+
+test("consent works on Postgres: answers are awaited, field rules read the replica", async () => {
+  const { PGlite } = await import("@electric-sql/pglite");
+  const { pgliteAsPool, usePostgres } = await import("../src/postgres.ts");
+  const n = uniq();
+  const a = `analytics${n}`;
+  const consent = defineConsent({ purposes: [a], name: `PgConsent${n}`, now: () => 5 });
+  const Visit = defineModel<{ id: string; owner: string; device: string | null }>(`PgVisit${n}`, {
+    fields: { id: "string", owner: "string", device: "string | null" },
+    attrs: { device: { consent: a } },
+    read: () => true,
+    write: () => true,
+  });
+  await usePostgres(pgliteAsPool(new PGlite()), [consent.model, Visit] as never, { onWarning: () => {} });
+  await Visit.as({ id: "ada" }).create({ id: "v1", owner: "ada", device: "phone" });
+  const ada = { id: "ada" };
+  assert.deepEqual((await Visit.as(ada).all()).map((v) => v.device), [null]);
+  assert.deepEqual(await consent.of(ada), { [a]: false });
+  const pending = consent.agree(ada, a);
+  assert.ok(pending instanceof Promise, "writes are awaited on Postgres");
+  await pending;
+  assert.equal(consent.has("ada", a), true, "the policy check reads the replica synchronously");
+  assert.deepEqual(await consent.of(ada), { [a]: true });
+  assert.deepEqual((await Visit.as(ada).all()).map((v) => v.device), ["phone"]);
+  await consent.agree(ada, a);
+  await consent.withdraw(ada, a);
+  assert.equal(consent.has("ada", a), false);
+  assert.deepEqual((await Visit.as(ada).all()).map((v) => v.device), [null]);
+  await assert.rejects(Promise.resolve().then(() => consent.agree(readOnlyActor(ada), a)), /refused/);
+});

@@ -7,11 +7,14 @@ import {
   styleOf,
   untrack,
   withRenderContext,
+  withResourceHost,
   type Component,
   type ComponentDef,
   type EventMessage,
   type Instance,
   type RenderContext,
+  type ResourceHost,
+  type ResourceHostFactory,
   type ServerMessage,
   type Signal,
 } from "@weft-framework/runtime";
@@ -101,6 +104,7 @@ interface Rec {
   ms: number;
   path: string;
   signals: Signal<unknown>[];
+  resources: ResourceHost[];
 }
 
 export type PageState = [path: string, name: string, count: number, values: [number, unknown][]][];
@@ -135,6 +139,7 @@ export interface LivePageOptions {
   restore?: PageState;
   sealArgs?(action: string, args: readonly unknown[]): string;
   onInvalidate?(): void;
+  resource?: ResourceHostFactory;
 }
 
 export class LivePage {
@@ -362,7 +367,18 @@ export class LivePage {
       throw new Error(`@weft-framework/server: live page exceeded ${max} component instances`);
     }
     const live = { ...props };
-    const made = collectSignals(() => def.setup(live));
+    const hosts: ResourceHost[] = [];
+    const factory = this.opts.resource;
+    const made = withResourceHost(
+      factory
+        ? (rerun) => {
+            const h = factory(rerun);
+            hosts.push(h);
+            return h;
+          }
+        : null,
+      () => collectSignals(() => def.setup(live)),
+    );
     const saved = this.restoring.get(path);
     if (saved) {
       this.restoring.delete(path);
@@ -387,6 +403,7 @@ export class LivePage {
       inst: made.value,
       path,
       signals: made.signals,
+      resources: hosts,
       args: argTable(),
       children: new Map(),
       template: "",
@@ -408,6 +425,14 @@ export class LivePage {
     rec.untrack?.();
     rec.untrack = undefined;
     const report = (err: unknown) => this.opts.onError?.(err);
+    for (const h of rec.resources) {
+      try {
+        h.dispose();
+      } catch (err) {
+        report(err);
+      }
+    }
+    rec.resources = [];
     runHooks(rec.cleanups, report);
     rec.cleanups = [];
     runHooks(rec.inst.destroy, report);

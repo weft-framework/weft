@@ -759,10 +759,12 @@ impl<'a> Checker<'a> {
             }
             if attr.name.eq_ignore_ascii_case("srcdoc")
                 && matches!(attr.value, Some(AttrValue::Expr(_)))
+                && !script_free_sandbox(e)
             {
                 self.error(
                     "`srcdoc` takes HTML, so a dynamic value could run script; \
-                     use a static string, or `src` with a sandboxed URL",
+                     add a static `sandbox` without `allow-scripts`, use a static string, \
+                     or `src` with a sandboxed URL",
                     attr.span,
                 );
             }
@@ -1138,11 +1140,27 @@ impl<'a> Checker<'a> {
                     p.span,
                 );
             }
-            if crate::lower::action_param_type(&p.ty).is_none() {
+            let file = matches!(crate::lower::action_param_type(&p.ty), Some(("file", _)));
+            if file && (a.job || crate::lower::held_param(&p.ty).is_some()) {
+                self.error(
+                    format!(
+                        "{what} parameter `{}: {}` cannot be a file; {}",
+                        p.name,
+                        p.ty,
+                        if a.job {
+                            "store the upload first and pass its key"
+                        } else {
+                            "held values are signed into the page, not uploaded"
+                        }
+                    ),
+                    p.span,
+                );
+            } else if crate::lower::action_param_type(&p.ty).is_none() {
                 self.error(
                     format!(
                         "{what} parameter `{}: {}` cannot be decoded from {}; use \
-                         `string`, `number`, `boolean` or an array of one (`T[]`)",
+                         `string`, `number`, `boolean`, `File`, an array of one (`T[]`) \
+                         or `Record<string, string>`",
                         p.name,
                         p.ty,
                         if a.job { "stored JSON" } else { "a form" }
@@ -1519,6 +1537,27 @@ impl<'a> Checker<'a> {
                 Span::new(start, start + name.len()),
             );
         }
+    }
+}
+
+fn script_free_sandbox(e: &Element) -> bool {
+    let spread = e.attrs.iter().any(|a| a.kind == AttrKind::Spread);
+    if spread || !e.name.eq_ignore_ascii_case("iframe") {
+        return false;
+    }
+    let mut sandboxes = e
+        .attrs
+        .iter()
+        .filter(|a| a.kind == AttrKind::Plain && a.name.eq_ignore_ascii_case("sandbox"));
+    let (Some(sandbox), None) = (sandboxes.next(), sandboxes.next()) else {
+        return false;
+    };
+    match &sandbox.value {
+        None => true,
+        Some(AttrValue::Str(tokens)) => !tokens
+            .split_ascii_whitespace()
+            .any(|t| t.eq_ignore_ascii_case("allow-scripts")),
+        Some(AttrValue::Expr(_)) => false,
     }
 }
 
@@ -2445,6 +2484,24 @@ mod tests {
     }
 
     #[test]
+    fn actions_take_file_uploads_but_jobs_and_held_values_do_not() {
+        let ok = errors("action up(doc: File, more: File[], logo?: File) {}\n");
+        assert!(ok.is_empty(), "{ok:?}");
+        let errs = errors("job j(doc: File) {}\n");
+        assert!(
+            errs.iter()
+                .any(|e| e.contains("cannot be a file; store the upload")),
+            "{errs:?}"
+        );
+        let errs = errors("action a(f: Held<File>) {}\n");
+        assert!(
+            errs.iter()
+                .any(|e| e.contains("cannot be a file; held values")),
+            "{errs:?}"
+        );
+    }
+
+    #[test]
     fn job_parameters_must_be_decodable() {
         let errs = errors("interface U { id: string }\njob j(ctx: string, u: U) {}\n");
         assert!(errs.iter().any(|e| e.starts_with("`ctx` is reserved in jobs")), "{errs:?}");
@@ -2685,5 +2742,27 @@ mod tests {
             "component A() {\n  view { <iframe srcdoc=\"<p>hi</p>\" title=\"t\" /> }\n}\n"
         )
         .is_empty());
+        let srcdoc = |sandbox: &str| {
+            errors(&format!(
+                "component A(h: string, s: string) {{\n  view {{ <iframe {sandbox} srcdoc={{h}} title=\"t\" /> }}\n}}\n"
+            ))
+            .iter()
+            .any(|e| e.contains("`srcdoc` takes HTML"))
+        };
+        assert!(!srcdoc("sandbox"), "a bare sandbox blocks scripts");
+        assert!(!srcdoc("sandbox=\"allow-popups allow-same-origin\""));
+        assert!(srcdoc("sandbox=\"allow-forms ALLOW-SCRIPTS\""));
+        assert!(
+            srcdoc("sandbox={s}"),
+            "a dynamic sandbox could allow scripts"
+        );
+        assert!(
+            srcdoc("sandbox {...{}}"),
+            "a spread could replace the sandbox"
+        );
+        assert!(
+            srcdoc("sandbox sandbox=\"allow-scripts\""),
+            "two sandboxes are not trusted"
+        );
     }
 }

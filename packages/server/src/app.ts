@@ -17,6 +17,7 @@ import {
   trustHtml,
   type ClientMessage,
   type Component,
+  type ResourceHostFactory,
   type ServerMessage,
 } from "@weft-framework/runtime";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -87,6 +88,7 @@ import {
 } from "./security.ts";
 import { checkPdfRoute, pdfFilename, type PdfPrinter, type PdfRouteOptions } from "./pdf.ts";
 import { IMAGES_PATH, type Images } from "./images.ts";
+import { attachClientAddress, clientAddress } from "./client-address.ts";
 
 const STYLES = "/_weft/styles.css";
 const APP_CSS = "/_weft/app.css";
@@ -139,6 +141,7 @@ export interface Route<P extends object = object> {
   status?: number;
   cache?: "etag";
   csp?: CspSources;
+  cspFor?: (ctx: PageContext, data: P) => CspSources | undefined | Promise<CspSources | undefined>;
   pdf?: true | PdfRouteOptions;
   edge?: boolean;
   og?: Component<never> | OgImage;
@@ -165,17 +168,19 @@ export function checkOg(raw: unknown, where: string): Component<never> | OgImage
 
 export function edgeReason(
   route: Route<never>,
-  app: { middleware?: unknown; htmlAttributes?: unknown },
+  app: { middleware?: unknown; htmlAttributes?: unknown; themeCss?: unknown },
 ): string | null {
   if (route.edge === false) return "edge: false";
   if (route.load) return "load";
   if (typeof route.meta === "function" || route.layouts?.some((l) => typeof l.meta === "function")) return "meta from the request";
+  if (route.cspFor) return "csp from the request";
   if (route.cache === "etag") return 'cache: "etag"';
   if (route.status !== undefined && route.status !== 200) return `status ${route.status}`;
   if (route.edge !== true) {
     const mw = app.middleware;
     if (Array.isArray(mw) ? mw.length > 0 : mw !== undefined) return "middleware (the page may export `edge = true`)";
     if (app.htmlAttributes !== undefined) return "htmlAttributes (the page may export `edge = true`)";
+    if (app.themeCss !== undefined) return "themeFor (the page may export `edge = true`)";
   }
   return null;
 }
@@ -210,6 +215,7 @@ export interface AppOptions {
   notFound?: Route<never>;
   error?: Route<never>;
   api?: Record<string, ApiHandlers>;
+  sockets?: Record<string, SocketRoute>;
   middleware?: Middleware | readonly Middleware[];
   devtools?: boolean;
   patchBudget?: number | false;
@@ -226,6 +232,7 @@ export interface AppOptions {
   assets?: Record<string, string>;
   stylesheet?: string;
   htmlAttributes?: (req: Request) => Record<string, string | boolean | null | undefined>;
+  themeCss?: (ctx: PageContext) => string | null | undefined | Promise<string | null | undefined>;
   componentStyles?: Record<string, string>;
   clientEntry?: string;
   immutableAssets?: boolean;
@@ -291,7 +298,7 @@ export interface QueryWarning {
 }
 
 export interface ErrorReport {
-  kind: "page" | "event" | "action" | "api" | "upload" | "request";
+  kind: "page" | "event" | "action" | "api" | "upload" | "request" | "socket";
   route?: string;
   component?: string;
   handler?: string;
@@ -315,6 +322,36 @@ export interface UpgradeServer {
 export interface SocketData {
   lid: string;
   sid: string;
+  app?: SocketAccept;
+}
+
+export interface AppSocket {
+  readonly ctx: PageContext;
+  send(data: string | Uint8Array): void;
+  close(code?: number, reason?: string): void;
+}
+
+export interface SocketRoute {
+  open?(ws: AppSocket, ctx: PageContext): void | Promise<void>;
+  message?(ws: AppSocket, data: string | Uint8Array): void | Promise<void>;
+  close?(ws: AppSocket, code: number): void;
+  maxBytes?: number;
+}
+
+export interface RawSocket {
+  send(data: string | Uint8Array): unknown;
+  close(code?: number, reason?: string): void;
+}
+
+export interface BoundSocket {
+  message(data: string | Uint8Array): void;
+  close(code: number): void;
+}
+
+export interface SocketAccept {
+  route: SocketRoute;
+  ctx: PageContext;
+  pattern: string;
 }
 
 export interface LiveSocket {
@@ -325,6 +362,8 @@ export interface LiveSocket {
 
 export interface App {
   fetch(req: Request, server?: UpgradeServer): Promise<Response | undefined>;
+  socket?(req: Request): Promise<SocketAccept | Response>;
+  socketRoute?(sock: RawSocket, accepted: SocketAccept): BoundSocket;
   websocket: {
     open(ws: LiveSocket): void;
     message(ws: LiveSocket, data: string | Uint8Array): Promise<void>;
@@ -539,6 +578,29 @@ export function createApp(opts: AppOptions): App {
   const ETAG_TTL = 60 * 60_000;
   const ETAG_MAX = 10_000;
   const cacheReaders = new DepsIndex<CacheRec>();
+  interface ResourceRec {
+    deps: Deps<ResourceRec>;
+    rerun(): void;
+    live: boolean;
+  }
+  const resourceReaders = new DepsIndex<ResourceRec>();
+
+  function resourceHost(sid: string): ResourceHostFactory {
+    return (rerun) => {
+      const rec: ResourceRec = { deps: null as unknown as Deps<ResourceRec>, rerun, live: true };
+      rec.deps = resourceReaders.deps(rec);
+      return {
+        run: (fn) => {
+          rec.deps = rec.deps.renew();
+          return withSession(sid, () => track(rec.deps, fn));
+        },
+        dispose: () => {
+          rec.live = false;
+          rec.deps.release();
+        },
+      };
+    };
+  }
   const etags = new Map<string, CacheRec>();
   const uncachable = new Set<Route<never>>();
   const purge = (r: CacheRec): void => {
@@ -1151,6 +1213,7 @@ export function createApp(opts: AppOptions): App {
       query: url.searchParams,
       session: sid,
       user: await userOf(sid),
+      clientAddress: clientAddress(req),
     };
     const rotate = async (user: string | null, o: { mfa?: boolean; tenant?: string; sso?: SessionRecord["sso"] } = {}): Promise<LoginResult> => {
       const pending = user !== null && !o.mfa && twoFactor !== null && (await twoFactor.needed(user, o.tenant));
@@ -1974,6 +2037,71 @@ export function createApp(opts: AppOptions): App {
       .map((s) => s.path);
   }
   const apiRouter = new Router<ApiHandlers>(opts.api ?? {});
+  const socketRouter = new Router<SocketRoute>(opts.sockets ?? {});
+  const socketPattern = new Map<SocketRoute, string>(Object.entries(opts.sockets ?? {}).map(([p, r]) => [r, p]));
+  for (const [p, r] of Object.entries(opts.sockets ?? {})) {
+    if (typeof r !== "object" || r === null) throw new Error(`@weft-framework/server: sockets["${p}"] is { open?, message?, close? }`);
+    for (const k of ["open", "message", "close"] as const) {
+      if (r[k] !== undefined && typeof r[k] !== "function") throw new Error(`@weft-framework/server: sockets["${p}"].${k} is a function`);
+    }
+    if (r.maxBytes !== undefined && !(Number.isInteger(r.maxBytes) && r.maxBytes > 0 && r.maxBytes <= 64 * 1024 * 1024)) {
+      throw new Error(`@weft-framework/server: sockets["${p}"].maxBytes is a whole number of bytes up to 64 MiB`);
+    }
+  }
+  const appSockets = new WeakMap<object, BoundSocket>();
+
+  async function acceptSocket(req: Request): Promise<SocketAccept | Response> {
+    const url = new URL(req.url);
+    const hit = socketRouter.match(url.pathname);
+    if (!hit) return status(404);
+    if (req.method !== "GET" || req.headers.get("upgrade")?.toLowerCase() !== "websocket") return status(426);
+    if (!sameOrigin(req)) return status(403);
+    if (draining) return status(503);
+    const sid = (await sessionOf(req)) ?? "";
+    const ctx = await contextFor(req, url, hit.params, sid, NOT_HERE);
+    return { route: hit.route.value, ctx, pattern: socketPattern.get(hit.route.value) ?? url.pathname };
+  }
+
+  function bindSocket(
+    sock: { send(data: string | Uint8Array): unknown; close(code?: number, reason?: string): void },
+    accepted: SocketAccept,
+  ): BoundSocket {
+    const { route, ctx, pattern } = accepted;
+    let open = true;
+    const ws: AppSocket = Object.freeze({
+      ctx,
+      send(data: string | Uint8Array) {
+        if (open) sock.send(data);
+      },
+      close(code = 1000, reason = "") {
+        if (open) sock.close(code, reason);
+      },
+    });
+    let queue: Promise<void> = Promise.resolve();
+    const run = (what: string, fn: () => void | Promise<void>) => {
+      queue = queue.then(fn).catch((err: unknown) => {
+        report(err, "socket", { route: pattern, ctx, handler: what });
+        if (open) sock.close(1011, "server error");
+      });
+    };
+    run("open", () => route.open?.(ws, ctx));
+    return {
+      message(data) {
+        if (open) run("message", () => route.message?.(ws, data));
+      },
+      close(code) {
+        if (!open) return;
+        open = false;
+        queue = queue.then(() => {
+          try {
+            route.close?.(ws, code);
+          } catch (err) {
+            report(err, "socket", { route: pattern, ctx, handler: "close" });
+          }
+        });
+      },
+    };
+  }
   const shell = parseShell(opts.shell);
 
   function idleOldest(sid: string | null): string | null {
@@ -2103,6 +2231,9 @@ export function createApp(opts: AppOptions): App {
       return renderPage(req, opts.notFound, params, 404);
     }
     const props = { ...params, ...(loaded as object) };
+    const pageCsp = route.cspFor
+      ? mergeCspSources(cspSourcesOf(route), checkCspSources((await route.cspFor(ctx, props as never)) ?? {}, `route ${url.pathname} csp()`))
+      : cspSourcesOf(route);
 
     const meta = await pageMeta(route, ctx, props);
 
@@ -2121,6 +2252,7 @@ export function createApp(opts: AppOptions): App {
         return sealHeld(sid, action, args);
       },
       onError: (err, msg) => report(err, "event", { route, ctx, ...(msg ? { handler: msg.handler } : {}) }),
+      ...(feed ? { resource: resourceHost(sid) } : {}),
       onInvalidate: () => {
         if (stream.open) {
           stream.dirty = true;
@@ -2263,6 +2395,16 @@ export function createApp(opts: AppOptions): App {
 
       const nonce = randomId(16);
       const csrf = edge ? "" : await csrfToken(key, sid);
+      let themed = "";
+      if (!edge && opts.themeCss) {
+        try {
+          const css = (await opts.themeCss(ctx)) ?? "";
+          if (typeof css !== "string" || css.includes("<")) throw new Error("@weft-framework/server: themeFor returned CSS that is not plain token blocks");
+          themed = css === "" ? "" : `<style nonce="${nonce}" data-weft-theme>${css}</style>`;
+        } catch (err) {
+          onError(err);
+        }
+      }
       const script =
         assets.has(clientEntry) && !inert
           ? `<script type="module" nonce="${nonce}" src="${escapeAttr(clientEntry)}"></script>`
@@ -2276,7 +2418,7 @@ export function createApp(opts: AppOptions): App {
         `${META_START}${renderMeta(meta, { nonce })}${META_END}` +
         live +
         (edge ? "" : `<meta name="weft-csrf" content="${escapeAttr(csrf)}">`) +
-        `${transport}${likelyMeta}${appCssLink}` +
+        `${transport}${likelyMeta}${appCssLink}${themed}` +
         `<style nonce="${nonce}">weft-c{display:contents}${critical}</style>${script}`;
       const tail = bundle ? `<link rel="stylesheet" href="${STYLES}?v=${bundle.version}">` : "";
       const mark = `<!--weft-stream-${randomId(12)}-->`;
@@ -2304,7 +2446,7 @@ export function createApp(opts: AppOptions): App {
             nonce: "",
             hashes: hashed,
             secure,
-            sources: cspSourcesOf(route),
+            sources: pageCsp,
             ...(onCspReport ? { report: CSP_REPORT } : {}),
           }),
         });
@@ -2317,7 +2459,7 @@ export function createApp(opts: AppOptions): App {
       const headers = new Headers({
         "content-type": "text/html; charset=utf-8",
         "cache-control": "no-store",
-        ...securityHeaders({ nonce, secure, sources: cspSourcesOf(route), ...(onCspReport ? { report: CSP_REPORT } : {}) }),
+        ...securityHeaders({ nonce, secure, sources: pageCsp, ...(onCspReport ? { report: CSP_REPORT } : {}) }),
       });
       if (cachedTag !== null) {
         headers.set("cache-control", "private, no-cache");
@@ -2703,6 +2845,9 @@ export function createApp(opts: AppOptions): App {
     sharedChange(change);
     for (const r of cacheReaders.readersOf(change.model)) {
       if (r.deps.load.concerns(change) || r.deps.render.concerns(change)) purge(r);
+    }
+    for (const r of resourceReaders.readersOf(change.model)) {
+      if (r.live && r.deps.concerns(change)) r.rerun();
     }
     for (const e of readers.readersOf(change.model)) {
       const inLoad = e.deps.load.concerns(change);
@@ -3223,11 +3368,14 @@ export function createApp(opts: AppOptions): App {
       if (!buf) {
         return stamp(jsonResponse(413, { error: "Request too large" }), false);
       }
-      next = new Request(req.url, {
-        method: req.method,
-        headers: req.headers,
-        body: buf.byteLength > 0 ? new Uint8Array(buf) : undefined,
-      });
+      next = attachClientAddress(
+        new Request(req.url, {
+          method: req.method,
+          headers: req.headers,
+          body: buf.byteLength > 0 ? new Uint8Array(buf) : undefined,
+        }),
+        clientAddress(req),
+      );
     }
     const ctx = await contextFor(next, url, params, sid, isUnsafeMethod(method) ? null : NOT_HERE, (r) => {
       active = r.sid;
@@ -3286,7 +3434,7 @@ export function createApp(opts: AppOptions): App {
       const declared = Number(req.headers.get("content-length") ?? "0");
       const buf = Number.isFinite(declared) && declared > maxApiBytes ? null : await readLimited(req, maxApiBytes);
       if (!buf) return plain(jsonResponse(413, { error: "Request too large" }), false);
-      next = new Request(req.url, { method: req.method, headers: req.headers, body: buf.byteLength > 0 ? new Uint8Array(buf) : undefined });
+      next = attachClientAddress(new Request(req.url, { method: req.method, headers: req.headers, body: buf.byteLength > 0 ? new Uint8Array(buf) : undefined }), clientAddress(req));
     }
     const ctx = await contextFor(next, url, params, randomId(24), "do not work in external API handlers (no browser session)");
     try {
@@ -3354,6 +3502,12 @@ export function createApp(opts: AppOptions): App {
             status: ok ? 200 : 503,
             headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" },
           });
+        }
+        if (req.method === "GET" && req.headers.get("upgrade")?.toLowerCase() === "websocket" && socketRouter.match(path)) {
+          const accepted = await acceptSocket(req);
+          if (accepted instanceof Response) return accepted;
+          if (!server?.upgrade(req, { data: { lid: "", sid: "", app: accepted } })) return status(426);
+          return undefined;
         }
         if (path === LIVE && req.method === "GET") {
           if (!wsEnabled || req.headers.get("upgrade")?.toLowerCase() !== "websocket") {
@@ -3550,8 +3704,15 @@ export function createApp(opts: AppOptions): App {
       }
     },
 
+    socket: acceptSocket,
+    socketRoute: bindSocket,
+
     websocket: {
       open(ws) {
+        if (ws.data.app) {
+          appSockets.set(ws, bindSocket(ws, ws.data.app));
+          return;
+        }
         const entry = pageFor(ws.data.lid, ws.data.sid);
         if (!entry) {
           ws.send(encode({ t: "expired" }));
@@ -3562,6 +3723,10 @@ export function createApp(opts: AppOptions): App {
         sockets.set(ws, attach(entry, (msg) => ws.send(encode(msg))));
       },
       async message(ws, data) {
+        if (ws.data.app) {
+          appSockets.get(ws)?.message(data);
+          return;
+        }
         const raw = typeof data === "string" ? data : new TextDecoder().decode(data);
         const entry = pageFor(ws.data.lid, ws.data.sid);
         if (!entry) {
@@ -3597,6 +3762,11 @@ export function createApp(opts: AppOptions): App {
         }
       },
       close(ws) {
+        if (ws.data.app) {
+          appSockets.get(ws)?.close(1000);
+          appSockets.delete(ws);
+          return;
+        }
         sockets.get(ws)?.();
         sockets.delete(ws);
       },

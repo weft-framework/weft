@@ -234,3 +234,90 @@ test("settingsForm: what defineSettings needs for a tenant's settings", () => {
   fails(() => page.save({}, { theme: "light" }), "forbidden");
   fails(() => access.settingsForm(null as never), "invalid");
 });
+
+function scoped(driver: "memory" | "sqlite") {
+  const access = defineAccess({
+    scopes: { reseller: {}, customer: { parent: "reseller" }, server: { parent: "customer" } },
+    permissions: { "servers.read": "See servers" },
+    roles: {
+      owner: { scope: "reseller", permissions: ["*"] },
+      manager: { scope: ["customer", "server"], permissions: ["access.settings.manage", "servers.read"] },
+      user: { scope: ["customer", "server"], permissions: ["servers.read"] },
+    },
+    owner: "owner",
+    settings: {
+      "servers.max": { type: "number", default: 5, min: 0, integer: true, scoped: true },
+      "brand.name": { type: "string", default: "Hedlo", maxLength: 40, editable: true, scoped: true },
+      "billing.currency": { type: "string", default: "EUR", options: ["EUR", "USD"], editable: true },
+    },
+  });
+  if (driver === "sqlite") {
+    const db = openSqlite(":memory:");
+    useDatabase(db, Object.values(access.models) as Model<never>[]);
+  }
+  const root = access.createTenant("rita", { name: "Reseller" });
+  const acme = access.createScope("rita", { type: "customer", parent: root.id, name: "Acme" });
+  const other = access.createScope("rita", { type: "customer", parent: root.id, name: "Other" });
+  const box = access.createScope("rita", { type: "server", parent: acme.id, name: "box" });
+  access.assign("rita", { user: "mia", role: "manager", scope: acme.id });
+  access.assign("rita", { user: "uli", role: "user", scope: box.id });
+  return { access, root, acme, other, box };
+}
+
+for (const driver of ["memory", "sqlite"] as const) {
+  test(`scoped settings: overrides inherit down the tree and stay in their branch (${driver})`, () => {
+    const { access, root, acme, other, box } = scoped(driver);
+    access.configureTenant(root.id, { "servers.max": 20, "brand.name": "Rita Hosting" });
+    assert.equal(access.scopeSettingValue(box.id, "servers.max"), 20, "from the tenant");
+
+    const after = access.configureScope(acme.id, { "servers.max": 3 });
+    assert.equal(after["servers.max"], 3);
+    assert.equal(access.scopeSettingValue(acme.id, "servers.max"), 3);
+    assert.equal(access.scopeSettingValue(box.id, "servers.max"), 3, "inherited by the server");
+    assert.equal(access.scopeSettingValue(other.id, "servers.max"), 20, "a sibling keeps the tenant value");
+    assert.equal(access.settingValue(root.id, "servers.max"), 20, "the tenant row is untouched");
+    access.configureScope(box.id, { "servers.max": 1 });
+    assert.equal(access.scopeSettingValue(box.id, "servers.max"), 1, "the nearest scope wins");
+    assert.equal(access.scopeSettingValue(acme.id, "servers.max"), 3);
+
+    fails(() => access.configureScope(acme.id, { "billing.currency": "USD" } as never), "invalid", /per tenant, not per scope/);
+    fails(() => access.configureScope(acme.id, { "servers.max": -1 }), "invalid");
+    fails(() => access.configureScope(`${root.id}/nope`, { "servers.max": 1 }), "not-found");
+    assert.equal(access.scopeSettingValue(`${root.id}/nope`, "servers.max"), undefined);
+
+    access.resetScopeSettings(null, box.id, ["servers.max"]);
+    assert.equal(access.scopeSettingValue(box.id, "servers.max"), 3, "back to the customer's value");
+  });
+
+  test(`scoped settings: people change only editable ones, where they manage settings (${driver})`, () => {
+    const { access, root, acme, other, box } = scoped(driver);
+    assert.equal(access.updateScopeSettings("mia", acme.id, { "brand.name": "Acme Cloud" })["brand.name"], "Acme Cloud");
+    assert.equal(access.scopeSettings("uli", box.id)["brand.name"], "Acme Cloud", "seen from below");
+    assert.equal(access.scopeSettings("rita", other.id)["brand.name"], "Hedlo");
+    fails(() => access.updateScopeSettings("mia", acme.id, { "servers.max": 99 }), "forbidden", /servers\.max/);
+    fails(() => access.updateScopeSettings("mia", other.id, { "brand.name": "x" }), "forbidden");
+    fails(() => access.updateScopeSettings("uli", box.id, { "brand.name": "x" }), "forbidden");
+    fails(() => access.scopeSettings("uli", other.id), "forbidden");
+    fails(() => access.scopeSettings("stranger", acme.id), "forbidden");
+    fails(() => access.resetScopeSettings("mia", acme.id, ["servers.max"]), "forbidden");
+    fails(() => access.resetScopeSettings("rita", root.id, ["brand.name"]), "invalid");
+    assert.equal(access.resetScopeSettings("mia", acme.id, ["brand.name"])["brand.name"], "Hedlo");
+    assert.equal(access.updateScopeSettings("rita", root.id, { "billing.currency": "USD" })["billing.currency"], "USD", "on the tenant itself, the tenant settings");
+    assert.equal(access.explain(root.id).settings.find((s) => s.key === "servers.max")?.scoped, true);
+  });
+}
+
+test("scoped settings are declared with booleans and never for seats", () => {
+  const base = {
+    scopes: { org: {} },
+    permissions: {},
+    roles: { owner: { scope: "org", permissions: ["*"] } },
+    owner: "owner",
+  } as const;
+  fails(() => defineAccess({ ...base, settings: { x: { type: "boolean", default: true, scoped: "yes" } } } as never), "invalid", /scoped is true or false/);
+  fails(
+    () => defineAccess({ ...base, settings: { seats: { type: "number", default: 1, min: 1, integer: true, scoped: true } }, seats: "seats" } as never),
+    "invalid",
+    /cannot be scoped/,
+  );
+});

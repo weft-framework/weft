@@ -34,6 +34,8 @@ export {
   styleMark,
   styleOf,
 } from "./component.ts";
+export { asyncDerived, withResourceHost } from "./resource.ts";
+export type { AsyncDerived, ResourceHost, ResourceHostFactory } from "./resource.ts";
 export { defineIsland } from "./island.ts";
 export type { Attachment, IslandDef, IslandInstance, IslandRegistry, ClientFn } from "./island.ts";
 export type {

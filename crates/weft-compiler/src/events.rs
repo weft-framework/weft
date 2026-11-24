@@ -335,11 +335,15 @@ pub fn validate(spec: &EventSpec) -> Vec<Problem> {
             ("confirm", None) => out.push(bad(
                 "`.confirm` needs a message: `.confirm(\"Delete this?\")`".to_string(),
             )),
-            ("confirm", Some(a)) if string_literal(a).is_none() => out.push(Problem::error(
-                "the `.confirm` message must be a string literal",
+            ("confirm", Some(a))
+                if a.trim().is_empty() =>
+            {
+                out.push(Problem::error(
+                "the `.confirm` message is a string or an expression such as `t(\"delete.confirm\")`",
                 m.at + len + 1,
                 a.len().max(1),
-            )),
+            ))
+            }
             ("confirm", Some(_)) => {}
             ("optimistic", None) => out.push(bad(
                 "`.optimistic` names a client function: `.optimistic(markDone)`".to_string(),
@@ -403,6 +407,14 @@ impl EventSpec<'_> {
             .iter()
             .find(|m| m.name == "optimistic")
             .and_then(|m| m.arg)
+    }
+
+    pub fn confirm_expr(&self) -> Option<&str> {
+        self.mods
+            .iter()
+            .find(|m| m.name == "confirm")
+            .and_then(|m| m.arg)
+            .filter(|a| string_literal(a).is_none() && !a.trim().is_empty())
     }
 
     pub fn confirm(&self) -> Option<String> {
@@ -503,8 +515,8 @@ mod tests {
             "`.confirm` needs a message: `.confirm(\"Delete this?\")`"
         );
         assert_eq!(
-            first("click.confirm(msg)"),
-            "the `.confirm` message must be a string literal"
+            first("click.confirm()"),
+            "the `.confirm` message is a string or an expression such as `t(\"delete.confirm\")`"
         );
         assert_eq!(first("click.once(2)"), "`.once` takes no argument");
         assert_eq!(first("click.once.once"), "`.once` is repeated");

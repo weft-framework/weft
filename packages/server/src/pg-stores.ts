@@ -8,6 +8,7 @@ import type { PasskeyCredential, PasskeyStore } from "./passkey.ts";
 import type { TwoFactorRecord, TwoFactorStore } from "./two-factor.ts";
 import type { FileRecord, FileStatus, FileStore } from "./uploads.ts";
 import type { WebhookKind, WebhookStore } from "./webhooks.ts";
+import type { RateLimitStore, RateRule } from "./security.ts";
 
 type Row = Record<string, unknown>;
 
@@ -532,5 +533,31 @@ export class PgWebhookStore extends PgStore implements WebhookStore {
       ? await this.q(`DELETE FROM ${this.t} WHERE kind = ? AND created < ? RETURNING id`, [kind, before])
       : await this.q(`DELETE FROM ${this.t} WHERE kind = ? AND created < ? AND owner = ? RETURNING id`, [kind, before, owner]);
     return rows.length;
+  }
+}
+
+export class PgRateLimitStore extends PgStore implements RateLimitStore {
+  #calls = 0;
+
+  constructor(pool: PgPool, table = "weft_rate_limits") {
+    super(pool, table, (t, name) => [
+      `CREATE TABLE IF NOT EXISTS ${t} (key text PRIMARY KEY NOT NULL, tokens double precision NOT NULL, at bigint NOT NULL, ok boolean NOT NULL)`,
+      `CREATE INDEX IF NOT EXISTS "${name}_at" ON ${t} (at)`,
+    ]);
+  }
+
+  async take(key: string, rule: RateRule, now: number): Promise<boolean> {
+    const cap = rule.capacity;
+    const rate = rule.refillPerSecond;
+    const refilled = `LEAST(?::float8, r.tokens + GREATEST(0, excluded.at - r.at) / 1000.0 * ?::float8)`;
+    const [row] = await this.q<{ ok: boolean }>(
+      `INSERT INTO ${this.t} AS r (key, tokens, at, ok) VALUES (?, ?::float8 - 1, ?, ?::float8 >= 1) ` +
+        `ON CONFLICT (key) DO UPDATE SET ok = ${refilled} >= 1, ` +
+        `tokens = ${refilled} - CASE WHEN ${refilled} >= 1 THEN 1 ELSE 0 END, at = GREATEST(r.at, excluded.at) ` +
+        `RETURNING ok`,
+      [key, cap, Math.floor(now), cap, cap, rate, cap, rate, cap, rate],
+    );
+    if (++this.#calls % 1000 === 0) await this.q(`DELETE FROM ${this.t} WHERE at < ?`, [Math.floor(now) - 7 * 86_400_000]);
+    return row?.ok === true;
   }
 }

@@ -17,10 +17,16 @@ export interface ContractInfo {
 
 type Schema = Record<string, unknown>;
 
-const PARAM_TYPE: Record<ParamSpec["type"], string> = { string: "string", number: "number", boolean: "boolean" };
+const PARAM_TYPE: Record<ParamSpec["type"], Schema> = {
+  string: { type: "string" },
+  number: { type: "number" },
+  boolean: { type: "boolean" },
+  file: { type: "string", format: "binary" },
+  record: { type: "object", additionalProperties: { type: "string" } },
+};
 
 function paramSchema(p: ParamSpec): Schema {
-  const item: Schema = { type: PARAM_TYPE[p.type] };
+  const item: Schema = { ...PARAM_TYPE[p.type] };
   return p.list ? { type: "array", items: item } : item;
 }
 
@@ -127,7 +133,9 @@ export function openApi(src: ContractSource, info: ContractInfo): Record<string,
         security: SECURED,
         requestBody: {
           required: true,
-          content: { "application/json": { schema: actionSchema(action.params) } },
+          content: action.params.some((p) => p.type === "file")
+            ? { "multipart/form-data": { schema: actionSchema(action.params) } }
+            : { "application/json": { schema: actionSchema(action.params) } },
         },
         responses: {
           "200": { description: "Done", content: { "application/json": { schema: { $ref: "#/components/schemas/ActionResult" } } } },

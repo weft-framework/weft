@@ -255,6 +255,7 @@ pub fn cmd_check_project(dir: &Path) -> ExitCode {
     let mut diags = diags;
     diags.extend(crate::i18n::report(&root));
     diags.extend(crate::links::report(&root));
+    diags.extend(crate::actions::report(&root));
     let mut errors = false;
     for d in &diags {
         let shown = d.file.strip_prefix(&root).unwrap_or(&d.file);

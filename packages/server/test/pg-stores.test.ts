@@ -11,6 +11,7 @@ import {
   PgPasskeyStore,
   PgSessionStore,
   PgTwoFactorStore,
+  PgRateLimitStore,
   PgWebhookStore,
 } from "../src/pg-stores.ts";
 import type { JobRecord } from "../src/jobs.ts";
@@ -133,4 +134,22 @@ test("store writes join an async transaction and roll back with it", async () =>
     /abort/,
   );
   assert.equal(await s.get("x"), null);
+});
+
+test("PgRateLimitStore: one token bucket shared by every instance", async () => {
+  const p = pool();
+  const a = new PgRateLimitStore(p);
+  const b = new PgRateLimitStore(p);
+  const rule = { capacity: 2, refillPerSecond: 1 };
+  const t0 = 1_700_000_000_000;
+  assert.equal(await a.take("signin.email:ada@x.test", rule, t0), true);
+  assert.equal(await b.take("signin.email:ada@x.test", rule, t0), true, "another instance draws from the same bucket");
+  assert.equal(await a.take("signin.email:ada@x.test", rule, t0 + 10), false);
+  assert.equal(await b.take("signin.email:ada@x.test", rule, t0 + 20), false, "a refused attempt costs nothing more");
+  assert.equal(await a.take("signin.email:bob@x.test", rule, t0), true, "keys are separate");
+  assert.equal(await b.take("signin.email:ada@x.test", rule, t0 + 1010), true, "one second refills one token");
+  assert.equal(await a.take("signin.email:ada@x.test", rule, t0 + 1020), false);
+  assert.equal(await a.take("signin.email:ada@x.test", rule, t0 - 5000), false, "a clock running behind never refills");
+  const burst = await Promise.all(Array.from({ length: 10 }, () => a.take("burst", rule, t0)));
+  assert.equal(burst.filter(Boolean).length, 2, "concurrent takes cannot overspend");
 });

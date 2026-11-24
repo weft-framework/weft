@@ -1,6 +1,8 @@
 export { defineModel, FieldLock, isAsyncDriver, isReadOnlyActor, Model, readOnlyActor, REGION, ScopedModel, MemoryDriver, tenantOf } from "./model.ts";
 export { andThen, flow, isThenable, out, sub, wait } from "./flow.ts";
 export type { Flow, Maybe, Out } from "./flow.ts";
+export { currentPhase, inBuildPhase, isBuildPhase } from "./phase.ts";
+export type { Phase } from "./phase.ts";
 export type { Actor, Register, Policy, ModelConfig, Driver, AsyncDriver, AnyDriver, Scope, Creatable, Grant, WriteEvent } from "./model.ts";
 export { policyToSql, actorValue } from "./policy.ts";
 export type { PolicyExpr, Operand, Sql, SqlValue, ColumnResolver } from "./policy.ts";

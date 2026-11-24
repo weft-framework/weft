@@ -73,6 +73,13 @@ pub fn lower_client(file: &SourceFile) -> Option<String> {
         "// The browser half of this file's islands (generated; client code only).\n\
          import { defineIsland, signal, derived",
     );
+    if islands.iter().any(|c| {
+        c.reactives
+            .iter()
+            .any(|r| r.client && crate::lower::is_async_derived(r))
+    }) {
+        out.push_str(", asyncDerived");
+    }
     out.push_str(if actions.is_empty() {
         " } from \"@weft-framework/runtime\";\n"
     } else {
@@ -178,6 +185,9 @@ fn lower_island(c: &Component, out: &mut String) {
             r.span.start,
             match r.kind {
                 ReactiveKind::Signal => format!("{at}const {} = signal({init});", r.name),
+                ReactiveKind::Derived if crate::lower::is_async_derived(r) => {
+                    format!("{at}const {} = asyncDerived(async () => {init});", r.name)
+                }
                 ReactiveKind::Derived => {
                     format!("{at}const {} = derived(() => {init});", r.name)
                 }

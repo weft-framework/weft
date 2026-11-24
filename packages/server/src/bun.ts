@@ -1,9 +1,11 @@
 import type { App } from "./app.ts";
+import { attachClientAddress, checkTrustedProxies, peerTrusted, resolveClientAddress, type TrustedProxies } from "./client-address.ts";
 
 export interface BunServeOptions {
   port?: number;
   hostname?: string;
   trustProxy?: boolean;
+  trustedProxies?: TrustedProxies;
   idleTimeout?: number;
   onError?(err: unknown): void;
 }
@@ -49,6 +51,7 @@ export function forwarded(req: Request): Request {
 }
 
 export function serveBun(app: App, opts: BunServeOptions = {}, bun?: BunServeApi): BunServer {
+  checkTrustedProxies(opts.trustedProxies, "serveBun: trustedProxies");
   const api = bun ?? (globalThis as { Bun?: BunServeApi }).Bun;
   if (!api) {
     throw new Error("serveBun: not running on Bun (no global `Bun`)");
@@ -58,7 +61,13 @@ export function serveBun(app: App, opts: BunServeOptions = {}, bun?: BunServeApi
     port: opts.port ?? 3000,
     hostname: opts.hostname ?? "127.0.0.1",
     idleTimeout: Math.min(255, Math.max(0, opts.idleTimeout ?? 60)),
-    fetch: (req, srv) => app.fetch(opts.trustProxy ? forwarded(req) : req, srv as never),
+    fetch: (req, srv) => {
+      const peer = (srv as { requestIP?(r: Request): { address: string } | null } | undefined)?.requestIP?.(req)?.address ?? null;
+      const trusted = opts.trustedProxies ?? (opts.trustProxy ? 1 : undefined);
+      const viaProxy = opts.trustedProxies === undefined ? opts.trustProxy === true : peerTrusted(peer, trusted);
+      const address = resolveClientAddress(peer, req.headers.get("x-forwarded-for"), trusted);
+      return app.fetch(attachClientAddress(viaProxy ? forwarded(req) : req, address), srv as never);
+    },
     error(err) {
       onError(err);
       return new Response("Internal Server Error", { status: 500, headers: { "content-type": "text/plain" } });

@@ -1,11 +1,14 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { Readable } from "node:stream";
+import { Readable, type Duplex } from "node:stream";
 import type { App } from "./app.ts";
+import { acceptWebSocket, handshakeKey } from "./ws.ts";
+import { attachClientAddress, checkTrustedProxies, peerTrusted, resolveClientAddress, type TrustedProxies } from "./client-address.ts";
 
 export interface NodeServeOptions {
   port?: number;
   host?: string;
   trustProxy?: boolean;
+  trustedProxies?: TrustedProxies;
   onError?(err: unknown): void;
 }
 
@@ -15,10 +18,15 @@ export interface NodeServer {
 }
 
 function toRequest(req: IncomingMessage, opts: NodeServeOptions, signal: AbortSignal): Request {
+  const peer = req.socket.remoteAddress ?? null;
+  const trusted = opts.trustedProxies ?? (opts.trustProxy ? 1 : undefined);
+  const viaProxy = opts.trustedProxies === undefined ? opts.trustProxy === true : peerTrusted(peer, trusted);
   const fwd = (name: string) => {
     const v = req.headers[name];
-    return opts.trustProxy && typeof v === "string" ? v.split(",")[0].trim() : undefined;
+    return viaProxy && typeof v === "string" ? v.split(",")[0].trim() : undefined;
   };
+  const xff = req.headers["x-forwarded-for"];
+  const address = resolveClientAddress(peer, Array.isArray(xff) ? xff.join(",") : (xff ?? null), trusted);
   const proto = fwd("x-forwarded-proto") ?? "http";
   const host = fwd("x-forwarded-host") ?? req.headers.host ?? "localhost";
   const headers = new Headers();
@@ -27,13 +35,13 @@ function toRequest(req: IncomingMessage, opts: NodeServeOptions, signal: AbortSi
   }
   const method = req.method ?? "GET";
   const hasBody = method !== "GET" && method !== "HEAD";
-  return new Request(`${proto}://${host}${req.url ?? "/"}`, {
+  return attachClientAddress(new Request(`${proto}://${host}${req.url ?? "/"}`, {
     method,
     headers,
     signal,
     body: hasBody ? (Readable.toWeb(req) as ReadableStream<Uint8Array>) : undefined,
     duplex: hasBody ? "half" : undefined,
-  } as RequestInit);
+  } as RequestInit), address);
 }
 
 async function send(res: ServerResponse, response: Response): Promise<void> {
@@ -70,6 +78,7 @@ async function send(res: ServerResponse, response: Response): Promise<void> {
 }
 
 export function serveNode(app: App, opts: NodeServeOptions = {}): Promise<NodeServer> {
+  checkTrustedProxies(opts.trustedProxies, "serveNode: trustedProxies");
   const onError = opts.onError ?? ((err: unknown) => console.error("[weft]", err));
   const server = createServer((req, res) => {
     const abort = new AbortController();
@@ -86,6 +95,32 @@ export function serveNode(app: App, opts: NodeServeOptions = {}): Promise<NodeSe
       res.end();
     });
   });
+  const upgrades = new Set<Duplex>();
+  server.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
+    const refuse = (code: number, text: string) => {
+      if (!socket.destroyed) socket.end(`HTTP/1.1 ${code} ${text}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
+    };
+    socket.on("error", () => socket.destroy());
+    (async () => {
+      if (!app.socket || !app.socketRoute) return refuse(404, "Not Found");
+      const accept = handshakeKey(req.headers);
+      if (accept === null) return refuse(400, "Bad Request");
+      const abort = new AbortController();
+      const result = await app.socket(toRequest(req, opts, abort.signal));
+      if (result instanceof Response) {
+        await result.body?.cancel().catch(() => undefined);
+        return refuse(result.status, result.statusText || "Refused");
+      }
+      if (socket.destroyed) return;
+      const bindRoute = app.socketRoute;
+      upgrades.add(socket);
+      socket.on("close", () => upgrades.delete(socket));
+      const ws = acceptWebSocket(socket, head, accept, () => bindRoute(ws, result), { maxBytes: result.route.maxBytes });
+    })().catch((err: unknown) => {
+      onError(err);
+      refuse(500, "Internal Server Error");
+    });
+  });
   return new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(opts.port ?? 3000, opts.host ?? "127.0.0.1", () => {
@@ -95,6 +130,7 @@ export function serveNode(app: App, opts: NodeServeOptions = {}): Promise<NodeSe
         url: `http://${opts.host ?? "127.0.0.1"}:${port}`,
         close: () =>
           new Promise<void>((done) => {
+            for (const s of upgrades) s.destroy();
             server.closeAllConnections();
             server.close(() => done());
           }),

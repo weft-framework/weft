@@ -118,7 +118,7 @@ fn files(dir: &Path, out: &mut Vec<PathBuf>) {
         let p = e.path();
         let name = e.file_name().to_string_lossy().to_string();
         if p.is_dir() {
-            if name != "node_modules" && !name.starts_with('.') {
+            if crate::project::enter_dir(dir, &name) {
                 files(&p, out);
             }
         } else {
@@ -288,6 +288,7 @@ mod tests {
         assert!(m("files/[[...p]].wx", "/files"));
         assert!(m("files/[[...p]].wx", "/files/x/y"));
         assert!(m("api/tasks/export.ts", "/api/tasks/export"));
+        assert!(m(".well-known/security.txt.ts", "/.well-known/security.txt"));
     }
 
     #[test]

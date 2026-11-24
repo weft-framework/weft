@@ -6,7 +6,8 @@ import { Model } from "@weft-framework/data";
 import type { ApiHandlers, ApiMethod } from "./api.ts";
 import type { AuthOptions } from "./auth.ts";
 import { isAction, type Action } from "./action.ts";
-import type { AppOptions, Layout, Route } from "./app.ts";
+import type { AppOptions, Layout, Route, SocketRoute } from "./app.ts";
+import type { PageContext } from "./context.ts";
 import { checkOg } from "./app.ts";
 import { islandAssets, runtimeAssets } from "./assets.ts";
 import { compileTree, type Compiler } from "./compiler.ts";
@@ -105,10 +106,12 @@ function checkExports(mod: Module, file: string, allowLoad: boolean): void {
   }
   if (mod.csp !== undefined) {
     if (!allowLoad) throw new ProjectError(`${file}: layouts cannot export \`csp\`; export it from each page that needs it`);
-    try {
-      checkCspSources(mod.csp, file);
-    } catch (err) {
-      throw new ProjectError((err as Error).message);
+    if (typeof mod.csp !== "function") {
+      try {
+        checkCspSources(mod.csp, file);
+      } catch (err) {
+        throw new ProjectError((err as Error).message);
+      }
     }
   }
   if (mod.og !== undefined) {
@@ -138,6 +141,10 @@ function checkExports(mod: Module, file: string, allowLoad: boolean): void {
       allowLoad ? `${file}: \`load\` must be a function` : `${file}: layouts cannot export \`load\``,
     );
   }
+}
+
+export function isApiModule(rel: string): boolean {
+  return rel.startsWith("api/") || rel.startsWith(".well-known/");
 }
 
 function listModules(dir: string): string[] {
@@ -223,7 +230,11 @@ export async function loadProject(root: string, opts: ProjectOptions): Promise<P
       load: mod.load as Route<never>["load"],
       meta: mod.meta as Route<never>["meta"],
       ...(mod.cache === "etag" ? { cache: "etag" as const } : {}),
-      ...(mod.csp !== undefined ? { csp: mod.csp as CspSources } : {}),
+      ...(typeof mod.csp === "function"
+        ? { cspFor: mod.csp as Route<never>["cspFor"] }
+        : mod.csp !== undefined
+          ? { csp: mod.csp as CspSources }
+          : {}),
       ...(mod.pdf !== undefined ? { pdf: mod.pdf as true | PdfRouteOptions } : {}),
       ...(typeof mod.edge === "boolean" ? { edge: mod.edge } : {}),
       ...(mod.og !== undefined ? { og: mod.og as Route<never>["og"] } : {}),
@@ -233,8 +244,13 @@ export async function loadProject(root: string, opts: ProjectOptions): Promise<P
 
   const routes: Record<string, Route<never>> = {};
   const owner: Record<string, string> = {};
+  const handlerPages: string[] = [];
   for (const rel of files) {
-    if (rel.split("/").some((part) => part.startsWith("_")) || rel.startsWith("api/")) {
+    if (rel.split("/").some((part) => part.startsWith("_")) || isApiModule(rel)) {
+      continue;
+    }
+    if (isHandlerModule(await load(rel))) {
+      handlerPages.push(rel);
       continue;
     }
     const pattern = patternForFile(rel);
@@ -267,14 +283,23 @@ export async function loadProject(root: string, opts: ProjectOptions): Promise<P
   }
 
   const api: Record<string, ApiHandlers> = {};
-  for (const rel of files.filter((f) => f.startsWith("api/"))) {
+  const sockets: Record<string, SocketRoute> = {};
+  for (const rel of [...files.filter(isApiModule), ...handlerPages]) {
     const pattern = patternForFile(rel);
     if (owner[pattern]) {
       throw new ProjectError(`${shown(rel)} and ${shown(owner[pattern])} both serve ${pattern}`);
     }
     owner[pattern] = rel;
     const mod = await load(rel);
-    api[pattern] = apiHandlers(mod, shown(rel));
+    if (mod.socket !== undefined) {
+      const sock = mod.socket;
+      if (typeof sock !== "object" || sock === null || Array.isArray(sock)) {
+        throw new ProjectError(`${shown(rel)}: \`socket\` is { open?, message?, close?, maxBytes? }`);
+      }
+      sockets[pattern] = sock as SocketRoute;
+    }
+    const handlers = apiHandlers(mod, shown(rel), mod.socket !== undefined);
+    if (Object.keys(handlers).length > 0) api[pattern] = handlers;
   }
 
   const models: Record<string, Model<unknown>> = {};
@@ -499,8 +524,10 @@ export async function loadProject(root: string, opts: ProjectOptions): Promise<P
 
   const themeFile = ["theme.ts", "theme.js"].map((name) => join(opts.outDir, name)).find((file) => existsSync(file));
   let theme: ProjectTheme | undefined;
+  let themeCss: AppOptions["themeCss"];
   if (themeFile) {
-    const exported = ((await import(pathToFileURL(themeFile).href)) as Module).default as ProjectTheme | undefined;
+    const themeModule = (await import(pathToFileURL(themeFile).href)) as Module;
+    const exported = themeModule.default as ProjectTheme | undefined;
     if (
       !exported ||
       typeof exported.css !== "function" ||
@@ -510,6 +537,13 @@ export async function loadProject(root: string, opts: ProjectOptions): Promise<P
       throw new ProjectError("src/theme: export default defineTheme({...}) from @weft-framework/theme");
     }
     theme = exported;
+    if (themeModule.themeFor !== undefined) {
+      const themeFor = themeModule.themeFor;
+      const overrides = exported.overrides;
+      if (typeof themeFor !== "function") throw new ProjectError("src/theme: `themeFor` is a function `themeFor(ctx)` returning token overrides");
+      if (typeof overrides !== "function") throw new ProjectError("src/theme: `themeFor` needs @weft-framework/theme with per-request overrides");
+      themeCss = async (ctx) => overrides.call(exported, await (themeFor as (c: PageContext) => unknown)(ctx));
+    }
   }
 
   const notFound = files.includes("_404.ts") ? await route("_404.ts") : undefined;
@@ -544,6 +578,7 @@ export async function loadProject(root: string, opts: ProjectOptions): Promise<P
     ...(Object.keys(styles.components).length > 0 ? { componentStyles: styles.components } : {}),
     actions,
     api,
+    ...(Object.keys(sockets).length > 0 ? { sockets } : {}),
     models,
     emails,
     database:
@@ -569,6 +604,7 @@ export async function loadProject(root: string, opts: ProjectOptions): Promise<P
     ...(config.csp ? { csp: config.csp } : {}),
     ...(config.edge !== undefined ? { edge: config.edge } : {}),
     ...htmlAttributesOf(theme, config.htmlAttributes),
+    ...(themeCss ? { themeCss } : {}),
   };
 }
 
@@ -576,6 +612,7 @@ interface ProjectTheme {
   css(): string;
   tailwind(): string;
   htmlAttributes(req: Request): Record<string, string>;
+  overrides?(o: unknown): string;
 }
 
 type HtmlAttributes = NonNullable<AppOptions["htmlAttributes"]>;
@@ -585,7 +622,12 @@ function htmlAttributesOf(theme: ProjectTheme | undefined, own: HtmlAttributes |
   return { htmlAttributes: (req) => ({ ...theme.htmlAttributes(req), ...own?.(req) }) };
 }
 
-function apiHandlers(mod: Module, file: string): ApiHandlers {
+function isHandlerModule(mod: Module): boolean {
+  if (Object.values(mod).some(isComponent)) return false;
+  return API_METHODS.some((m) => typeof mod[m] === "function") || typeof mod.default === "function" || (typeof mod.socket === "object" && mod.socket !== null);
+}
+
+function apiHandlers(mod: Module, file: string, socketOnly = false): ApiHandlers {
   const handlers: ApiHandlers = {};
   for (const method of API_METHODS) {
     const fn = mod[method];
@@ -603,8 +645,8 @@ function apiHandlers(mod: Module, file: string): ApiHandlers {
     }
     handlers.default = mod.default as ApiHandlers["default"];
   }
-  if (Object.keys(handlers).length === 0) {
-    throw new ProjectError(`${file}: export a request method or a default function returning a Response`);
+  if (Object.keys(handlers).length === 0 && !socketOnly) {
+    throw new ProjectError(`${file}: export a request method, a default function returning a Response, or a \`socket\``);
   }
   return handlers;
 }

@@ -479,3 +479,46 @@ test("dev frames are bounded by count and bytes, and a repeated state is not kep
   for (let i = 0; i < 5; i++) frame(log, "big" + i, big + i);
   assert.ok(log.frames.reduce((s, f) => s + f.html.length, 0) <= DEV_FRAMES_BYTES);
 });
+
+test("an async derived value resolves before the first paint and re-runs when the rows it read change", async () => {
+  const { asyncDerived } = await import("@weft-framework/runtime");
+  const feed = new ChangeFeed();
+  const Msgs = defineModel<Msg>("AsyncMsg", {
+    fields: { id: "string", author: "string", text: "string", public: "boolean" },
+    read: (a, r) => r.public || (a as User).id === r.author,
+    write: (a, r) => (a as User).id === r.author,
+  }).publishTo(feed);
+  let runs = 0;
+  const Live = defineComponent("AsyncCount", (props: { user: string }) => {
+    const count = asyncDerived(async () => {
+      runs += 1;
+      await new Promise((r) => setTimeout(r, 5));
+      return Msgs.as({ id: props.user }).all().length;
+    });
+    return {
+      handlers: {},
+      render: () => `<b>${count.value ?? "…"}</b>`,
+    };
+  });
+  const app = createApp({
+    secret: SECRET,
+    sync: feed,
+    syncDelayMs: 0,
+    onError: (e) => {
+      throw e;
+    },
+    routes: { "/": { component: Live as never, load: (ctx) => ({ user: ctx.query.get("as") ?? "anon" }) } },
+  });
+  Msgs.as({ id: "carol" }).create({ id: "0", author: "carol", text: "hello", public: true });
+  const p = await open(app, "/?as=bob");
+  assert.match(p.html, /<b>1<\/b>/, "the first paint waits for the value");
+  const s = await stream(app, p.cookie, p.lid);
+  Msgs.as({ id: "carol" }).create({ id: "1", author: "carol", text: "x", public: true });
+  assert.match(String((await s.next(1000))?.html), /<b>2<\/b>/, "a visible write re-runs it");
+  const before = runs;
+  Msgs.as({ id: "dave" }).create({ id: "2", author: "dave", text: "secret", public: false });
+  assert.equal(await s.next(150), null, "a row the reader cannot see changes nothing");
+  assert.equal(runs, before);
+  await s.close();
+  app.close();
+});

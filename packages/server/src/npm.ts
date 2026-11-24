@@ -27,7 +27,6 @@ interface Pkg {
 
 type Target = { file: string; pkg: Pkg | null } | { empty: string };
 
-const SPECIFIER = /(\bfrom\s*|\bimport\s*\(?\s*)(["'])([^"'\n]+)\2/g;
 const REQUIRE = /\brequire\s*\(\s*(["'])([^"'\n]+)\1\s*\)/g;
 const ESM_SYNTAX = /(^|[\n;])\s*(import\b\s*[\w*{"'$]|export\b\s*[\w*{])/;
 const NAMED_EXPORT =
@@ -195,11 +194,124 @@ function resolveFile(path: string, pkg: Pkg | null): Target | null {
   return { file, pkg: owner };
 }
 
-function rewrite(code: string, map: (spec: string) => string | null): string {
-  return code.replace(SPECIFIER, (all, lead: string, q: string, spec: string) => {
-    const url = map(spec);
-    return url === null ? all : `${lead}${q}${url}${q}`;
-  });
+const REGEX_AFTER_WORD = new Set(["return", "typeof", "case", "do", "else", "in", "of", "new", "delete", "void", "throw", "yield", "await", "instanceof"]);
+
+export function rewriteSpecifiers(code: string, map: (spec: string) => string | null): string {
+  let out = "";
+  let last = 0;
+  let i = 0;
+  let prev = "";
+  let word = "";
+  const braces: number[] = [];
+  let depth = 0;
+  const n = code.length;
+  const isId = (c: string | undefined) => c !== undefined && /[\w$]/.test(c);
+  const skipString = (q: string, at: number): number => {
+    let j = at + 1;
+    while (j < n && code[j] !== q && code[j] !== "\n") j += code[j] === "\\" ? 2 : 1;
+    return j + 1;
+  };
+  const template = (at: number): number => {
+    let j = at;
+    while (j < n) {
+      const c = code[j];
+      if (c === "\\") j += 2;
+      else if (c === "`") return j + 1;
+      else if (c === "$" && code[j + 1] === "{") {
+        braces.push(depth);
+        depth += 1;
+        return -(j + 2);
+      } else j += 1;
+    }
+    return n;
+  };
+  while (i < n) {
+    const c = code[i]!;
+    if (c === "/" && code[i + 1] === "/") {
+      const e = code.indexOf("\n", i);
+      i = e < 0 ? n : e;
+      continue;
+    }
+    if (c === "/" && code[i + 1] === "*") {
+      const e = code.indexOf("*/", i + 2);
+      i = e < 0 ? n : e + 2;
+      continue;
+    }
+    if (/\s/.test(c)) {
+      i += 1;
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      const end = skipString(c, i);
+      const lead = word === "from" || word === "import" || (word === "(" && prev === "import");
+      if (lead) {
+        const spec = code.slice(i + 1, end - 1);
+        const url = spec.includes("\n") ? null : map(spec);
+        if (url !== null) {
+          out += code.slice(last, i + 1) + url;
+          last = end - 1;
+        }
+      }
+      prev = word;
+      word = "str";
+      i = end;
+      continue;
+    }
+    if (c === "`") {
+      const r = template(i + 1);
+      i = r < 0 ? -r : r;
+      prev = word;
+      word = r < 0 ? "{" : "str";
+      continue;
+    }
+    if (c === "}" && braces.length > 0 && braces[braces.length - 1] === depth - 1) {
+      braces.pop();
+      depth -= 1;
+      const r = template(i + 1);
+      i = r < 0 ? -r : r;
+      prev = word;
+      word = r < 0 ? "{" : "str";
+      continue;
+    }
+    if (c === "/") {
+      const regexOk = word === "" || (!isId(word[word.length - 1]) && word !== ")" && word !== "]" && word !== "str") || REGEX_AFTER_WORD.has(word);
+      if (regexOk) {
+        let j = i + 1;
+        let cls = false;
+        while (j < n && code[j] !== "\n") {
+          const d = code[j];
+          if (d === "\\") j += 2;
+          else {
+            if (d === "[") cls = true;
+            else if (d === "]") cls = false;
+            else if (d === "/" && !cls) break;
+            j += 1;
+          }
+        }
+        j += 1;
+        while (isId(code[j])) j += 1;
+        prev = word;
+        word = "str";
+        i = j;
+        continue;
+      }
+    }
+    if (isId(c)) {
+      let j = i;
+      while (isId(code[j])) j += 1;
+      prev = word;
+      word = code.slice(i, j);
+      if (code[i - 1] === ".") word = "." + word;
+      i = j;
+      continue;
+    }
+    if (c === "{") depth += 1;
+    else if (c === "}") depth -= 1;
+    prev = word;
+    word = c;
+    i += 1;
+  }
+  return out + code.slice(last);
 }
 
 export function browserModules(
@@ -252,7 +364,7 @@ export function browserModules(
 
   const out: Record<string, string> = {};
   for (const [key, { js, dir }] of Object.entries(modules)) {
-    out[key] = rewrite(js, (spec) => {
+    out[key] = rewriteSpecifiers(js, (spec) => {
       if (spec.startsWith("/_weft/") || spec === "@weft-framework/runtime") return null;
       if (BUILTINS.has(spec) || spec.startsWith("node:")) {
         throw new NpmError(`${key}: \`${spec}\` is a Node built-in and cannot run in the browser`);
@@ -292,7 +404,7 @@ export function browserModules(
     }
     code = code.replace(/\bprocess\.env\.NODE_ENV\b/g, JSON.stringify(mode));
     if (local || file.endsWith(".mjs") || ESM_SYNTAX.test(code)) {
-      assets[url] = rewrite(code, map);
+      assets[url] = rewriteSpecifiers(code, map);
     } else {
       assets[url] = wrapCommonJs(code, namedExports(file, cjsNames, 0), map);
     }

@@ -2,7 +2,7 @@ import type { SqlDatabase } from "@weft-framework/data";
 import { signInWith } from "./auth.ts";
 import type { PageContext } from "./context.ts";
 import type { Identity } from "./oauth.ts";
-import { base64url, RateLimiter, timingSafeEqual } from "./security.ts";
+import { base64url, RateLimit, timingSafeEqual, type RateLimitStore } from "./security.ts";
 import { isSafePath } from "@weft-framework/runtime";
 
 type Maybe<T> = T | Promise<T>;
@@ -137,6 +137,7 @@ export interface EmailSignInOptions {
   maxAttempts?: number;
   perEmail?: number;
   perSession?: number;
+  limits?: RateLimitStore;
   store?: EmailTokenStore;
   now?(): number;
 }
@@ -182,13 +183,13 @@ export function normalizeEmail(raw: unknown): string | null {
 }
 
 export class EmailSignIn {
-  readonly #o: Required<Omit<EmailSignInOptions, "allow" | "store" | "now">> & Pick<EmailSignInOptions, "allow">;
+  readonly #o: Required<Omit<EmailSignInOptions, "allow" | "store" | "now" | "limits">> & Pick<EmailSignInOptions, "allow">;
   readonly page: string;
   readonly #store: EmailTokenStore;
   readonly #now: () => number;
   readonly #origin: string;
-  readonly #byEmail: RateLimiter;
-  readonly #bySession: RateLimiter;
+  readonly #byEmail: RateLimit;
+  readonly #bySession: RateLimit;
   #swept = 0;
 
   constructor(o: EmailSignInOptions) {
@@ -222,8 +223,8 @@ export class EmailSignIn {
     this.#origin = origin.origin;
     this.#store = o.store ?? new MemoryEmailTokenStore();
     this.#now = o.now ?? Date.now;
-    this.#byEmail = new RateLimiter({ capacity: perEmail, refillPerSecond: perEmail / 3600 });
-    this.#bySession = new RateLimiter({ capacity: perSession, refillPerSecond: perSession / 3600 });
+    this.#byEmail = new RateLimit("signin.email", { capacity: perEmail, refillPerSecond: perEmail / 3600 }, o.limits);
+    this.#bySession = new RateLimit("signin.session", { capacity: perSession, refillPerSecond: perSession / 3600 }, o.limits);
   }
 
   async #sweep(now: number): Promise<void> {
@@ -237,7 +238,7 @@ export class EmailSignIn {
     const address = normalizeEmail(email);
     if (!address) throw new EmailSignInError("invalid", "That is not an email address");
     const now = this.#now();
-    if (!this.#bySession.take(ctx.session, now) || !this.#byEmail.take(address, now)) {
+    if (!(await this.#bySession.take(ctx.session, now)) || !(await this.#byEmail.take(address, now))) {
       throw new EmailSignInError("limit", "Too many sign-in emails; try again later");
     }
     await this.#sweep(now);

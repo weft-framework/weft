@@ -76,3 +76,23 @@ test("the shadcn theme carries shadcn's token names", () => {
   assert.ok(theme.css().includes("--destructive: oklch(0.704 0.191 22.216);"));
   assert.equal(theme.fromRequest(req()), "dark");
 });
+
+test("per-request overrides outrank the base theme and stay within known tokens", () => {
+  const theme = defineTheme(config);
+  assert.equal(theme.overrides(null), "");
+  assert.equal(theme.overrides({}), "");
+  const css = theme.overrides({ shared: { radius: "0" }, themes: { dark: { background: "#000" } } });
+  assert.equal(
+    css,
+    ":root:root {\n  --radius: 0;\n}\n" +
+      ':root:root[data-theme="light"] {\n  --radius: 0;\n}\n' +
+      ':root:root[data-theme="dark"] {\n  --radius: 0;\n  --background: #000;\n}\n' +
+      ':root:root[data-theme="ocean"] {\n  --radius: 0;\n}\n' +
+      '@media (prefers-color-scheme: dark) {\n:root:root:not([data-theme]), :root:root[data-theme="system"] {\n  --radius: 0;\n  --background: #000;\n}\n}\n',
+  );
+  assert.deepEqual([...theme.tokens].sort(), ["background", "font-sans", "foreground", "radius"]);
+  assert.throws(() => theme.overrides({ shared: { primary: "red" } }), /not a token of this theme/);
+  assert.throws(() => theme.overrides({ themes: { nope: { background: "#000" } } as never }), /not a theme/);
+  assert.throws(() => theme.overrides({ shared: { background: "red;}body{display:none" } }), ThemeError);
+  assert.throws(() => theme.overrides({ shared: { background: "</style><script>" } }), ThemeError);
+});

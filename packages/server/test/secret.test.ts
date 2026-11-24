@@ -88,3 +88,19 @@ test("loading .env never overrides the real environment", () => {
   assert.deepEqual(env, { A: "real", B: "from-file" });
   assert.deepEqual(loadEnvFile(join(dir, "missing.env"), env), []);
 });
+
+test("during weft build an unset secret is a throwaway placeholder, never a real value", () => {
+  const before = process.env.WEFT_PHASE;
+  process.env.WEFT_PHASE = "build";
+  try {
+    const s = secretEnv("WEFT_TEST_UNSET_SECRET", { minLength: 100, env: {} });
+    assert.match(s.reveal(), /^weft-build-[0-9a-f]+$/);
+    assert.ok(s.reveal().length >= 100);
+    assert.notEqual(s.reveal(), secretEnv("WEFT_TEST_UNSET_SECRET", { env: {} }).reveal());
+    assert.equal(secretEnv("X", { env: { X: "real" } }).reveal(), "real");
+  } finally {
+    if (before === undefined) delete process.env.WEFT_PHASE;
+    else process.env.WEFT_PHASE = before;
+  }
+  assert.throws(() => secretEnv("WEFT_TEST_UNSET_SECRET", { env: {} }), /is not set/);
+});

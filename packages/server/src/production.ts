@@ -10,6 +10,7 @@ import { serveNode } from "./node.ts";
 import { ProjectError, loadProject } from "./project.ts";
 import { loadEnvFile } from "./env.ts";
 import { ModelStorage } from "./storage.ts";
+import { parseTrustedProxies } from "./client-address.ts";
 
 export interface ProductionOptions {
   env?: Record<string, string | undefined>;
@@ -104,13 +105,14 @@ export async function startProduction(distUrl: URL | string, opts: ProductionOpt
   }
 
   const p = port(env.PORT, config.port ?? 3000);
+  const trustedProxies = parseTrustedProxies(env.WEFT_TRUSTED_PROXIES);
   const host = env.HOST || config.host || "127.0.0.1";
   let server: ProductionServer;
   if (bun) {
-    const s = serveBun(app, { port: p, hostname: host, trustProxy: env.WEFT_TRUST_PROXY === "1" }, bun);
+    const s = serveBun(app, { port: p, hostname: host, trustProxy: env.WEFT_TRUST_PROXY === "1", trustedProxies }, bun);
     server = { app, manifest, url: s.url, close: () => shutdown(() => s.close()) };
   } else {
-    const s = await serveNode(app, { port: p, host, trustProxy: env.WEFT_TRUST_PROXY === "1" });
+    const s = await serveNode(app, { port: p, host, trustProxy: env.WEFT_TRUST_PROXY === "1", trustedProxies });
     server = { app, manifest, url: s.url, close: () => shutdown(() => s.close()) };
   }
   let closing = false;

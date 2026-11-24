@@ -275,3 +275,87 @@ test("middleware guards standalone actions", async () => {
   );
   assert.equal(res?.status, 401);
 });
+
+test("File parameters are decoded from multipart forms and refused elsewhere", async () => {
+  const specs: ParamSpec[] = [
+    { name: "doc", type: "file" },
+    { name: "extra", type: "file", list: true },
+    { name: "logo", type: "file", optional: true },
+    { name: "title", type: "string" },
+  ];
+  const form = new FormData();
+  form.append("doc", new File(["hello"], "a.txt", { type: "text/plain" }));
+  form.append("extra", new File(["1"], "b.txt"));
+  form.append("extra", new File(["22"], "c.txt"));
+  form.append("logo", new File([], ""));
+  form.append("title", "T");
+  const d = decodeForm(specs, form);
+  assert.ok(d.ok, d.ok ? "" : d.error);
+  const [doc, extra, logo, title] = d.args as [File, File[], File | undefined, string];
+  assert.equal(doc.name, "a.txt");
+  assert.equal(await doc.text(), "hello");
+  assert.deepEqual(extra.map((f) => f.name), ["b.txt", "c.txt"]);
+  assert.equal(logo, undefined, "an empty file input is no file");
+  assert.equal(title, "T");
+
+  const missing = new FormData();
+  missing.append("doc", new File([], ""));
+  missing.append("title", "T");
+  assert.deepEqual(decodeForm(specs, missing), { ok: false, error: "doc is required" });
+  assert.deepEqual(decodeForm(specs, new URLSearchParams("doc=x&title=T")), { ok: false, error: "doc: expected a file upload" });
+  const smuggled = new FormData();
+  smuggled.append("doc", new File(["x"], "x"));
+  smuggled.append("title", new File(["x"], "x"));
+  assert.deepEqual(decodeForm(specs, smuggled), { ok: false, error: "title: files are not accepted" });
+  assert.deepEqual(decodeJson(specs.slice(0, 1), { doc: "x" }), { ok: false, error: "doc: files are sent as a multipart form, not JSON" });
+  assert.throws(() => defineAction("a", [{ name: "f", type: "file", held: true }], () => 1), /held parameter cannot be a file/);
+
+  let got = "";
+  const upload = defineAction<[File, string], number>("upload", [{ name: "doc", type: "file" }, { name: "title", type: "string" }], async (_ctx, f, t) => {
+    got = `${t}:${f.name}:${await f.text()}`;
+    return f.size;
+  });
+  const Page = defineComponent("Page", () => ({ handlers: {}, render: () => "<p></p>" }));
+  const app = createApp({ secret: SECRET, routes: { "/u": { component: Page } }, actions: { upload: upload as never }, sync: false, onError: () => {} });
+  const { cookie, csrf } = await session2(app);
+  const body = new FormData();
+  body.append("doc", new File(["abc"], "r.csv", { type: "text/csv" }));
+  body.append("title", "Report");
+  const res = await app.fetch(new Request(`${ORIGIN}/u?/upload`, { method: "POST", headers: { cookie, origin: ORIGIN, "x-weft-csrf": csrf, "x-weft-enhanced": "1", accept: "application/json" }, body }));
+  assert.ok(res);
+  assert.deepEqual(await res.json(), { ok: true, value: 3 });
+  assert.equal(got, "Report:r.csv:abc");
+});
+
+async function session2(app: ReturnType<typeof createApp>) {
+  const res = await app.fetch(new Request(`${ORIGIN}/u`));
+  assert.ok(res);
+  const html = await res.text();
+  return { cookie: (res.headers.get("set-cookie") ?? "").split(";")[0]!, csrf: /name="weft-csrf" content="([^"]+)"/.exec(html)?.[1] ?? "" };
+}
+
+test("Record<string, string> parameters collect name[key] fields", () => {
+  const specs: ParamSpec[] = [{ name: "vars", type: "record" }, { name: "title", type: "string" }];
+  const form = new URLSearchParams();
+  form.append("vars[first name]", "Ada");
+  form.append("vars[__proto__]", "x");
+  form.append("vars[plan]", "");
+  form.append("other[k]", "no");
+  form.append("title", "T");
+  const d = decodeForm(specs, form);
+  assert.ok(d.ok, d.ok ? "" : d.error);
+  const vars = d.args[0] as Record<string, string>;
+  assert.deepEqual(Object.keys(vars), ["first name", "__proto__", "plan"]);
+  assert.equal(vars["first name"], "Ada");
+  assert.equal(Object.getPrototypeOf(vars), Object.prototype, "the prototype is untouched");
+  assert.equal(({} as Record<string, unknown>).x, undefined);
+  assert.deepEqual(decodeForm(specs, new URLSearchParams("title=T")), { ok: true, args: [{}, "T"] });
+  assert.deepEqual(decodeForm(specs, new URLSearchParams("vars[a]=1&vars[a]=2&title=T")), { ok: false, error: "vars[a] is given twice" });
+  assert.deepEqual(decodeForm(specs, new URLSearchParams("vars[]=1&title=T")), { ok: false, error: "vars: invalid key" });
+  const many = new URLSearchParams(Array.from({ length: 201 }, (_, i) => [`vars[k${i}]`, "v"]));
+  many.append("title", "T");
+  assert.deepEqual(decodeForm(specs, many), { ok: false, error: "vars: at most 200 entries" });
+  assert.deepEqual(decodeJson(specs, { vars: { a: "1" }, title: "T" }), { ok: true, args: [{ a: "1" }, "T"] });
+  assert.equal(decodeJson(specs, { vars: { a: 1 }, title: "T" }).ok, false);
+  assert.equal(decodeJson(specs, { vars: ["a"], title: "T" }).ok, false);
+});

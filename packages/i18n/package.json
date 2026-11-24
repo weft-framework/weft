@@ -1,6 +1,6 @@
 {
   "name": "@weft-framework/i18n",
-  "version": "0.0.4",
+  "version": "0.0.6",
   "description": "Weft translations: ICU message catalogs with type-checked keys and parameters, locale negotiation (URL prefix, cookie, Accept-Language), localised routes, Intl formatting, lang/dir on <html>.",
   "keywords": [
     "weft",

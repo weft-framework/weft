@@ -105,6 +105,7 @@ test("edgeReason names why a route is served from the origin", () => {
   assert.equal(edgeReason(r({}), {}), null);
   assert.equal(edgeReason(r({ load: () => ({}) as never }), {}), "load");
   assert.equal(edgeReason(r({ meta: () => ({}) }), {}), "meta from the request");
+  assert.equal(edgeReason(r({ cspFor: () => undefined }), {}), "csp from the request");
   assert.equal(edgeReason(r({ cache: "etag" }), {}), 'cache: "etag"');
   assert.equal(edgeReason(r({ edge: false }), {}), "edge: false");
   assert.match(edgeReason(r({}), { middleware: () => undefined })!, /^middleware/);

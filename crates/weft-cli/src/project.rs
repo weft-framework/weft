@@ -490,6 +490,16 @@ fn relative(from: &Path, to: &Path) -> String {
     parts.join("/")
 }
 
+pub fn enter_dir(parent: &Path, name: &str) -> bool {
+    if name == "node_modules" {
+        return false;
+    }
+    if !name.starts_with('.') {
+        return true;
+    }
+    name == ".well-known" && parent.file_name().is_some_and(|n| n == "pages")
+}
+
 fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> io::Result<()> {
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
@@ -498,7 +508,7 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> io::Result<()> {
         let name = name.to_string_lossy();
         let ty = entry.file_type()?;
         if ty.is_dir() {
-            if !name.starts_with('.') && name != "node_modules" {
+            if enter_dir(dir, &name) {
                 walk(&path, out)?;
             }
         } else if ty.is_file() {
@@ -782,24 +792,33 @@ fn run_server_script(name: &str, script_file: &str, args: &[String]) -> ExitCode
         eprintln!("weft {name}: @weft-framework/server not found; run `npm install` in the project");
         return ExitCode::FAILURE;
     };
-    let mut cmd = Command::new("node");
-    cmd.arg("--experimental-strip-types")
-        .arg("--disable-warning=ExperimentalWarning")
-        .arg(script)
-        .arg(&root)
-        .args(rest);
-    if let Ok(exe) = std::env::current_exe() {
-        cmd.env("WEFT_BIN", exe);
-    }
-    match cmd.status() {
-        Ok(s) if s.success() => ExitCode::SUCCESS,
-        Ok(_) => ExitCode::FAILURE,
-        Err(e) => {
-            eprintln!("weft {name}: cannot run node: {e}");
-            ExitCode::FAILURE
+    let supervise = name == "dev";
+    loop {
+        let mut cmd = Command::new("node");
+        cmd.arg("--experimental-strip-types")
+            .arg("--disable-warning=ExperimentalWarning")
+            .arg(&script)
+            .arg(&root)
+            .args(&rest);
+        if let Ok(exe) = std::env::current_exe() {
+            cmd.env("WEFT_BIN", exe);
+        }
+        if supervise {
+            cmd.env("WEFT_DEV_RESTART", "1");
+        }
+        match cmd.status() {
+            Ok(s) if supervise && s.code() == Some(DEV_RESTART_CODE) => continue,
+            Ok(s) if s.success() => return ExitCode::SUCCESS,
+            Ok(_) => return ExitCode::FAILURE,
+            Err(e) => {
+                eprintln!("weft {name}: cannot run node: {e}");
+                return ExitCode::FAILURE;
+            }
         }
     }
 }
+
+const DEV_RESTART_CODE: i32 = 75;
 
 pub(crate) fn plain_canonical(dir: &Path) -> io::Result<PathBuf> {
     let p = fs::canonicalize(dir)?;
@@ -830,6 +849,28 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("weft-cli-{tag}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         dir
+    }
+
+    #[test]
+    fn well_known_pages_are_compiled_other_dot_dirs_are_not() {
+        assert!(enter_dir(Path::new("src/pages"), ".well-known"));
+        assert!(!enter_dir(Path::new("src/lib"), ".well-known"));
+        assert!(!enter_dir(Path::new("src/pages/blog"), ".well-known"));
+        assert!(!enter_dir(Path::new("src/pages"), ".git"));
+        assert!(!enter_dir(Path::new("src"), "node_modules"));
+        assert!(enter_dir(Path::new("src/pages"), "blog"));
+        let dir = temp_dir("well-known");
+        fs::create_dir_all(dir.join("src/pages/.well-known")).unwrap();
+        fs::create_dir_all(dir.join("src/pages/.cache")).unwrap();
+        fs::write(dir.join("src/pages/.well-known/security.txt.ts"), "export function GET() { return new Response(\"x\"); }
+").unwrap();
+        fs::write(dir.join("src/pages/.cache/junk.ts"), "export const x = 1;
+").unwrap();
+        let out = dir.join("out");
+        assert!(compile_tree(&dir.join("src"), &out).unwrap());
+        assert!(out.join("pages/.well-known/security.txt.ts").is_file());
+        assert!(!out.join("pages/.cache").exists());
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
@@ -928,7 +969,7 @@ mod tests {
         assert!(pkg.contains("\"tailwindcss\": \"^4.3.5\""), "{pkg}");
         assert!(pkg.contains("},\n  \"engines\""), "{pkg}");
         assert_eq!(pkg.matches("\"devDependencies\"").count(), 1, "{pkg}");
-        assert!(pkg.contains("\"@weft-framework/cli\": \"^0.0.1\""), "{pkg}");
+        assert!(pkg.contains("\"@weft-framework/cli\": \"^0.0.6\""), "{pkg}");
         fs::remove_dir_all(&dir).unwrap();
     }
 

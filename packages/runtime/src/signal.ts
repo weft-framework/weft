@@ -29,7 +29,7 @@ export function signal<T>(initial: T): Signal<T> {
   return s;
 }
 
-function cell<T>(initial: T): Signal<T> {
+export function cell<T>(initial: T): Signal<T> {
   let current = initial;
   const subscribers = new Set<Computation>();
 

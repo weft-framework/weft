@@ -396,3 +396,107 @@ test("src/emails templates load with subject and samples, and preview in dev", {
     (err: unknown) => err instanceof ProjectError && /src\/emails\/bad: `preview` is sample props/.test(err.message),
   );
 });
+
+test("src/pages/.well-known modules serve /.well-known/* like api routes; other dot dirs stay out", { skip: !hasCargo() }, async () => {
+  const root = scaffold("well-known-app");
+  mkdirSync(join(root, "src", "pages", ".well-known", "proof"), { recursive: true });
+  mkdirSync(join(root, "src", "pages", ".drafts"), { recursive: true });
+  writeFileSync(
+    join(root, "src", "pages", ".well-known", "security.txt.ts"),
+    `export function GET() { return new Response("Contact: mailto:security@demo.test", { headers: { "content-type": "text/plain" } }) }\n`,
+  );
+  writeFileSync(
+    join(root, "src", "pages", ".well-known", "proof", "[token].ts"),
+    `export function GET(ctx: { params: { token: string } }) { return new Response("proof:" + ctx.params.token) }\n`,
+  );
+  writeFileSync(join(root, "src", "pages", ".drafts", "secret.ts"), `export function GET() { return new Response("leak") }\n`);
+  const compiler = findCompiler(repo);
+  const project = await loadProject(root, { compiler, outDir: join(root, ".weft", "build") });
+  assert.ok(project.api?.["/.well-known/security.txt"]);
+  assert.ok(project.api?.["/.well-known/proof/[token]"]);
+  assert.equal(project.routes["/.well-known/security.txt"], undefined);
+  assert.equal(project.api?.["/.drafts/secret"], undefined);
+  const app = createApp({ secret: "project-test-secret-0123456789abcdef", ...project, onError: () => {} });
+  const sec = await get(app, "/.well-known/security.txt");
+  assert.equal(sec.res.status, 200);
+  assert.match(sec.html, /^Contact: mailto:security@demo\.test/);
+  const proof = await get(app, "/.well-known/proof/abc123");
+  assert.equal(proof.html, "proof:abc123");
+  const hidden = await get(app, "/.drafts/secret");
+  assert.equal(hidden.res.status, 404);
+});
+
+test("a .ts page that exports only request handlers is served like an api route", { skip: !hasCargo() }, async () => {
+  const root = scaffold("handler-page-app");
+  mkdirSync(join(root, "src", "pages", "l"), { recursive: true });
+  writeFileSync(
+    join(root, "src", "pages", "l", "[code].ts"),
+    `export function GET(ctx: { params: { code: string } }) { return new Response(null, { status: 302, headers: { location: "/go/" + ctx.params.code, "set-cookie": "ref=" + ctx.params.code + "; Path=/; HttpOnly" } }) }\n`,
+  );
+  const compiler = findCompiler(repo);
+  const project = await loadProject(root, { compiler, outDir: join(root, ".weft", "build") });
+  assert.ok(project.api?.["/l/[code]"]);
+  assert.equal(project.routes["/l/[code]"], undefined);
+  const app = createApp({ secret: "project-test-secret-0123456789abcdef", ...project, onError: () => {} });
+  const res = await get(app, "/l/abc");
+  assert.equal(res.res.status, 302);
+  assert.equal(res.res.headers.get("location"), "/go/abc");
+  assert.match(res.res.headers.get("set-cookie") ?? "", /ref=abc/);
+});
+
+test("src/theme.ts can export themeFor(ctx): token overrides served with each page", { skip: !hasCargo() }, async () => {
+  const root = scaffold("themed-app");
+  writeFileSync(
+    join(root, "src", "theme.ts"),
+    `import { shadcnTheme } from "@weft-framework/theme"\n` +
+      `export default shadcnTheme()\n` +
+      `export function themeFor(ctx: { query: URLSearchParams }) {\n` +
+      `  const brand = ctx.query.get("brand")\n` +
+      `  if (brand === "bad") return { shared: { nope: "red" } }\n` +
+      `  return brand ? { shared: { primary: brand } } : null\n` +
+      `}\n`,
+  );
+  const compiler = findCompiler(repo);
+  const project = await loadProject(root, { compiler, outDir: join(root, ".weft", "build") });
+  assert.equal(typeof project.themeCss, "function");
+  const errors: unknown[] = [];
+  const app = createApp({ secret: "project-test-secret-0123456789abcdef", ...project, onError: (e) => errors.push(e) });
+  const plain = await get(app, "/");
+  assert.equal(plain.res.status, 200);
+  assert.ok(!plain.html.includes("data-weft-theme"));
+  const branded = await get(app, "/?brand=%23ff6600");
+  const style = /<style nonce="([^"]+)" data-weft-theme>([^<]*)<\/style>/.exec(branded.html);
+  assert.ok(style, branded.html.slice(0, 600));
+  assert.match(style![2]!, /:root:root \{\n  --primary: #ff6600;\n\}/);
+  assert.ok(branded.res.headers.get("content-security-policy")?.includes(`'nonce-${style![1]}'`));
+  const bad = await get(app, "/?brand=bad");
+  assert.equal(bad.res.status, 200, "a broken override never breaks the page");
+  assert.ok(!bad.html.includes("data-weft-theme"));
+  assert.match(String(errors[0]), /not a token of this theme/);
+});
+
+test("an api file may export `socket` to serve a websocket route", { skip: !hasCargo() }, async () => {
+  const root = scaffold("socket-app");
+  mkdirSync(join(root, "src", "pages", "api", "rooms"), { recursive: true });
+  writeFileSync(
+    join(root, "src", "pages", "api", "rooms", "[id].ts"),
+    `export const socket = {\n  open(ws: { send(d: string): void }, ctx: { params: { id: string } }) { ws.send("room " + ctx.params.id) },\n}\n` +
+      `export function GET() { return new Response("plain") }\n`,
+  );
+  writeFileSync(join(root, "src", "pages", "api", "feed.ts"), `export const socket = { message(ws: { send(d: string): void }, d: string) { ws.send(d) } }\n`);
+  const compiler = findCompiler(repo);
+  const project = await loadProject(root, { compiler, outDir: join(root, ".weft", "build") });
+  assert.deepEqual(Object.keys(project.sockets ?? {}).sort(), ["/api/feed", "/api/rooms/[id]"]);
+  assert.ok(project.api?.["/api/rooms/[id]"]?.GET);
+  assert.equal(project.api?.["/api/feed"], undefined);
+  const app = createApp({ secret: "project-test-secret-0123456789abcdef", ...project });
+  const accepted = await app.socket!(
+    new Request(ORIGIN + "/api/rooms/7", { headers: { upgrade: "websocket", origin: ORIGIN } }),
+  );
+  assert.ok(!(accepted instanceof Response));
+  const sent: string[] = [];
+  app.socketRoute!({ send: (d) => sent.push(String(d)), close: () => undefined }, accepted);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(sent, ["room 7"]);
+  assert.equal(((await get(app, "/api/rooms/7")).html), "plain");
+});

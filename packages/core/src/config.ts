@@ -41,6 +41,7 @@ interface SettingBase {
   label?: string;
   description?: string;
   editable?: boolean;
+  scoped?: boolean;
 }
 
 export type SettingConfig =
@@ -243,6 +244,9 @@ export function resolve(config: AccessConfig<string, string, string, SettingsCon
         invalid(`${at}: maxLength is between 1 and ${MAX_SETTING_TEXT}`);
       }
     }
+    for (const flag of ["editable", "scoped"] as const) {
+      if (spec[flag] !== undefined && typeof spec[flag] !== "boolean") invalid(`${at}: ${flag} is true or false`);
+    }
     const problem = settingProblem(spec, spec.default);
     if (problem !== null) invalid(`${at}: the default ${problem}`);
     const copy = spec.type === "string" && spec.options ? { ...spec, options: Object.freeze([...spec.options]) } : { ...spec };
@@ -254,6 +258,7 @@ export function resolve(config: AccessConfig<string, string, string, SettingsCon
     if (spec?.type !== "number" || !spec.integer || spec.min === undefined || spec.min < 1) {
       invalid(`seats: \`${seats}\` must be a whole-number setting with a min of at least 1`);
     }
+    if (spec.scoped) invalid(`seats: \`${seats}\` counts per tenant and cannot be scoped`);
   }
 
   const ttl = config.invites?.ttlMs ?? 7 * DAY;

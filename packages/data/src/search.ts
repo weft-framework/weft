@@ -13,6 +13,7 @@ export interface SearchSpec<T> {
 export interface SearchOptions {
   limit?: number;
   offset?: number;
+  match?: "all" | "any";
 }
 
 export interface SearchHit<R> {
@@ -150,16 +151,18 @@ export class Search<T> {
     const offset = o.offset ?? 0;
     if (!Number.isSafeInteger(limit) || limit < 0) throw new Error("search: limit is a non-negative integer");
     if (!Number.isSafeInteger(offset) || offset < 0) throw new Error("search: offset is a non-negative integer");
+    if (o.match !== undefined && o.match !== "all" && o.match !== "any") throw new Error("search: match is \"all\" or \"any\"");
+    const any = o.match === "any";
     const terms = this.terms(q);
     const self = this;
     return out(
       (function* (): Flow<SearchResult<T>> {
         if (terms.length === 0) return { hits: [], total: 0, terms, truncated: false };
         if (self.#db && self.model.driver instanceof SqlTable) {
-          const keys = self.#candidates(terms);
-          return yield* self.#rank(base, yield* self.#load(base, keys), terms, keys.length > self.#maxMatches, limit, offset);
+          const keys = self.#candidates(terms, any);
+          return yield* self.#rank(base, yield* self.#load(base, keys), terms, keys.length > self.#maxMatches, limit, offset, any);
         }
-        return yield* self.#rank(base, (yield* base.rowsG()) as T[], terms, false, limit, offset);
+        return yield* self.#rank(base, (yield* base.rowsG()) as T[], terms, false, limit, offset, any);
       })(),
     );
   }
@@ -172,13 +175,15 @@ export class Search<T> {
     const offset = o.offset ?? 0;
     if (!Number.isSafeInteger(limit) || limit < 0) throw new Error("search: limit is a non-negative integer");
     if (!Number.isSafeInteger(offset) || offset < 0) throw new Error("search: offset is a non-negative integer");
+    if (o.match !== undefined && o.match !== "all" && o.match !== "any") throw new Error("search: match is \"all\" or \"any\"");
+    const any = o.match === "any";
     const terms = this.terms(q);
     if (terms.length === 0) return { hits: [], total: 0, terms, truncated: false };
-    const keys = await this.#pg.candidates(terms, this.#maxMatches + 1);
+    const keys = await this.#pg.candidates(terms, this.#maxMatches + 1, any);
     const self = this;
     return await flow(
       (function* (): Flow<SearchResult<T>> {
-        return yield* self.#rank(base, yield* self.#load(base, keys), terms, keys.length > self.#maxMatches, limit, offset);
+        return yield* self.#rank(base, yield* self.#load(base, keys), terms, keys.length > self.#maxMatches, limit, offset, any);
       })(),
     );
   }
@@ -227,7 +232,7 @@ export class Search<T> {
     return rows;
   }
 
-  *#rank(base: Query<T, any, any, any>, rows: T[], terms: string[], truncated: boolean, limit: number, offset: number): Flow<SearchResult<T>> {
+  *#rank(base: Query<T, any, any, any>, rows: T[], terms: string[], truncated: boolean, limit: number, offset: number, any = false): Flow<SearchResult<T>> {
     const prefix = terms[terms.length - 1]!.length >= 2;
     const docs: { row: T; words: string[][] }[] = [];
     for (const row of rows) {
@@ -236,9 +241,8 @@ export class Search<T> {
         return typeof v === "string" ? searchWords(v) : [];
       });
       const all = words.flat();
-      const ok = terms.every((t, i) =>
-        i === terms.length - 1 && prefix ? all.some((w) => w.startsWith(t)) : all.includes(t),
-      );
+      const has = (t: string, i: number) => (i === terms.length - 1 && prefix ? all.some((w) => w.startsWith(t)) : all.includes(t));
+      const ok = any ? terms.some(has) : terms.every(has);
       if (ok) docs.push({ row, words });
     }
     const avg = this.#weights.map((_, f) => docs.reduce((s, d) => s + d.words[f]!.length, 0) / Math.max(1, docs.length) || 1);
@@ -286,9 +290,9 @@ export class Search<T> {
     return out;
   }
 
-  #candidates(terms: string[]): unknown[] {
+  #candidates(terms: string[], any = false): unknown[] {
     const last = terms.length - 1;
-    const match = terms.map((t, i) => `"${t}"${i === last && t.length >= 2 ? "*" : ""}`).join(" ");
+    const match = terms.map((t, i) => `"${t}"${i === last && t.length >= 2 ? "*" : ""}`).join(any ? " OR " : " ");
     const key = quoteIdent(this.model.key);
     const rows = this.#db!
       .prepare(
@@ -385,9 +389,9 @@ class PgIndex {
     return this.#queue;
   }
 
-  async candidates(terms: string[], max: number): Promise<unknown[]> {
+  async candidates(terms: string[], max: number, any = false): Promise<unknown[]> {
     const last = terms.length - 1;
-    const query = terms.map((t, i) => `'${t.replace(/'/g, "")}'${i === last && t.length >= 2 ? ":*" : ""}`).join(" & ");
+    const query = terms.map((t, i) => `'${t.replace(/'/g, "")}'${i === last && t.length >= 2 ? ":*" : ""}`).join(any ? " | " : " & ");
     const r = await this.#pool.query(`SELECT k FROM ${this.#t} WHERE doc @@ to_tsquery('simple', $1) LIMIT $2`, [query, max]);
     return r.rows.map((x) => this.#keyKind(String(x.k)));
   }

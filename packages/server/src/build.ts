@@ -3,6 +3,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync,
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { inBuildPhase } from "@weft-framework/data";
 import { CompileError, compileTree, findCompiler, type Compiler } from "./compiler.ts";
 import { ConfigError } from "./config.ts";
 import { openApi } from "./contract.ts";
@@ -88,7 +89,11 @@ export function versionAssets(assets: Record<string, string>): { assets: Record<
   return { assets: out, buildId };
 }
 
-export async function build(root: string, opts: BuildOptions): Promise<BuildManifest> {
+export function build(root: string, opts: BuildOptions): Promise<BuildManifest> {
+  return inBuildPhase(() => buildProject(root, opts));
+}
+
+async function buildProject(root: string, opts: BuildOptions): Promise<BuildManifest> {
   root = resolve(root);
   const out = resolve(opts.out ?? join(root, "dist"));
   if (!existsSync(join(root, "src", "pages"))) {

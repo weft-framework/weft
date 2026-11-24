@@ -100,3 +100,18 @@ test("security headers: nonce CSP, framing denied, HSTS only when secure", () =>
   assert.equal(h["strict-transport-security"], undefined);
   assert.ok(securityHeaders({ nonce: "N", secure: true })["strict-transport-security"]);
 });
+
+test("RateLimit uses a shared store when given one, and keys limits by name", async () => {
+  const { RateLimit } = await import("../src/security.ts");
+  const seen: string[] = [];
+  const store = { take: (key: string) => (seen.push(key), seen.length < 3) };
+  const shared = new RateLimit("account.email", { capacity: 1, refillPerSecond: 1 }, store);
+  assert.equal(await shared.take("ada"), true);
+  assert.equal(await shared.take("ada"), true, "the store decides, not the local bucket");
+  assert.equal(await shared.take("ada"), false);
+  assert.deepEqual(seen, ["account.email:ada", "account.email:ada", "account.email:ada"]);
+  const local = new RateLimit("account.email", { capacity: 1, refillPerSecond: 0.001 });
+  assert.equal(await local.take("ada", 0), true);
+  assert.equal(await local.take("ada", 1), false);
+  assert.throws(() => new RateLimit("Bad Name", { capacity: 1, refillPerSecond: 1 }), /not a limit name/);
+});
