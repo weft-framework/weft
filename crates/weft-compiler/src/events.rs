@@ -12,7 +12,20 @@ pub const DOM_EVENTS: &[&str] = &[
     "pointerup",
 ];
 
+pub const CLIENT_EVENTS: &[&str] = &[
+    "dragstart",
+    "dragenter",
+    "dragover",
+    "dragleave",
+    "drop",
+    "dragend",
+];
+
 pub const TRIGGERS: &[&str] = &["load", "visible", "every"];
+
+pub fn client_only(event: &str) -> bool {
+    CLIENT_EVENTS.contains(&event)
+}
 
 const KEY_EVENTS: &[&str] = &["keydown", "keyup"];
 const POINTER_EVENTS: &[&str] = &["click", "dblclick", "pointerdown", "pointerup"];
@@ -236,13 +249,17 @@ pub fn validate(spec: &EventSpec) -> Vec<Problem> {
     let mut out = Vec::new();
     let ev = spec.event;
     let trigger = TRIGGERS.contains(&ev);
-    if !trigger && !DOM_EVENTS.contains(&ev) {
-        let s = crate::html::suggest(ev, DOM_EVENTS.iter().chain(TRIGGERS).copied());
+    if !trigger && !DOM_EVENTS.contains(&ev) && !client_only(ev) {
+        let s = crate::html::suggest(
+            ev,
+            DOM_EVENTS.iter().chain(CLIENT_EVENTS).chain(TRIGGERS).copied(),
+        );
         let hint = s.map_or(String::new(), |s| format!(" (did you mean `@{s}`?)"));
         out.push(Problem::error(
             format!(
-                "`@{ev}` is not an event Weft delivers{hint}; events: {}; triggers: {}",
+                "`@{ev}` is not an event Weft delivers{hint}; events: {}; client-only events: {}; triggers: {}",
                 DOM_EVENTS.join(", "),
+                CLIENT_EVENTS.join(", "),
                 TRIGGERS.join(", ")
             ),
             0,
@@ -488,6 +505,9 @@ mod tests {
             "visible.once",
             "every(30s)",
             "every(1m).confirm('Refresh?')",
+            "dragover",
+            "drop.prevent",
+            "dragenter.stop",
         ] {
             assert!(problems(ok).is_empty(), "{ok}: {:?}", problems(ok));
         }
@@ -539,5 +559,7 @@ mod tests {
             "`.once` does not apply to `@every`"
         );
         assert!(first("every(200ms)").contains("more than once a second"));
+        assert!(first("dragovr").contains("did you mean `@dragover`"));
+        assert_eq!(first("drop.enter"), "key filter `.enter` only applies to `@keydown` / `@keyup`");
     }
 }

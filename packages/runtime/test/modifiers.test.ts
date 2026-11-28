@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { DEFAULT_EVENTS, WeftClient, type ClientOptions, type Timers } from "../src/client.ts";
+import { CLIENT_EVENTS, DEFAULT_EVENTS, WeftClient, type ClientOptions, type Timers } from "../src/client.ts";
 import type { ClientMessage, EventMessage } from "../src/protocol.ts";
 import { frag, h, type FElement } from "../testing/fakedom.ts";
 
@@ -255,4 +255,6 @@ test("the client listens for exactly the compiler's events", () => {
   const block = src.slice(src.indexOf("pub const DOM_EVENTS"), src.indexOf("];", src.indexOf("pub const DOM_EVENTS")));
   const rust = [...block.matchAll(/"([a-z]+)"/g)].map((m) => m[1]);
   assert.deepEqual([...DEFAULT_EVENTS], rust);
+  const cblock = src.slice(src.indexOf("pub const CLIENT_EVENTS"), src.indexOf("];", src.indexOf("pub const CLIENT_EVENTS")));
+  assert.deepEqual([...CLIENT_EVENTS], [...cblock.matchAll(/"([a-z]+)"/g)].map((m) => m[1]));
 });

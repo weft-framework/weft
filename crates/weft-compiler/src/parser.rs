@@ -1087,6 +1087,18 @@ impl<'a> Parser<'a> {
             return None;
         }
         self.skip_trivia();
+        let ty = if self.peek() == Some(':') {
+            self.bump();
+            self.skip_trivia();
+            let ty = self.read_reactive_type();
+            if ty.is_empty() {
+                self.error("expected a type after ':'");
+                return None;
+            }
+            Some(ty)
+        } else {
+            None
+        };
         if !self.expect('=', "'=' and an initializer") {
             return None;
         }
@@ -1100,10 +1112,38 @@ impl<'a> Parser<'a> {
             kind,
             client: false,
             name,
+            ty,
             expr,
             comments: Comments::default(),
             span: Span::new(start, self.offset()),
         })
+    }
+
+    fn read_reactive_type(&mut self) -> String {
+        let start = self.offset();
+        let mut depth: i32 = 0;
+        loop {
+            match self.peek() {
+                None => break,
+                Some('\n') if depth == 0 => break,
+                Some('=') if self.peek_at(1) == Some('>') => {
+                    self.bump();
+                    self.bump();
+                }
+                Some('=') if depth == 0 => break,
+                Some('"' | '\'' | '`') => self.skip_string(),
+                Some('/') if matches!(self.peek_at(1), Some('/' | '*')) => self.skip_comment(),
+                Some(c) => {
+                    match c {
+                        '(' | '[' | '{' | '<' => depth += 1,
+                        ')' | ']' | '}' | '>' => depth -= 1,
+                        _ => {}
+                    }
+                    self.bump();
+                }
+            }
+        }
+        self.src[start..self.offset()].trim().to_string()
     }
 
     fn read_expr_to_terminator(&mut self, stop_brace: bool) -> String {
@@ -1252,6 +1292,17 @@ impl<'a> Parser<'a> {
             let name = match &tokens[i].kind {
                 TokenKind::Eof => break,
                 TokenKind::Ident(n) => n.clone(),
+                TokenKind::Keyword(_) => {
+                    let span = shift(tokens[i].span, base);
+                    let word = slice
+                        .get(tokens[i].span.start..tokens[i].span.end)
+                        .unwrap_or("this word");
+                    self.diags.push(Diagnostic::error(
+                        format!("`{word}` is a reserved word in .wx and cannot be a parameter name; rename it"),
+                        span,
+                    ));
+                    break;
+                }
                 _ => {
                     let span = shift(tokens[i].span, base);
                     self.diags
@@ -1642,6 +1693,21 @@ mod tests {
         assert_eq!(c.reactives[1].kind, ReactiveKind::Derived);
         assert_eq!(c.reactives[1].name, "doubled");
         assert_eq!(c.reactives[1].expr, "count * 2");
+        assert_eq!(c.reactives[0].ty, None);
+    }
+
+    #[test]
+    fn reactives_take_an_optional_type() {
+        let src = "component Codes() {\n  client signal codes: string[] = []\n  signal pick: Map<string, (a: number) => void> = new Map()\n  derived total: number = codes.length\n  view { <p>{total}</p> }\n}";
+        let file = parse_ok(src);
+        let Item::Component(c) = &file.items[0] else {
+            panic!("expected component");
+        };
+        assert_eq!(c.reactives[0].ty.as_deref(), Some("string[]"));
+        assert_eq!(c.reactives[0].expr, "[]");
+        assert_eq!(c.reactives[1].ty.as_deref(), Some("Map<string, (a: number) => void>"));
+        assert_eq!(c.reactives[1].expr, "new Map()");
+        assert_eq!(c.reactives[2].ty.as_deref(), Some("number"));
     }
 
     #[test]

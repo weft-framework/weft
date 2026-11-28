@@ -8,10 +8,13 @@ use crate::token::Span;
 pub fn lint(nodes: &[Node]) -> Vec<Diagnostic> {
     let mut ids = HashSet::new();
     let mut fors = Vec::new();
-    collect_ids(nodes, &mut ids, &mut fors);
+    let mut wrapped = HashSet::new();
+    collect_ids(nodes, &mut ids, &mut fors, &mut wrapped);
+    let mut labelled: HashSet<String> = fors.iter().map(|(f, _)| f.clone()).collect();
+    labelled.extend(wrapped);
     let mut cx = Lint {
         ids,
-        labelled: fors.iter().map(|(f, _)| f.clone()).collect(),
+        labelled,
         diags: Vec::new(),
     };
     for (target, span) in &fors {
@@ -88,11 +91,31 @@ fn has_text(nodes: &[Node]) -> bool {
     })
 }
 
-fn collect_ids(nodes: &[Node], ids: &mut HashSet<String>, fors: &mut Vec<(String, Span)>) {
+fn labels_its_field(e: &Element) -> Option<&str> {
+    if !is_component_name(&e.name) {
+        return None;
+    }
+    let label = e.attrs.iter().any(|a| {
+        matches!(a.kind, AttrKind::Plain) && a.name == "label" && !matches!(&a.value, Some(AttrValue::Str(s)) if s.trim().is_empty())
+    });
+    if !label {
+        return None;
+    }
+    attr(e, "for").flatten().or_else(|| attr(e, "id").flatten()).filter(|s| !s.is_empty())
+}
+
+fn collect_ids(
+    nodes: &[Node],
+    ids: &mut HashSet<String>,
+    fors: &mut Vec<(String, Span)>,
+    wrapped: &mut HashSet<String>,
+) {
     for n in nodes {
         match n {
             Node::Element(e) => {
-                if let Some(Some(id)) = attr(e, "id") {
+                if let Some(target) = labels_its_field(e) {
+                    wrapped.insert(target.to_string());
+                } else if let Some(Some(id)) = attr(e, "id") {
                     ids.insert(id.to_string());
                 }
                 if e.name == "label" {
@@ -100,11 +123,11 @@ fn collect_ids(nodes: &[Node], ids: &mut HashSet<String>, fors: &mut Vec<(String
                         fors.push((target.to_string(), e.span));
                     }
                 }
-                collect_ids(&e.children, ids, fors);
+                collect_ids(&e.children, ids, fors, wrapped);
             }
             _ => {
                 for b in n.blocks() {
-                    collect_ids(b, ids, fors);
+                    collect_ids(b, ids, fors, wrapped);
                 }
             }
         }
@@ -244,8 +267,16 @@ mod tests {
             "<form><button>Add</button><button type=\"button\" @click={u}>x</button></form>",
             "<a href=\"/\">{u}</a><button aria-label=\"Close\"><svg></svg></button>",
             "<div role=\"button\" tabindex=\"0\" @click={u} @keydown={u}>ok</div>",
+            "<Field id=\"name\" label={u}><input id=\"name\" /></Field>",
+            "<Row for=\"kind\" label=\"Kind\"><select id=\"kind\"></select></Row>",
         ));
         assert!(out.is_empty(), "{out:?}");
+    }
+
+    #[test]
+    fn a_wrapper_only_labels_the_field_it_names() {
+        let out = lint("<Field id=\"a\" label={u}><input id=\"b\" /></Field><Card id=\"c\"><input id=\"c\" /></Card>");
+        assert_eq!(out.iter().filter(|m| m.contains("has no label")).count(), 2, "{out:?}");
     }
 
     #[test]

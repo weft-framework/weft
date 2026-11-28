@@ -180,19 +180,7 @@ fn lower_island(c: &Component, out: &mut String) {
     members.extend(hooks.into_iter().map(|(at, _, decl)| (at, decl)));
     for r in c.reactives.iter().filter(|r| r.client) {
         let init = rewrite_at(&r.expr, &scope, locate(r.span, &r.expr));
-        let at = mark_str(r.span.start);
-        members.push((
-            r.span.start,
-            match r.kind {
-                ReactiveKind::Signal => format!("{at}const {} = signal({init});", r.name),
-                ReactiveKind::Derived if crate::lower::is_async_derived(r) => {
-                    format!("{at}const {} = asyncDerived(async () => {init});", r.name)
-                }
-                ReactiveKind::Derived => {
-                    format!("{at}const {} = derived(() => {init});", r.name)
-                }
-            },
-        ));
+        members.push((r.span.start, crate::lower::reactive_decl(r, &init)));
     }
     for f in c.functions.iter().filter(|f| f.client) {
         members.push((

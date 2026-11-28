@@ -969,7 +969,7 @@ mod tests {
         assert!(pkg.contains("\"tailwindcss\": \"^4.3.5\""), "{pkg}");
         assert!(pkg.contains("},\n  \"engines\""), "{pkg}");
         assert_eq!(pkg.matches("\"devDependencies\"").count(), 1, "{pkg}");
-        assert!(pkg.contains("\"@weft-framework/cli\": \"^0.0.6\""), "{pkg}");
+        assert!(pkg.contains("\"@weft-framework/cli\": \"^0.0.7\""), "{pkg}");
         fs::remove_dir_all(&dir).unwrap();
     }
 

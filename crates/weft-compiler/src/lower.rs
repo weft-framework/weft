@@ -91,6 +91,18 @@ fn local_name(spec: &str) -> &str {
     }
 }
 
+pub(crate) fn reactive_decl(r: &crate::ast::Reactive, init: &str) -> String {
+    let at = mark_str(r.span.start);
+    let ty = r.ty.as_deref().map_or(String::new(), |t| format!("<{t}>"));
+    match r.kind {
+        ReactiveKind::Signal => format!("{at}const {} = signal{ty}({init});", r.name),
+        ReactiveKind::Derived if is_async_derived(r) => {
+            format!("{at}const {} = asyncDerived{ty}(async () => {init});", r.name)
+        }
+        ReactiveKind::Derived => format!("{at}const {} = derived{ty}(() => {init});", r.name),
+    }
+}
+
 pub(crate) fn is_async_derived(r: &crate::ast::Reactive) -> bool {
     if r.kind != ReactiveKind::Derived {
         return false;
@@ -973,14 +985,7 @@ fn lower_component(c: &Component, out: &mut String) {
     let mut members: Vec<(usize, &Comments, String)> = Vec::new();
     for r in &c.reactives {
         let init = rewrite_at(&r.expr, &scope, locate(r.span, &r.expr));
-        let at = mark_str(r.span.start);
-        let decl = match r.kind {
-            ReactiveKind::Signal => format!("{at}const {} = signal({init});", r.name),
-            ReactiveKind::Derived if is_async_derived(r) => {
-                format!("{at}const {} = asyncDerived(async () => {init});", r.name)
-            }
-            ReactiveKind::Derived => format!("{at}const {} = derived(() => {init});", r.name),
-        };
+        let decl = reactive_decl(r, &init);
         members.push((r.span.start, &r.comments, decl));
     }
     for f in c.functions.iter().filter(|f| !f.client) {
@@ -2583,6 +2588,13 @@ mod tests {
         );
         assert!(out.contains("${escapeHtml(count.value)}"), "got:\n{out}");
         assert!(out.contains("${escapeHtml(doubled.value)}"), "got:\n{out}");
+    }
+
+    #[test]
+    fn typed_reactives_pass_the_type_through() {
+        let out = lower_src("component C() {\n  signal names: string[] = []\n  derived n: number = names.length\n  view { <p>{n}</p> }\n}");
+        assert!(out.contains("const names = signal<string[]>([]);"), "got:\n{out}");
+        assert!(out.contains("const n = derived<number>(() =>"), "got:\n{out}");
     }
 
     #[test]

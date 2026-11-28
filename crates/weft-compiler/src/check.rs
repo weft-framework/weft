@@ -863,6 +863,20 @@ impl<'a> Checker<'a> {
                 format!("`{name}` is not a function declared in this component"),
                 attr.span,
             ),
+            Some((name, _))
+                if !self.client.contains(name)
+                    && crate::events::parse(&attr.name)
+                        .is_ok_and(|s| crate::events::client_only(s.event)) =>
+            {
+                let ev = crate::events::parse(&attr.name).map_or("", |s| s.event);
+                self.error(
+                    format!(
+                        "`@{ev}` fires many times a second and runs only in the browser; \
+                         declare `client function {name}` to handle it"
+                    ),
+                    attr.span,
+                )
+            }
             Some((_, Some(args))) => {
                 let from = self.after(attr.span, "=");
                 let at = self.locate(attr.span, from, args);

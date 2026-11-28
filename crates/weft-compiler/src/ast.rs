@@ -169,6 +169,7 @@ pub struct Reactive {
     pub kind: ReactiveKind,
     pub client: bool,
     pub name: String,
+    pub ty: Option<String>,
     pub expr: String,
     pub comments: Comments,
     pub span: Span,

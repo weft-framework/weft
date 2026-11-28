@@ -1,6 +1,6 @@
 {
   "name": "@weft-framework/server",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "Weft server: live pages over WebSocket/SSE with signed sessions, CSRF, rate limiting and a strict CSP, on the Fetch API (Bun, Node, edge).",
   "keywords": [
     "weft",
@@ -70,8 +70,8 @@
     "./pg-stores": "./src/pg-stores.ts"
   },
   "dependencies": {
-    "@weft-framework/data": "0.0.6",
-    "@weft-framework/runtime": "0.0.6",
+    "@weft-framework/data": "0.0.7",
+    "@weft-framework/runtime": "0.0.7",
     "@xmldom/xmldom": "0.8.15",
     "xml-crypto": "6.4.0"
   },

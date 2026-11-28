@@ -67,14 +67,15 @@ export class PgSessionStore extends PgStore implements SessionStore {
   constructor(pool: PgPool, table = "weft_sessions") {
     super(pool, table, (t, name) => [
       `CREATE TABLE IF NOT EXISTS ${t} (sid text PRIMARY KEY NOT NULL, "user" text NOT NULL, created bigint NOT NULL, ` +
-        `seen bigint NOT NULL, tenant text, pending integer, mfa integer, agent text, view_as text)`,
+        `seen bigint NOT NULL, tenant text, pending integer, mfa integer, agent text, view_as text, address text)`,
+      `ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS address text`,
       `CREATE INDEX IF NOT EXISTS "${name}_user" ON ${t} ("user")`,
     ]);
   }
 
   async get(sid: string): Promise<SessionRecord | null> {
     const [row] = await this.q<SessionRow>(
-      `SELECT "user", created, seen, tenant, pending, mfa, agent, view_as FROM ${this.t} WHERE sid = ?`,
+      `SELECT "user", created, seen, tenant, pending, mfa, agent, view_as, address FROM ${this.t} WHERE sid = ?`,
       [sid],
     );
     return row ? SqlSessionStore.record(row) : null;
@@ -82,7 +83,7 @@ export class PgSessionStore extends PgStore implements SessionStore {
 
   async forUser(user: string): Promise<{ sid: string; record: SessionRecord }[]> {
     const rows = await this.q<SessionRow & { sid: string }>(
-      `SELECT sid, "user", created, seen, tenant, pending, mfa, agent, view_as FROM ${this.t} WHERE "user" = ?`,
+      `SELECT sid, "user", created, seen, tenant, pending, mfa, agent, view_as, address FROM ${this.t} WHERE "user" = ?`,
       [user],
     );
     return rows.map((row) => ({ sid: String(row.sid), record: SqlSessionStore.record(row) }));
@@ -90,10 +91,10 @@ export class PgSessionStore extends PgStore implements SessionStore {
 
   async set(sid: string, r: SessionRecord): Promise<void> {
     await this.q(
-      `INSERT INTO ${this.t} (sid, "user", created, seen, tenant, pending, mfa, agent, view_as) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ` +
+      `INSERT INTO ${this.t} (sid, "user", created, seen, tenant, pending, mfa, agent, view_as, address) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ` +
         `ON CONFLICT (sid) DO UPDATE SET "user" = excluded."user", created = excluded.created, seen = excluded.seen, ` +
-        `tenant = excluded.tenant, pending = excluded.pending, mfa = excluded.mfa, agent = excluded.agent, view_as = excluded.view_as`,
-      [sid, r.user, r.created, r.seen, r.tenant ?? null, r.pending ? 1 : null, r.mfa ? 1 : null, r.agent ?? null, r.viewAs ? JSON.stringify(r.viewAs) : null],
+        `tenant = excluded.tenant, pending = excluded.pending, mfa = excluded.mfa, agent = excluded.agent, view_as = excluded.view_as, address = excluded.address`,
+      [sid, r.user, r.created, r.seen, r.tenant ?? null, r.pending ? 1 : null, r.mfa ? 1 : null, r.agent ?? null, r.viewAs ? JSON.stringify(r.viewAs) : null, r.address ?? null],
     );
   }
 

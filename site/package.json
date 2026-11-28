@@ -24,8 +24,8 @@
     "build": "cargo run -q -p weft-cli -- build . && node ../scripts/pages.mjs dist/edge ../target/pages"
   },
   "dependencies": {
-    "@weft-framework/runtime": "0.0.6",
-    "@weft-framework/server": "0.0.6"
+    "@weft-framework/runtime": "0.0.7",
+    "@weft-framework/server": "0.0.7"
   },
   "engines": {
     "node": ">=22.6"

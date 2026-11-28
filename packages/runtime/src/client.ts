@@ -38,6 +38,8 @@ export const DEFAULT_EVENTS = [
   "pointerup",
 ] as const;
 
+export const CLIENT_EVENTS = ["dragstart", "dragenter", "dragover", "dragleave", "drop", "dragend"] as const;
+
 export interface Conflict {
   reason: "stale" | "expired";
   handler: string;
@@ -185,8 +187,12 @@ export class WeftClient {
     this.listener = (ev) => this.handle(ev);
   }
 
+  private listened(): string[] {
+    return [...new Set<string>([...(this.opts.events ?? DEFAULT_EVENTS), ...CLIENT_EVENTS])];
+  }
+
   start(): void {
-    for (const type of this.opts.events ?? DEFAULT_EVENTS) {
+    for (const type of this.listened()) {
       this.opts.root.addEventListener(type, this.listener);
     }
     applyCssVars(this.opts.root);
@@ -233,7 +239,7 @@ export class WeftClient {
   }
 
   stop(): void {
-    for (const type of this.opts.events ?? DEFAULT_EVENTS) {
+    for (const type of this.listened()) {
       this.opts.root.removeEventListener(type, this.listener);
     }
     for (const h of this.timeouts) {

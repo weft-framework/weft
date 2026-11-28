@@ -65,7 +65,7 @@ export type { EventPayload as WeftEvent } from "./protocol.ts";
 export { morphChildren, morphNode } from "./morph.ts";
 export { LiveConnection, endpointsFor } from "./connection.ts";
 export type { ConnectionOptions, Status } from "./connection.ts";
-export { WeftClient, browserClient, DEFAULT_EVENTS, applyCssVars } from "./client.ts";
+export { WeftClient, browserClient, CLIENT_EVENTS, DEFAULT_EVENTS, applyCssVars } from "./client.ts";
 export type { ClientOptions, Conflict } from "./client.ts";
 export { boot } from "./boot.ts";
 export type { BootOptions } from "./boot.ts";

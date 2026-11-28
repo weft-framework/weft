@@ -77,6 +77,15 @@ test("bound JSON arguments are passed to the client function", () => {
   assert.match(serialize(button(root)), />Hide</);
 });
 
+test("drag and drop events reach client functions without a server round trip", () => {
+  const root = h("body", {}, markup({ "data-weft-do-drop": "toggle" }));
+  button(root).removeAttribute("data-weft-do-click");
+  const { sent } = setup(root);
+  root.dispatch("drop", button(root));
+  assert.equal(sent.length, 0);
+  assert.match(serialize(button(root)), />Hide</);
+});
+
 test("client state survives a server patch and is re-bound", () => {
   setups = 0;
   const root = h("body", {}, markup());

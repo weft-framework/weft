@@ -1227,6 +1227,8 @@ export function createApp(opts: AppOptions): App {
         if (o.sso !== undefined) rec.sso = o.sso;
         const agent = req.headers.get("user-agent");
         if (agent) rec.agent = agent.slice(0, 256);
+        const address = clientAddress(req);
+        if (address) rec.address = address.slice(0, 64);
         if (pending) rec.pending = true;
         else if (o.mfa) rec.mfa = true;
         await authStore.set(next, rec);
@@ -1258,6 +1260,7 @@ export function createApp(opts: AppOptions): App {
       }
       const next: SessionRecord = { user: rec.user, created: rec.created, seen: rec.seen };
       if (rec.agent !== undefined) next.agent = rec.agent;
+      if (rec.address !== undefined) next.address = rec.address;
       if (rec.sso !== undefined) next.sso = rec.sso;
       if (tenant !== null) {
         next.tenant = tenant;
@@ -1338,6 +1341,7 @@ export function createApp(opts: AppOptions): App {
             created: r.created,
             seen: r.seen,
             agent: r.agent ?? null,
+            address: r.address ?? null,
             current: sid === ctx.session,
             mfa: r.mfa === true,
             pending: r.pending === true,

@@ -12,6 +12,7 @@ export interface SessionRecord {
   pending?: true;
   mfa?: true;
   agent?: string;
+  address?: string;
   viewAs?: { user: string; tenant?: string; until: number; dev?: true };
   sso?: { c: string; n: string; f: string | null; s: string | null; nq?: string; spnq?: string };
 }
@@ -21,6 +22,7 @@ export interface SessionInfo {
   created: number;
   seen: number;
   agent: string | null;
+  address: string | null;
   current: boolean;
   mfa: boolean;
   pending: boolean;
@@ -104,6 +106,7 @@ export interface SessionRow {
   pending: number | bigint | null;
   mfa: number | bigint | null;
   agent: string | null;
+  address?: string | null;
   view_as?: string | null;
 }
 
@@ -119,7 +122,7 @@ export class SqlSessionStore implements SessionStore {
     this.table = `"${table}"`;
     db.exec(
       `CREATE TABLE IF NOT EXISTS ${this.table} (sid TEXT PRIMARY KEY NOT NULL, user TEXT NOT NULL, ` +
-        `created INTEGER NOT NULL, seen INTEGER NOT NULL, tenant TEXT, pending INTEGER, mfa INTEGER, agent TEXT, view_as TEXT)`,
+        `created INTEGER NOT NULL, seen INTEGER NOT NULL, tenant TEXT, pending INTEGER, mfa INTEGER, agent TEXT, view_as TEXT, address TEXT)`,
     );
     const cols = db.prepare(`SELECT name FROM pragma_table_info(?)`).all(table) as { name: string }[];
     for (const [name, type] of [
@@ -128,6 +131,7 @@ export class SqlSessionStore implements SessionStore {
       ["mfa", "INTEGER"],
       ["agent", "TEXT"],
       ["view_as", "TEXT"],
+      ["address", "TEXT"],
     ]) {
       if (!cols.some((c) => c.name === name)) {
         db.exec(`ALTER TABLE ${this.table} ADD COLUMN ${name} ${type}`);
@@ -138,14 +142,14 @@ export class SqlSessionStore implements SessionStore {
 
   get(sid: string): SessionRecord | null {
     const row = this.db
-      .prepare(`SELECT user, created, seen, tenant, pending, mfa, agent, view_as FROM ${this.table} WHERE sid = ?`)
+      .prepare(`SELECT user, created, seen, tenant, pending, mfa, agent, view_as, address FROM ${this.table} WHERE sid = ?`)
       .all(sid)[0] as SessionRow | undefined;
     return row ? SqlSessionStore.record(row) : null;
   }
 
   forUser(user: string): { sid: string; record: SessionRecord }[] {
     const rows = this.db
-      .prepare(`SELECT sid, user, created, seen, tenant, pending, mfa, agent, view_as FROM ${this.table} WHERE user = ?`)
+      .prepare(`SELECT sid, user, created, seen, tenant, pending, mfa, agent, view_as, address FROM ${this.table} WHERE user = ?`)
       .all(user) as (SessionRow & { sid: string })[];
     return rows.map((row) => ({ sid: String(row.sid), record: SqlSessionStore.record(row) }));
   }
@@ -165,6 +169,9 @@ export class SqlSessionStore implements SessionStore {
     if (row.agent !== null && row.agent !== undefined) {
       rec.agent = String(row.agent);
     }
+    if (row.address !== null && row.address !== undefined) {
+      rec.address = String(row.address);
+    }
     if (typeof row.view_as === "string") {
       try {
         const v = JSON.parse(row.view_as) as { user?: unknown; tenant?: unknown; until?: unknown; dev?: unknown };
@@ -181,11 +188,11 @@ export class SqlSessionStore implements SessionStore {
   set(sid: string, r: SessionRecord): void {
     this.db
       .prepare(
-        `INSERT INTO ${this.table} (sid, user, created, seen, tenant, pending, mfa, agent, view_as) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ` +
+        `INSERT INTO ${this.table} (sid, user, created, seen, tenant, pending, mfa, agent, view_as, address) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ` +
           `ON CONFLICT(sid) DO UPDATE SET user = excluded.user, created = excluded.created, seen = excluded.seen, ` +
-          `tenant = excluded.tenant, pending = excluded.pending, mfa = excluded.mfa, agent = excluded.agent, view_as = excluded.view_as`,
+          `tenant = excluded.tenant, pending = excluded.pending, mfa = excluded.mfa, agent = excluded.agent, view_as = excluded.view_as, address = excluded.address`,
       )
-      .run(sid, r.user, r.created, r.seen, r.tenant ?? null, r.pending ? 1 : null, r.mfa ? 1 : null, r.agent ?? null, r.viewAs ? JSON.stringify(r.viewAs) : null);
+      .run(sid, r.user, r.created, r.seen, r.tenant ?? null, r.pending ? 1 : null, r.mfa ? 1 : null, r.agent ?? null, r.viewAs ? JSON.stringify(r.viewAs) : null, r.address ?? null);
   }
 
   delete(sid: string): void {
